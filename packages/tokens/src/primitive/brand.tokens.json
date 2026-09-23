@@ -1,0 +1,30 @@
+{
+  "$description": "Vianova brand colours from the Figma library brand board. Brand expression only -- see the note in scripts/import-figma.ts before reaching for these in product UI.",
+  "brand": {
+    "red-pink": {
+      "$value": "#FC0061",
+      "$type": "color",
+      "$description": "Gradient start"
+    },
+    "magenta": {
+      "$value": "#BA00C7",
+      "$type": "color",
+      "$description": "Gradient"
+    },
+    "violet": {
+      "$value": "#6000F3",
+      "$type": "color",
+      "$description": "Gradient"
+    },
+    "blue": {
+      "$value": "#004BD9",
+      "$type": "color",
+      "$description": "Gradient"
+    },
+    "teal": {
+      "$value": "#00DC96",
+      "$type": "color",
+      "$description": "Gradient end"
+    }
+  }
+}

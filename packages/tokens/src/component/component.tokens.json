@@ -1,0 +1,109 @@
+{
+  "$description": "Imported from the Figma library's Component collection.",
+  "component": {
+    "button": {
+      "sm": {
+        "padding-y": {
+          "$value": "4px",
+          "$type": "dimension"
+        },
+        "padding-x": {
+          "$value": "10px",
+          "$type": "dimension"
+        },
+        "font-size": {
+          "$value": "12px",
+          "$type": "dimension"
+        }
+      },
+      "md": {
+        "padding-y": {
+          "$value": "8px",
+          "$type": "dimension"
+        },
+        "padding-x": {
+          "$value": "16px",
+          "$type": "dimension"
+        },
+        "font-size": {
+          "$value": "14px",
+          "$type": "dimension"
+        }
+      },
+      "lg": {
+        "padding-y": {
+          "$value": "10px",
+          "$type": "dimension"
+        },
+        "padding-x": {
+          "$value": "20px",
+          "$type": "dimension"
+        },
+        "font-size": {
+          "$value": "16px",
+          "$type": "dimension"
+        }
+      },
+      "radius": {
+        "$value": "6px",
+        "$type": "dimension"
+      }
+    },
+    "badge": {
+      "padding-y": {
+        "$value": "2px",
+        "$type": "dimension"
+      },
+      "padding-x": {
+        "$value": "8px",
+        "$type": "dimension"
+      },
+      "radius": {
+        "$value": "6px",
+        "$type": "dimension"
+      }
+    },
+    "input": {
+      "padding-y": {
+        "$value": "8px",
+        "$type": "dimension"
+      },
+      "padding-x": {
+        "$value": "12px",
+        "$type": "dimension"
+      },
+      "radius": {
+        "$value": "6px",
+        "$type": "dimension"
+      },
+      "font-size": {
+        "$value": "14px",
+        "$type": "dimension"
+      }
+    },
+    "card": {
+      "padding": {
+        "$value": "24px",
+        "$type": "dimension"
+      },
+      "radius": {
+        "$value": "8px",
+        "$type": "dimension"
+      }
+    },
+    "alert": {
+      "padding": {
+        "$value": "16px",
+        "$type": "dimension"
+      },
+      "gap": {
+        "$value": "12px",
+        "$type": "dimension"
+      },
+      "radius": {
+        "$value": "8px",
+        "$type": "dimension"
+      }
+    }
+  }
+}

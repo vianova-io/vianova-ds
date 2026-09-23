@@ -1,0 +1,32 @@
+{
+  "name": "@vianova/tokens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/tokens.d.ts",
+      "import": "./dist/tokens.js"
+    },
+    "./theme.css": "./dist/theme.css",
+    "./tokens.json": "./dist/tokens.json",
+    "./figma": "./dist/figma.variables.json",
+    "./registry-theme": "./dist/registry-theme.json"
+  },
+  "scripts": {
+    "build": "tsx scripts/build.ts",
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "clean": "rm -rf dist",
+    "figma:import": "tsx scripts/import-figma.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@vianova/typescript-config": "workspace:*",
+    "culori": "^4.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

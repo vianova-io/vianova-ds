@@ -1,0 +1,23 @@
+Copyright (c) 2026 Vianova. All rights reserved.
+
+This source code is published for reference and evaluation only.
+
+No licence is granted. Except where a separate written agreement with Vianova
+says otherwise, you may not use, copy, modify, merge, publish, distribute,
+sublicense or sell any part of this repository, nor create derivative works
+from it.
+
+The Vianova name, logo, and the brand assets under apps/www/public/brand/ are
+trademarks of Vianova and are not licensed for any use.
+
+Portions of this repository derive from shadcn/ui (https://ui.shadcn.com),
+which is distributed under the MIT Licence. Those portions remain subject to
+their original licence; the reservation above applies to Vianova's own
+contributions.
+
+Viewing this repository grants no right under copyright, trademark, patent, or
+any other intellectual property law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.

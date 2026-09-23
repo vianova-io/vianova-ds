@@ -1,0 +1,36 @@
+# Secrets — never commit. A Figma PAT was previously found in a settings.local.json.
+.claude/settings.local.json
+.env
+.env.*
+!.env.example
+*.pem
+.figma_token
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+.next/
+.next-build/
+out/
+.turbo/
+*.tsbuildinfo
+
+# Generated — reproducible from source, keep out of git
+apps/www/public/r/
+apps/www/public/maplibre/
+apps/www/__registry__/
+
+# Test artifacts
+test-results/
+playwright-report/
+blob-report/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json

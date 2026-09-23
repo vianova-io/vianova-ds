@@ -1,0 +1,209 @@
+{
+  "$description": "Imported from the Figma library's 'Map data' collection. A SECOND axis, independent of theme -- a user on the Gray theme can still pick Viridis.",
+  "map": {
+    "ramp": {
+      "brand": {
+        "0": {
+          "$value": "#ede9fe",
+          "$type": "color"
+        },
+        "10": {
+          "$value": "#ddd6fe",
+          "$type": "color"
+        },
+        "20": {
+          "$value": "#c4b5fd",
+          "$type": "color"
+        },
+        "30": {
+          "$value": "#a78bfa",
+          "$type": "color"
+        },
+        "40": {
+          "$value": "#8b5cf6",
+          "$type": "color"
+        },
+        "50": {
+          "$value": "#7c3aed",
+          "$type": "color"
+        },
+        "60": {
+          "$value": "#6d28d9",
+          "$type": "color"
+        },
+        "70": {
+          "$value": "#5b21b6",
+          "$type": "color"
+        },
+        "80": {
+          "$value": "#4c1d95",
+          "$type": "color"
+        },
+        "90": {
+          "$value": "#3d157f",
+          "$type": "color"
+        },
+        "100": {
+          "$value": "#2e1065",
+          "$type": "color"
+        }
+      },
+      "warm": {
+        "0": {
+          "$value": "#fcd34d",
+          "$type": "color"
+        },
+        "10": {
+          "$value": "#fbbf24",
+          "$type": "color"
+        },
+        "20": {
+          "$value": "#fb923c",
+          "$type": "color"
+        },
+        "30": {
+          "$value": "#f97316",
+          "$type": "color"
+        },
+        "40": {
+          "$value": "#fb7185",
+          "$type": "color"
+        },
+        "50": {
+          "$value": "#ec4899",
+          "$type": "color"
+        },
+        "60": {
+          "$value": "#d946ef",
+          "$type": "color"
+        },
+        "70": {
+          "$value": "#c026d3",
+          "$type": "color"
+        },
+        "80": {
+          "$value": "#9333ea",
+          "$type": "color"
+        },
+        "90": {
+          "$value": "#7e22ce",
+          "$type": "color"
+        },
+        "100": {
+          "$value": "#6b21a8",
+          "$type": "color"
+        }
+      },
+      "viridis": {
+        "0": {
+          "$value": "#440154",
+          "$type": "color"
+        },
+        "10": {
+          "$value": "#482475",
+          "$type": "color"
+        },
+        "20": {
+          "$value": "#414487",
+          "$type": "color"
+        },
+        "30": {
+          "$value": "#355f8d",
+          "$type": "color"
+        },
+        "40": {
+          "$value": "#2f788e",
+          "$type": "color"
+        },
+        "50": {
+          "$value": "#21918c",
+          "$type": "color"
+        },
+        "60": {
+          "$value": "#22a884",
+          "$type": "color"
+        },
+        "70": {
+          "$value": "#44bf70",
+          "$type": "color"
+        },
+        "80": {
+          "$value": "#7ad151",
+          "$type": "color"
+        },
+        "90": {
+          "$value": "#bddf26",
+          "$type": "color"
+        },
+        "100": {
+          "$value": "#fde725",
+          "$type": "color"
+        }
+      },
+      "blue": {
+        "0": {
+          "$value": "#dbeafe",
+          "$type": "color"
+        },
+        "10": {
+          "$value": "#bfdbfe",
+          "$type": "color"
+        },
+        "20": {
+          "$value": "#93c5fd",
+          "$type": "color"
+        },
+        "30": {
+          "$value": "#60a5fa",
+          "$type": "color"
+        },
+        "40": {
+          "$value": "#3b82f6",
+          "$type": "color"
+        },
+        "50": {
+          "$value": "#2563eb",
+          "$type": "color"
+        },
+        "60": {
+          "$value": "#1d4ed8",
+          "$type": "color"
+        },
+        "70": {
+          "$value": "#1e40af",
+          "$type": "color"
+        },
+        "80": {
+          "$value": "#1e3a8a",
+          "$type": "color"
+        },
+        "90": {
+          "$value": "#172554",
+          "$type": "color"
+        },
+        "100": {
+          "$value": "#0f1a40",
+          "$type": "color"
+        }
+      }
+    },
+    "layer-color": {
+      "brand": {
+        "$value": "#5e59e8",
+        "$type": "color"
+      },
+      "warm": {
+        "$value": "#f59e0b",
+        "$type": "color"
+      },
+      "viridis": {
+        "$value": "#21918c",
+        "$type": "color"
+      },
+      "blue": {
+        "$value": "#3b82f6",
+        "$type": "color"
+      }
+    }
+  }
+}

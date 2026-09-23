@@ -1,0 +1,1805 @@
+{
+  "$description": "CODE-ONLY semantic tokens. These do NOT exist in the Figma library -- they are required by shadcn (sidebar-*, chart-*) or by the OD surfaces (origin/destination/selected/dimmed). Every entry is stamped figma:null. Push these into the Figma library and then fold them into color.tokens.json.",
+  "semantic": {
+    "light": {
+      "success": {
+        "$value": "{tw.green.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--success"
+          }
+        }
+      },
+      "success-foreground": {
+        "$value": "{tw.zinc.50}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--success-foreground"
+          }
+        }
+      },
+      "info": {
+        "$value": "{tw.sky.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--info"
+          }
+        }
+      },
+      "info-foreground": {
+        "$value": "{tw.zinc.50}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--info-foreground"
+          }
+        }
+      },
+      "surface-raised": {
+        "$value": "{tw.white}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--surface-raised"
+          }
+        }
+      },
+      "surface-sunken": {
+        "$value": "{tw.zinc.100}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--surface-sunken"
+          }
+        }
+      },
+      "overlay": {
+        "$value": "{tw.black}a6",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--overlay"
+          }
+        }
+      },
+      "origin": {
+        "$value": "{tw.teal.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--origin"
+          }
+        }
+      },
+      "origin-foreground": {
+        "$value": "{tw.zinc.50}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--origin-foreground"
+          }
+        }
+      },
+      "destination": {
+        "$value": "{tw.amber.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--destination"
+          }
+        }
+      },
+      "destination-foreground": {
+        "$value": "{tw.zinc.50}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--destination-foreground"
+          }
+        }
+      },
+      "selected": {
+        "$value": "{semantic.light.primary}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary",
+            "cssVar": "--selected"
+          }
+        }
+      },
+      "dimmed": {
+        "$value": "{tw.zinc.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--dimmed"
+          }
+        }
+      },
+      "sidebar": {
+        "$value": "oklch(0.985 0 0)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "card",
+            "cssVar": "--sidebar",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "sidebar-foreground": {
+        "$value": "oklch(0.141 0.005 285.823)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "foreground",
+            "cssVar": "--sidebar-foreground",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "sidebar-primary": {
+        "$value": "{semantic.light.primary}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary",
+            "cssVar": "--sidebar-primary"
+          }
+        }
+      },
+      "sidebar-primary-foreground": {
+        "$value": "{semantic.light.primary-foreground}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary-foreground",
+            "cssVar": "--sidebar-primary-foreground"
+          }
+        }
+      },
+      "sidebar-accent": {
+        "$value": "oklch(0.967 0.001 286.375)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "accent",
+            "cssVar": "--sidebar-accent",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "sidebar-accent-foreground": {
+        "$value": "oklch(0.21 0.006 285.885)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "accent-foreground",
+            "cssVar": "--sidebar-accent-foreground",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "sidebar-border": {
+        "$value": "oklch(0.92 0.004 286.32)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "border",
+            "cssVar": "--sidebar-border",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "sidebar-ring": {
+        "$value": "oklch(0.705 0.015 286.067)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "ring",
+            "cssVar": "--sidebar-ring",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "chart-1": {
+        "$value": "{tw.teal.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-1",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-2": {
+        "$value": "{tw.teal.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-2",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-3": {
+        "$value": "{tw.teal.800}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-3",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-4": {
+        "$value": "{tw.teal.900}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-4",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-5": {
+        "$value": "{tw.teal.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-5",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      }
+    },
+    "dark": {
+      "success": {
+        "$value": "{tw.green.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--success"
+          }
+        }
+      },
+      "success-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--success-foreground"
+          }
+        }
+      },
+      "info": {
+        "$value": "{tw.sky.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--info"
+          }
+        }
+      },
+      "info-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--info-foreground"
+          }
+        }
+      },
+      "surface-raised": {
+        "$value": "{tw.zinc.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--surface-raised"
+          }
+        }
+      },
+      "surface-sunken": {
+        "$value": "{tw.zinc.900}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--surface-sunken"
+          }
+        }
+      },
+      "overlay": {
+        "$value": "{tw.black}a6",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--overlay"
+          }
+        }
+      },
+      "origin": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--origin"
+          }
+        }
+      },
+      "origin-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--origin-foreground"
+          }
+        }
+      },
+      "destination": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--destination"
+          }
+        }
+      },
+      "destination-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--destination-foreground"
+          }
+        }
+      },
+      "selected": {
+        "$value": "{semantic.dark.primary}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary",
+            "cssVar": "--selected"
+          }
+        }
+      },
+      "dimmed": {
+        "$value": "{tw.zinc.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--dimmed"
+          }
+        }
+      },
+      "sidebar": {
+        "$value": "oklch(0.21 0.006 285.885)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "card",
+            "cssVar": "--sidebar",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "sidebar-foreground": {
+        "$value": "oklch(0.985 0 0)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "foreground",
+            "cssVar": "--sidebar-foreground",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "sidebar-primary": {
+        "$value": "{semantic.dark.primary}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary",
+            "cssVar": "--sidebar-primary"
+          }
+        }
+      },
+      "sidebar-primary-foreground": {
+        "$value": "{semantic.dark.primary-foreground}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary-foreground",
+            "cssVar": "--sidebar-primary-foreground"
+          }
+        }
+      },
+      "sidebar-accent": {
+        "$value": "oklch(0.274 0.006 286.033)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "accent",
+            "cssVar": "--sidebar-accent",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "sidebar-accent-foreground": {
+        "$value": "oklch(0.985 0 0)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "accent-foreground",
+            "cssVar": "--sidebar-accent-foreground",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "sidebar-border": {
+        "$value": "oklch(1 0 0 / 10%)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "border",
+            "cssVar": "--sidebar-border",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "sidebar-ring": {
+        "$value": "oklch(0.552 0.016 285.938)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "ring",
+            "cssVar": "--sidebar-ring",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "chart-1": {
+        "$value": "{tw.teal.200}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-1",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-2": {
+        "$value": "{tw.teal.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-2",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-3": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-3",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-4": {
+        "$value": "{tw.teal.500}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-4",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-5": {
+        "$value": "{tw.teal.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-5",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      }
+    },
+    "darkStone": {
+      "success": {
+        "$value": "{tw.green.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--success"
+          }
+        }
+      },
+      "success-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--success-foreground"
+          }
+        }
+      },
+      "info": {
+        "$value": "{tw.sky.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--info"
+          }
+        }
+      },
+      "info-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--info-foreground"
+          }
+        }
+      },
+      "surface-raised": {
+        "$value": "{tw.stone.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--surface-raised"
+          }
+        }
+      },
+      "surface-sunken": {
+        "$value": "{tw.stone.900}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--surface-sunken"
+          }
+        }
+      },
+      "overlay": {
+        "$value": "{tw.black}a6",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--overlay"
+          }
+        }
+      },
+      "origin": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--origin"
+          }
+        }
+      },
+      "origin-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--origin-foreground"
+          }
+        }
+      },
+      "destination": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--destination"
+          }
+        }
+      },
+      "destination-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--destination-foreground"
+          }
+        }
+      },
+      "selected": {
+        "$value": "{semantic.darkStone.primary}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary",
+            "cssVar": "--selected"
+          }
+        }
+      },
+      "dimmed": {
+        "$value": "{tw.stone.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--dimmed"
+          }
+        }
+      },
+      "sidebar": {
+        "$value": "{semantic.darkStone.card}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "card",
+            "cssVar": "--sidebar"
+          }
+        }
+      },
+      "sidebar-foreground": {
+        "$value": "{semantic.darkStone.foreground}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "foreground",
+            "cssVar": "--sidebar-foreground"
+          }
+        }
+      },
+      "sidebar-primary": {
+        "$value": "{semantic.darkStone.primary}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary",
+            "cssVar": "--sidebar-primary"
+          }
+        }
+      },
+      "sidebar-primary-foreground": {
+        "$value": "{semantic.darkStone.primary-foreground}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary-foreground",
+            "cssVar": "--sidebar-primary-foreground"
+          }
+        }
+      },
+      "sidebar-accent": {
+        "$value": "{semantic.darkStone.accent}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "accent",
+            "cssVar": "--sidebar-accent"
+          }
+        }
+      },
+      "sidebar-accent-foreground": {
+        "$value": "{semantic.darkStone.accent-foreground}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "accent-foreground",
+            "cssVar": "--sidebar-accent-foreground"
+          }
+        }
+      },
+      "sidebar-border": {
+        "$value": "{semantic.darkStone.border}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "border",
+            "cssVar": "--sidebar-border"
+          }
+        }
+      },
+      "sidebar-ring": {
+        "$value": "{semantic.darkStone.ring}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "ring",
+            "cssVar": "--sidebar-ring"
+          }
+        }
+      },
+      "chart-1": {
+        "$value": "{tw.teal.200}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-1",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-2": {
+        "$value": "{tw.teal.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-2",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-3": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-3",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-4": {
+        "$value": "{tw.teal.500}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-4",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-5": {
+        "$value": "{tw.teal.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-5",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      }
+    },
+    "darkSlate": {
+      "success": {
+        "$value": "{tw.green.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--success"
+          }
+        }
+      },
+      "success-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--success-foreground"
+          }
+        }
+      },
+      "info": {
+        "$value": "{tw.sky.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--info"
+          }
+        }
+      },
+      "info-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--info-foreground"
+          }
+        }
+      },
+      "surface-raised": {
+        "$value": "{tw.slate.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--surface-raised"
+          }
+        }
+      },
+      "surface-sunken": {
+        "$value": "{tw.slate.900}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--surface-sunken"
+          }
+        }
+      },
+      "overlay": {
+        "$value": "{tw.black}a6",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--overlay"
+          }
+        }
+      },
+      "origin": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--origin"
+          }
+        }
+      },
+      "origin-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--origin-foreground"
+          }
+        }
+      },
+      "destination": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--destination"
+          }
+        }
+      },
+      "destination-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--destination-foreground"
+          }
+        }
+      },
+      "selected": {
+        "$value": "{semantic.darkSlate.primary}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary",
+            "cssVar": "--selected"
+          }
+        }
+      },
+      "dimmed": {
+        "$value": "{tw.slate.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--dimmed"
+          }
+        }
+      },
+      "sidebar": {
+        "$value": "{semantic.darkSlate.card}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "card",
+            "cssVar": "--sidebar"
+          }
+        }
+      },
+      "sidebar-foreground": {
+        "$value": "{semantic.darkSlate.foreground}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "foreground",
+            "cssVar": "--sidebar-foreground"
+          }
+        }
+      },
+      "sidebar-primary": {
+        "$value": "{semantic.darkSlate.primary}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary",
+            "cssVar": "--sidebar-primary"
+          }
+        }
+      },
+      "sidebar-primary-foreground": {
+        "$value": "{semantic.darkSlate.primary-foreground}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary-foreground",
+            "cssVar": "--sidebar-primary-foreground"
+          }
+        }
+      },
+      "sidebar-accent": {
+        "$value": "{semantic.darkSlate.accent}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "accent",
+            "cssVar": "--sidebar-accent"
+          }
+        }
+      },
+      "sidebar-accent-foreground": {
+        "$value": "{semantic.darkSlate.accent-foreground}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "accent-foreground",
+            "cssVar": "--sidebar-accent-foreground"
+          }
+        }
+      },
+      "sidebar-border": {
+        "$value": "{semantic.darkSlate.border}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "border",
+            "cssVar": "--sidebar-border"
+          }
+        }
+      },
+      "sidebar-ring": {
+        "$value": "{semantic.darkSlate.ring}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "ring",
+            "cssVar": "--sidebar-ring"
+          }
+        }
+      },
+      "chart-1": {
+        "$value": "{tw.teal.200}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-1",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-2": {
+        "$value": "{tw.teal.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-2",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-3": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-3",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-4": {
+        "$value": "{tw.teal.500}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-4",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-5": {
+        "$value": "{tw.teal.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-5",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      }
+    },
+    "fuchsia": {
+      "success": {
+        "$value": "{tw.green.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--success"
+          }
+        }
+      },
+      "success-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--success-foreground"
+          }
+        }
+      },
+      "info": {
+        "$value": "{tw.sky.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--info"
+          }
+        }
+      },
+      "info-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--info-foreground"
+          }
+        }
+      },
+      "surface-raised": {
+        "$value": "{tw.zinc.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--surface-raised"
+          }
+        }
+      },
+      "surface-sunken": {
+        "$value": "{tw.zinc.900}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--surface-sunken"
+          }
+        }
+      },
+      "overlay": {
+        "$value": "{tw.black}a6",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--overlay"
+          }
+        }
+      },
+      "origin": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--origin"
+          }
+        }
+      },
+      "origin-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--origin-foreground"
+          }
+        }
+      },
+      "destination": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--destination"
+          }
+        }
+      },
+      "destination-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--destination-foreground"
+          }
+        }
+      },
+      "selected": {
+        "$value": "{semantic.fuchsia.primary}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary",
+            "cssVar": "--selected"
+          }
+        }
+      },
+      "dimmed": {
+        "$value": "{tw.zinc.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--dimmed"
+          }
+        }
+      },
+      "sidebar": {
+        "$value": "{semantic.fuchsia.card}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "card",
+            "cssVar": "--sidebar"
+          }
+        }
+      },
+      "sidebar-foreground": {
+        "$value": "{semantic.fuchsia.foreground}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "foreground",
+            "cssVar": "--sidebar-foreground"
+          }
+        }
+      },
+      "sidebar-primary": {
+        "$value": "{semantic.fuchsia.primary}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary",
+            "cssVar": "--sidebar-primary"
+          }
+        }
+      },
+      "sidebar-primary-foreground": {
+        "$value": "{semantic.fuchsia.primary-foreground}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary-foreground",
+            "cssVar": "--sidebar-primary-foreground"
+          }
+        }
+      },
+      "sidebar-accent": {
+        "$value": "{semantic.fuchsia.accent}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "accent",
+            "cssVar": "--sidebar-accent"
+          }
+        }
+      },
+      "sidebar-accent-foreground": {
+        "$value": "{semantic.fuchsia.accent-foreground}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "accent-foreground",
+            "cssVar": "--sidebar-accent-foreground"
+          }
+        }
+      },
+      "sidebar-border": {
+        "$value": "{semantic.fuchsia.border}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "border",
+            "cssVar": "--sidebar-border"
+          }
+        }
+      },
+      "sidebar-ring": {
+        "$value": "{semantic.fuchsia.ring}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "ring",
+            "cssVar": "--sidebar-ring"
+          }
+        }
+      },
+      "chart-1": {
+        "$value": "{tw.teal.200}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-1",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-2": {
+        "$value": "{tw.teal.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-2",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-3": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-3",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-4": {
+        "$value": "{tw.teal.500}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-4",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-5": {
+        "$value": "{tw.teal.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-5",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      }
+    },
+    "gray": {
+      "success": {
+        "$value": "{tw.green.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--success"
+          }
+        }
+      },
+      "success-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--success-foreground"
+          }
+        }
+      },
+      "info": {
+        "$value": "{tw.sky.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--info"
+          }
+        }
+      },
+      "info-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--info-foreground"
+          }
+        }
+      },
+      "surface-raised": {
+        "$value": "{tw.gray.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--surface-raised"
+          }
+        }
+      },
+      "surface-sunken": {
+        "$value": "{tw.gray.900}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--surface-sunken"
+          }
+        }
+      },
+      "overlay": {
+        "$value": "{tw.black}a6",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--overlay"
+          }
+        }
+      },
+      "origin": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--origin"
+          }
+        }
+      },
+      "origin-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--origin-foreground"
+          }
+        }
+      },
+      "destination": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--destination"
+          }
+        }
+      },
+      "destination-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--destination-foreground"
+          }
+        }
+      },
+      "selected": {
+        "$value": "{semantic.gray.primary}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary",
+            "cssVar": "--selected"
+          }
+        }
+      },
+      "dimmed": {
+        "$value": "{tw.gray.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--dimmed"
+          }
+        }
+      },
+      "sidebar": {
+        "$value": "{semantic.gray.card}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "card",
+            "cssVar": "--sidebar"
+          }
+        }
+      },
+      "sidebar-foreground": {
+        "$value": "{semantic.gray.foreground}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "foreground",
+            "cssVar": "--sidebar-foreground"
+          }
+        }
+      },
+      "sidebar-primary": {
+        "$value": "{semantic.gray.primary}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary",
+            "cssVar": "--sidebar-primary"
+          }
+        }
+      },
+      "sidebar-primary-foreground": {
+        "$value": "{semantic.gray.primary-foreground}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "primary-foreground",
+            "cssVar": "--sidebar-primary-foreground"
+          }
+        }
+      },
+      "sidebar-accent": {
+        "$value": "{semantic.gray.accent}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "accent",
+            "cssVar": "--sidebar-accent"
+          }
+        }
+      },
+      "sidebar-accent-foreground": {
+        "$value": "{semantic.gray.accent-foreground}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "accent-foreground",
+            "cssVar": "--sidebar-accent-foreground"
+          }
+        }
+      },
+      "sidebar-border": {
+        "$value": "{semantic.gray.border}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "border",
+            "cssVar": "--sidebar-border"
+          }
+        }
+      },
+      "sidebar-ring": {
+        "$value": "{semantic.gray.ring}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": "ring",
+            "cssVar": "--sidebar-ring"
+          }
+        }
+      },
+      "chart-1": {
+        "$value": "{tw.teal.200}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-1",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-2": {
+        "$value": "{tw.teal.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-2",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-3": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-3",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-4": {
+        "$value": "{tw.teal.500}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-4",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "chart-5": {
+        "$value": "{tw.teal.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-5",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      }
+    }
+  }
+}

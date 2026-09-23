@@ -1,0 +1,2315 @@
+{
+  "$description": "Semantic colour across all six Figma library modes. Names are shadcn's CSS variable contract; each token records its Figma path in $extensions.",
+  "semantic": {
+    "light": {
+      "background": {
+        "$value": "oklch(1 0 0)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--background",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "foreground": {
+        "$value": "oklch(0.141 0.005 285.823)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--foreground",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "foreground-80": {
+        "$value": "{tw.zinc.950}cc",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-80",
+            "cssVar": "--foreground-80"
+          }
+        }
+      },
+      "foreground-60": {
+        "$value": "{tw.zinc.950}99",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-60",
+            "cssVar": "--foreground-60"
+          }
+        }
+      },
+      "foreground-40": {
+        "$value": "{tw.zinc.950}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-40",
+            "cssVar": "--foreground-40"
+          }
+        }
+      },
+      "foreground-20": {
+        "$value": "{tw.zinc.950}33",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-20",
+            "cssVar": "--foreground-20"
+          }
+        }
+      },
+      "foreground-10": {
+        "$value": "{tw.zinc.950}1a",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-10",
+            "cssVar": "--foreground-10"
+          }
+        }
+      },
+      "primary": {
+        "$value": "{tw.teal.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/primary",
+            "cssVar": "--primary"
+          }
+        }
+      },
+      "primary-foreground": {
+        "$value": "{tw.zinc.50}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/primary-foreground",
+            "cssVar": "--primary-foreground"
+          }
+        }
+      },
+      "secondary": {
+        "$value": "oklch(0.967 0.001 286.375)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--secondary",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "secondary-foreground": {
+        "$value": "oklch(0.21 0.006 285.885)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--secondary-foreground",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "muted": {
+        "$value": "oklch(0.967 0.001 286.375)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--muted",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "muted-40": {
+        "$value": "{tw.zinc.100}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/muted-40",
+            "cssVar": "--muted-40"
+          }
+        }
+      },
+      "muted-foreground": {
+        "$value": "{tw.zinc.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--muted-foreground",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-80": {
+        "$value": "{tw.zinc.600}cc",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-80",
+            "cssVar": "--muted-foreground-80",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-60": {
+        "$value": "{tw.zinc.600}99",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-60",
+            "cssVar": "--muted-foreground-60",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-40": {
+        "$value": "{tw.zinc.600}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-40",
+            "cssVar": "--muted-foreground-40",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-20": {
+        "$value": "{tw.zinc.600}33",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-20",
+            "cssVar": "--muted-foreground-20",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-10": {
+        "$value": "{tw.zinc.600}1a",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-10",
+            "cssVar": "--muted-foreground-10",
+            "a11yFix": true
+          }
+        }
+      },
+      "accent": {
+        "$value": "oklch(0.967 0.001 286.375)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--accent",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "accent-foreground": {
+        "$value": "oklch(0.21 0.006 285.885)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--accent-foreground",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "card": {
+        "$value": "oklch(1 0 0)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--card",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "card-foreground": {
+        "$value": "oklch(0.141 0.005 285.823)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--card-foreground",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "popover": {
+        "$value": "oklch(1 0 0)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--popover",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "popover-foreground": {
+        "$value": "oklch(0.141 0.005 285.823)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--popover-foreground",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "destructive": {
+        "$value": "oklch(0.577 0.245 27.325)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--destructive",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "destructive-foreground": {
+        "$value": "{tw.zinc.50}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/destructive-foreground",
+            "cssVar": "--destructive-foreground"
+          }
+        }
+      },
+      "border": {
+        "$value": "oklch(0.92 0.004 286.32)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--border",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "input": {
+        "$value": "{tw.zinc.200}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--input",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "ring": {
+        "$value": "{tw.zinc.500}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--ring",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "syntax-string": {
+        "$value": "{tw.green.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/string",
+            "cssVar": "--syntax-string"
+          }
+        }
+      },
+      "syntax-number": {
+        "$value": "{tw.amber.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/number",
+            "cssVar": "--syntax-number"
+          }
+        }
+      },
+      "syntax-property": {
+        "$value": "{tw.violet.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/property",
+            "cssVar": "--syntax-property"
+          }
+        }
+      },
+      "warning": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/warning",
+            "cssVar": "--warning"
+          }
+        }
+      },
+      "warning-foreground": {
+        "$value": "{tw.amber.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/warning-foreground",
+            "cssVar": "--warning-foreground"
+          }
+        }
+      },
+      "data-accent": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/data-accent",
+            "cssVar": "--data-accent"
+          }
+        }
+      },
+      "data-warning": {
+        "$value": "{tw.amber.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/data-warning",
+            "cssVar": "--data-warning"
+          }
+        }
+      }
+    },
+    "dark": {
+      "background": {
+        "$value": "oklch(0.141 0.005 285.823)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--background",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "foreground": {
+        "$value": "oklch(0.985 0 0)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--foreground",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "foreground-80": {
+        "$value": "{tw.zinc.300}cc",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-80",
+            "cssVar": "--foreground-80"
+          }
+        }
+      },
+      "foreground-60": {
+        "$value": "{tw.zinc.300}99",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-60",
+            "cssVar": "--foreground-60"
+          }
+        }
+      },
+      "foreground-40": {
+        "$value": "{tw.zinc.300}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-40",
+            "cssVar": "--foreground-40"
+          }
+        }
+      },
+      "foreground-20": {
+        "$value": "{tw.zinc.300}33",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-20",
+            "cssVar": "--foreground-20"
+          }
+        }
+      },
+      "foreground-10": {
+        "$value": "{tw.zinc.300}1a",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-10",
+            "cssVar": "--foreground-10"
+          }
+        }
+      },
+      "primary": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/primary",
+            "cssVar": "--primary",
+            "a11yFix": true
+          }
+        }
+      },
+      "primary-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/primary-foreground",
+            "cssVar": "--primary-foreground",
+            "a11yFix": true
+          }
+        }
+      },
+      "secondary": {
+        "$value": "oklch(0.274 0.006 286.033)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--secondary",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "secondary-foreground": {
+        "$value": "oklch(0.985 0 0)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--secondary-foreground",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "muted": {
+        "$value": "oklch(0.274 0.006 286.033)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--muted",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "muted-40": {
+        "$value": "{tw.zinc.700}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/muted-40",
+            "cssVar": "--muted-40"
+          }
+        }
+      },
+      "muted-foreground": {
+        "$value": "oklch(0.705 0.015 286.067)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--muted-foreground",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "muted-foreground-80": {
+        "$value": "{tw.zinc.400}cc",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-80",
+            "cssVar": "--muted-foreground-80"
+          }
+        }
+      },
+      "muted-foreground-60": {
+        "$value": "{tw.zinc.400}99",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-60",
+            "cssVar": "--muted-foreground-60"
+          }
+        }
+      },
+      "muted-foreground-40": {
+        "$value": "{tw.zinc.400}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-40",
+            "cssVar": "--muted-foreground-40"
+          }
+        }
+      },
+      "muted-foreground-20": {
+        "$value": "{tw.zinc.400}33",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-20",
+            "cssVar": "--muted-foreground-20"
+          }
+        }
+      },
+      "muted-foreground-10": {
+        "$value": "{tw.zinc.400}1a",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-10",
+            "cssVar": "--muted-foreground-10"
+          }
+        }
+      },
+      "accent": {
+        "$value": "oklch(0.274 0.006 286.033)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--accent",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "accent-foreground": {
+        "$value": "oklch(0.985 0 0)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--accent-foreground",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "card": {
+        "$value": "oklch(0.21 0.006 285.885)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--card",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "card-foreground": {
+        "$value": "oklch(0.985 0 0)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--card-foreground",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "popover": {
+        "$value": "oklch(0.21 0.006 285.885)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--popover",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "popover-foreground": {
+        "$value": "oklch(0.985 0 0)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--popover-foreground",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "destructive": {
+        "$value": "oklch(0.704 0.191 22.216)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--destructive",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "destructive-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/destructive-foreground",
+            "cssVar": "--destructive-foreground",
+            "a11yFix": true
+          }
+        }
+      },
+      "border": {
+        "$value": "oklch(1 0 0 / 10%)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--border",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "input": {
+        "$value": "oklch(1 0 0 / 15%)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--input",
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
+          }
+        }
+      },
+      "ring": {
+        "$value": "oklch(0.552 0.016 285.938)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "cssVar": "--ring",
+            "preset": "b5cRaL9Zg"
+          }
+        }
+      },
+      "syntax-string": {
+        "$value": "{tw.green.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/string",
+            "cssVar": "--syntax-string"
+          }
+        }
+      },
+      "syntax-number": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/number",
+            "cssVar": "--syntax-number"
+          }
+        }
+      },
+      "syntax-property": {
+        "$value": "{tw.violet.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/property",
+            "cssVar": "--syntax-property"
+          }
+        }
+      },
+      "warning": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/warning",
+            "cssVar": "--warning"
+          }
+        }
+      },
+      "warning-foreground": {
+        "$value": "{tw.amber.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/warning-foreground",
+            "cssVar": "--warning-foreground"
+          }
+        }
+      },
+      "data-accent": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/data-accent",
+            "cssVar": "--data-accent"
+          }
+        }
+      },
+      "data-warning": {
+        "$value": "{tw.amber.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/data-warning",
+            "cssVar": "--data-warning"
+          }
+        }
+      }
+    },
+    "darkStone": {
+      "background": {
+        "$value": "{tw.stone.800}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/background",
+            "cssVar": "--background"
+          }
+        }
+      },
+      "foreground": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground",
+            "cssVar": "--foreground"
+          }
+        }
+      },
+      "foreground-80": {
+        "$value": "{tw.zinc.300}cc",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-80",
+            "cssVar": "--foreground-80"
+          }
+        }
+      },
+      "foreground-60": {
+        "$value": "{tw.zinc.300}99",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-60",
+            "cssVar": "--foreground-60"
+          }
+        }
+      },
+      "foreground-40": {
+        "$value": "{tw.zinc.300}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-40",
+            "cssVar": "--foreground-40"
+          }
+        }
+      },
+      "foreground-20": {
+        "$value": "{tw.zinc.300}33",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-20",
+            "cssVar": "--foreground-20"
+          }
+        }
+      },
+      "foreground-10": {
+        "$value": "{tw.zinc.300}1a",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-10",
+            "cssVar": "--foreground-10"
+          }
+        }
+      },
+      "primary": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/primary",
+            "cssVar": "--primary",
+            "a11yFix": true
+          }
+        }
+      },
+      "primary-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/primary-foreground",
+            "cssVar": "--primary-foreground",
+            "a11yFix": true
+          }
+        }
+      },
+      "secondary": {
+        "$value": "{tw.stone.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/secondary",
+            "cssVar": "--secondary"
+          }
+        }
+      },
+      "secondary-foreground": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/secondary-foreground",
+            "cssVar": "--secondary-foreground"
+          }
+        }
+      },
+      "muted": {
+        "$value": "{tw.stone.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/muted",
+            "cssVar": "--muted"
+          }
+        }
+      },
+      "muted-40": {
+        "$value": "{tw.stone.700}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/muted-40",
+            "cssVar": "--muted-40"
+          }
+        }
+      },
+      "muted-foreground": {
+        "$value": "{tw.stone.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground",
+            "cssVar": "--muted-foreground",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-80": {
+        "$value": "{tw.stone.300}cc",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-80",
+            "cssVar": "--muted-foreground-80",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-60": {
+        "$value": "{tw.stone.300}99",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-60",
+            "cssVar": "--muted-foreground-60",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-40": {
+        "$value": "{tw.stone.300}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-40",
+            "cssVar": "--muted-foreground-40",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-20": {
+        "$value": "{tw.stone.300}33",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-20",
+            "cssVar": "--muted-foreground-20",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-10": {
+        "$value": "{tw.stone.300}1a",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-10",
+            "cssVar": "--muted-foreground-10",
+            "a11yFix": true
+          }
+        }
+      },
+      "accent": {
+        "$value": "{tw.stone.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/accent",
+            "cssVar": "--accent"
+          }
+        }
+      },
+      "accent-foreground": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/accent-foreground",
+            "cssVar": "--accent-foreground"
+          }
+        }
+      },
+      "card": {
+        "$value": "{tw.stone.800}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/card",
+            "cssVar": "--card"
+          }
+        }
+      },
+      "card-foreground": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/card-foreground",
+            "cssVar": "--card-foreground"
+          }
+        }
+      },
+      "popover": {
+        "$value": "{tw.stone.800}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/popover",
+            "cssVar": "--popover"
+          }
+        }
+      },
+      "popover-foreground": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/popover-foreground",
+            "cssVar": "--popover-foreground"
+          }
+        }
+      },
+      "destructive": {
+        "$value": "{tw.red.900}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/destructive",
+            "cssVar": "--destructive"
+          }
+        }
+      },
+      "destructive-foreground": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/destructive-foreground",
+            "cssVar": "--destructive-foreground"
+          }
+        }
+      },
+      "border": {
+        "$value": "{tw.stone.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "border/border",
+            "cssVar": "--border"
+          }
+        }
+      },
+      "input": {
+        "$value": "oklch(1 0 0 / 15%)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "border/input",
+            "cssVar": "--input",
+            "a11yFix": true
+          }
+        }
+      },
+      "ring": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "border/ring",
+            "cssVar": "--ring"
+          }
+        }
+      },
+      "syntax-string": {
+        "$value": "{tw.green.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/string",
+            "cssVar": "--syntax-string"
+          }
+        }
+      },
+      "syntax-number": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/number",
+            "cssVar": "--syntax-number"
+          }
+        }
+      },
+      "syntax-property": {
+        "$value": "{tw.violet.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/property",
+            "cssVar": "--syntax-property"
+          }
+        }
+      },
+      "warning": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/warning",
+            "cssVar": "--warning"
+          }
+        }
+      },
+      "warning-foreground": {
+        "$value": "{tw.amber.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/warning-foreground",
+            "cssVar": "--warning-foreground"
+          }
+        }
+      },
+      "data-accent": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/data-accent",
+            "cssVar": "--data-accent"
+          }
+        }
+      },
+      "data-warning": {
+        "$value": "{tw.amber.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/data-warning",
+            "cssVar": "--data-warning"
+          }
+        }
+      }
+    },
+    "darkSlate": {
+      "background": {
+        "$value": "{tw.slate.800}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/background",
+            "cssVar": "--background"
+          }
+        }
+      },
+      "foreground": {
+        "$value": "{tw.neutral.200}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground",
+            "cssVar": "--foreground"
+          }
+        }
+      },
+      "foreground-80": {
+        "$value": "{tw.neutral.200}cc",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-80",
+            "cssVar": "--foreground-80"
+          }
+        }
+      },
+      "foreground-60": {
+        "$value": "{tw.neutral.200}99",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-60",
+            "cssVar": "--foreground-60"
+          }
+        }
+      },
+      "foreground-40": {
+        "$value": "{tw.neutral.200}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-40",
+            "cssVar": "--foreground-40"
+          }
+        }
+      },
+      "foreground-20": {
+        "$value": "{tw.neutral.200}33",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-20",
+            "cssVar": "--foreground-20"
+          }
+        }
+      },
+      "foreground-10": {
+        "$value": "{tw.neutral.200}1a",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-10",
+            "cssVar": "--foreground-10"
+          }
+        }
+      },
+      "primary": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/primary",
+            "cssVar": "--primary",
+            "a11yFix": true
+          }
+        }
+      },
+      "primary-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/primary-foreground",
+            "cssVar": "--primary-foreground",
+            "a11yFix": true
+          }
+        }
+      },
+      "secondary": {
+        "$value": "{tw.slate.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/secondary",
+            "cssVar": "--secondary"
+          }
+        }
+      },
+      "secondary-foreground": {
+        "$value": "{tw.neutral.200}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/secondary-foreground",
+            "cssVar": "--secondary-foreground"
+          }
+        }
+      },
+      "muted": {
+        "$value": "{tw.slate.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/muted",
+            "cssVar": "--muted"
+          }
+        }
+      },
+      "muted-40": {
+        "$value": "{tw.slate.700}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/muted-40",
+            "cssVar": "--muted-40"
+          }
+        }
+      },
+      "muted-foreground": {
+        "$value": "{tw.slate.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground",
+            "cssVar": "--muted-foreground",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-80": {
+        "$value": "{tw.slate.300}cc",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-80",
+            "cssVar": "--muted-foreground-80",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-60": {
+        "$value": "{tw.slate.300}99",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-60",
+            "cssVar": "--muted-foreground-60",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-40": {
+        "$value": "{tw.slate.300}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-40",
+            "cssVar": "--muted-foreground-40",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-20": {
+        "$value": "{tw.slate.300}33",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-20",
+            "cssVar": "--muted-foreground-20",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-10": {
+        "$value": "{tw.slate.300}1a",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-10",
+            "cssVar": "--muted-foreground-10",
+            "a11yFix": true
+          }
+        }
+      },
+      "accent": {
+        "$value": "{tw.slate.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/accent",
+            "cssVar": "--accent"
+          }
+        }
+      },
+      "accent-foreground": {
+        "$value": "{tw.neutral.200}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/accent-foreground",
+            "cssVar": "--accent-foreground"
+          }
+        }
+      },
+      "card": {
+        "$value": "{tw.slate.800}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/card",
+            "cssVar": "--card"
+          }
+        }
+      },
+      "card-foreground": {
+        "$value": "{tw.neutral.200}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/card-foreground",
+            "cssVar": "--card-foreground"
+          }
+        }
+      },
+      "popover": {
+        "$value": "{tw.slate.800}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/popover",
+            "cssVar": "--popover"
+          }
+        }
+      },
+      "popover-foreground": {
+        "$value": "{tw.neutral.200}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/popover-foreground",
+            "cssVar": "--popover-foreground"
+          }
+        }
+      },
+      "destructive": {
+        "$value": "{tw.red.900}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/destructive",
+            "cssVar": "--destructive"
+          }
+        }
+      },
+      "destructive-foreground": {
+        "$value": "{tw.neutral.200}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/destructive-foreground",
+            "cssVar": "--destructive-foreground"
+          }
+        }
+      },
+      "border": {
+        "$value": "{tw.slate.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "border/border",
+            "cssVar": "--border"
+          }
+        }
+      },
+      "input": {
+        "$value": "oklch(1 0 0 / 15%)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "border/input",
+            "cssVar": "--input",
+            "a11yFix": true
+          }
+        }
+      },
+      "ring": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "border/ring",
+            "cssVar": "--ring"
+          }
+        }
+      },
+      "syntax-string": {
+        "$value": "{tw.green.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/string",
+            "cssVar": "--syntax-string"
+          }
+        }
+      },
+      "syntax-number": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/number",
+            "cssVar": "--syntax-number"
+          }
+        }
+      },
+      "syntax-property": {
+        "$value": "{tw.violet.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/property",
+            "cssVar": "--syntax-property"
+          }
+        }
+      },
+      "warning": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/warning",
+            "cssVar": "--warning"
+          }
+        }
+      },
+      "warning-foreground": {
+        "$value": "{tw.amber.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/warning-foreground",
+            "cssVar": "--warning-foreground"
+          }
+        }
+      },
+      "data-accent": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/data-accent",
+            "cssVar": "--data-accent"
+          }
+        }
+      },
+      "data-warning": {
+        "$value": "{tw.amber.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/data-warning",
+            "cssVar": "--data-warning"
+          }
+        }
+      }
+    },
+    "fuchsia": {
+      "background": {
+        "$value": "{tw.zinc.800}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/background",
+            "cssVar": "--background"
+          }
+        }
+      },
+      "foreground": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground",
+            "cssVar": "--foreground"
+          }
+        }
+      },
+      "foreground-80": {
+        "$value": "{tw.zinc.300}cc",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-80",
+            "cssVar": "--foreground-80"
+          }
+        }
+      },
+      "foreground-60": {
+        "$value": "{tw.zinc.300}99",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-60",
+            "cssVar": "--foreground-60"
+          }
+        }
+      },
+      "foreground-40": {
+        "$value": "{tw.zinc.300}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-40",
+            "cssVar": "--foreground-40"
+          }
+        }
+      },
+      "foreground-20": {
+        "$value": "{tw.zinc.300}33",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-20",
+            "cssVar": "--foreground-20"
+          }
+        }
+      },
+      "foreground-10": {
+        "$value": "{tw.zinc.300}1a",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-10",
+            "cssVar": "--foreground-10"
+          }
+        }
+      },
+      "primary": {
+        "$value": "{tw.fuchsia.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/primary",
+            "cssVar": "--primary",
+            "a11yFix": true
+          }
+        }
+      },
+      "primary-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/primary-foreground",
+            "cssVar": "--primary-foreground",
+            "a11yFix": true
+          }
+        }
+      },
+      "secondary": {
+        "$value": "{tw.zinc.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/secondary",
+            "cssVar": "--secondary"
+          }
+        }
+      },
+      "secondary-foreground": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/secondary-foreground",
+            "cssVar": "--secondary-foreground"
+          }
+        }
+      },
+      "muted": {
+        "$value": "{tw.zinc.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/muted",
+            "cssVar": "--muted"
+          }
+        }
+      },
+      "muted-40": {
+        "$value": "{tw.zinc.700}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/muted-40",
+            "cssVar": "--muted-40"
+          }
+        }
+      },
+      "muted-foreground": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground",
+            "cssVar": "--muted-foreground",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-80": {
+        "$value": "{tw.zinc.300}cc",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-80",
+            "cssVar": "--muted-foreground-80",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-60": {
+        "$value": "{tw.zinc.300}99",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-60",
+            "cssVar": "--muted-foreground-60",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-40": {
+        "$value": "{tw.zinc.300}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-40",
+            "cssVar": "--muted-foreground-40",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-20": {
+        "$value": "{tw.zinc.300}33",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-20",
+            "cssVar": "--muted-foreground-20",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-10": {
+        "$value": "{tw.zinc.300}1a",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-10",
+            "cssVar": "--muted-foreground-10",
+            "a11yFix": true
+          }
+        }
+      },
+      "accent": {
+        "$value": "{tw.zinc.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/accent",
+            "cssVar": "--accent"
+          }
+        }
+      },
+      "accent-foreground": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/accent-foreground",
+            "cssVar": "--accent-foreground"
+          }
+        }
+      },
+      "card": {
+        "$value": "{tw.zinc.800}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/card",
+            "cssVar": "--card"
+          }
+        }
+      },
+      "card-foreground": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/card-foreground",
+            "cssVar": "--card-foreground"
+          }
+        }
+      },
+      "popover": {
+        "$value": "{tw.zinc.800}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/popover",
+            "cssVar": "--popover"
+          }
+        }
+      },
+      "popover-foreground": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/popover-foreground",
+            "cssVar": "--popover-foreground"
+          }
+        }
+      },
+      "destructive": {
+        "$value": "{tw.red.900}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/destructive",
+            "cssVar": "--destructive"
+          }
+        }
+      },
+      "destructive-foreground": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/destructive-foreground",
+            "cssVar": "--destructive-foreground"
+          }
+        }
+      },
+      "border": {
+        "$value": "{tw.zinc.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "border/border",
+            "cssVar": "--border"
+          }
+        }
+      },
+      "input": {
+        "$value": "oklch(1 0 0 / 15%)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "border/input",
+            "cssVar": "--input",
+            "a11yFix": true
+          }
+        }
+      },
+      "ring": {
+        "$value": "{tw.zinc.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "border/ring",
+            "cssVar": "--ring"
+          }
+        }
+      },
+      "syntax-string": {
+        "$value": "{tw.green.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/string",
+            "cssVar": "--syntax-string"
+          }
+        }
+      },
+      "syntax-number": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/number",
+            "cssVar": "--syntax-number"
+          }
+        }
+      },
+      "syntax-property": {
+        "$value": "{tw.violet.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/property",
+            "cssVar": "--syntax-property"
+          }
+        }
+      },
+      "warning": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/warning",
+            "cssVar": "--warning"
+          }
+        }
+      },
+      "warning-foreground": {
+        "$value": "{tw.amber.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/warning-foreground",
+            "cssVar": "--warning-foreground"
+          }
+        }
+      },
+      "data-accent": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/data-accent",
+            "cssVar": "--data-accent"
+          }
+        }
+      },
+      "data-warning": {
+        "$value": "{tw.amber.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/data-warning",
+            "cssVar": "--data-warning"
+          }
+        }
+      }
+    },
+    "gray": {
+      "background": {
+        "$value": "{tw.gray.800}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/background",
+            "cssVar": "--background"
+          }
+        }
+      },
+      "foreground": {
+        "$value": "{tw.slate.100}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground",
+            "cssVar": "--foreground"
+          }
+        }
+      },
+      "foreground-80": {
+        "$value": "{tw.slate.100}cc",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-80",
+            "cssVar": "--foreground-80"
+          }
+        }
+      },
+      "foreground-60": {
+        "$value": "{tw.slate.100}99",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-60",
+            "cssVar": "--foreground-60"
+          }
+        }
+      },
+      "foreground-40": {
+        "$value": "{tw.slate.100}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-40",
+            "cssVar": "--foreground-40"
+          }
+        }
+      },
+      "foreground-20": {
+        "$value": "{tw.slate.100}33",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-20",
+            "cssVar": "--foreground-20"
+          }
+        }
+      },
+      "foreground-10": {
+        "$value": "{tw.slate.100}1a",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/foreground-10",
+            "cssVar": "--foreground-10"
+          }
+        }
+      },
+      "primary": {
+        "$value": "{tw.teal.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/primary",
+            "cssVar": "--primary"
+          }
+        }
+      },
+      "primary-foreground": {
+        "$value": "{tw.zinc.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/primary-foreground",
+            "cssVar": "--primary-foreground"
+          }
+        }
+      },
+      "secondary": {
+        "$value": "{tw.gray.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/secondary",
+            "cssVar": "--secondary"
+          }
+        }
+      },
+      "secondary-foreground": {
+        "$value": "{tw.slate.100}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "action/secondary-foreground",
+            "cssVar": "--secondary-foreground"
+          }
+        }
+      },
+      "muted": {
+        "$value": "{tw.gray.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/muted",
+            "cssVar": "--muted"
+          }
+        }
+      },
+      "muted-40": {
+        "$value": "{tw.gray.700}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/muted-40",
+            "cssVar": "--muted-40"
+          }
+        }
+      },
+      "muted-foreground": {
+        "$value": "{tw.gray.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground",
+            "cssVar": "--muted-foreground",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-80": {
+        "$value": "{tw.gray.300}cc",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-80",
+            "cssVar": "--muted-foreground-80",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-60": {
+        "$value": "{tw.gray.300}99",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-60",
+            "cssVar": "--muted-foreground-60",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-40": {
+        "$value": "{tw.gray.300}66",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-40",
+            "cssVar": "--muted-foreground-40",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-20": {
+        "$value": "{tw.gray.300}33",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-20",
+            "cssVar": "--muted-foreground-20",
+            "a11yFix": true
+          }
+        }
+      },
+      "muted-foreground-10": {
+        "$value": "{tw.gray.300}1a",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/muted-foreground-10",
+            "cssVar": "--muted-foreground-10",
+            "a11yFix": true
+          }
+        }
+      },
+      "accent": {
+        "$value": "{tw.gray.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/accent",
+            "cssVar": "--accent"
+          }
+        }
+      },
+      "accent-foreground": {
+        "$value": "{tw.slate.100}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/accent-foreground",
+            "cssVar": "--accent-foreground"
+          }
+        }
+      },
+      "card": {
+        "$value": "{tw.gray.800}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/card",
+            "cssVar": "--card"
+          }
+        }
+      },
+      "card-foreground": {
+        "$value": "{tw.slate.100}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/card-foreground",
+            "cssVar": "--card-foreground"
+          }
+        }
+      },
+      "popover": {
+        "$value": "{tw.gray.800}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "surface/popover",
+            "cssVar": "--popover"
+          }
+        }
+      },
+      "popover-foreground": {
+        "$value": "{tw.slate.100}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/popover-foreground",
+            "cssVar": "--popover-foreground"
+          }
+        }
+      },
+      "destructive": {
+        "$value": "{tw.red.700}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/destructive",
+            "cssVar": "--destructive"
+          }
+        }
+      },
+      "destructive-foreground": {
+        "$value": "{tw.slate.100}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/destructive-foreground",
+            "cssVar": "--destructive-foreground"
+          }
+        }
+      },
+      "border": {
+        "$value": "{tw.gray.600}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "border/border",
+            "cssVar": "--border"
+          }
+        }
+      },
+      "input": {
+        "$value": "oklch(1 0 0 / 15%)",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "border/input",
+            "cssVar": "--input",
+            "a11yFix": true
+          }
+        }
+      },
+      "ring": {
+        "$value": "{tw.teal.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "border/ring",
+            "cssVar": "--ring"
+          }
+        }
+      },
+      "syntax-string": {
+        "$value": "{tw.green.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/string",
+            "cssVar": "--syntax-string"
+          }
+        }
+      },
+      "syntax-number": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/number",
+            "cssVar": "--syntax-number"
+          }
+        }
+      },
+      "syntax-property": {
+        "$value": "{tw.violet.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "syntax/property",
+            "cssVar": "--syntax-property"
+          }
+        }
+      },
+      "warning": {
+        "$value": "{tw.amber.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/warning",
+            "cssVar": "--warning"
+          }
+        }
+      },
+      "warning-foreground": {
+        "$value": "{tw.amber.950}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "feedback/warning-foreground",
+            "cssVar": "--warning-foreground"
+          }
+        }
+      },
+      "data-accent": {
+        "$value": "{tw.teal.400}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/data-accent",
+            "cssVar": "--data-accent"
+          }
+        }
+      },
+      "data-warning": {
+        "$value": "{tw.amber.300}",
+        "$type": "color",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": "text/data-warning",
+            "cssVar": "--data-warning"
+          }
+        }
+      }
+    }
+  }
+}

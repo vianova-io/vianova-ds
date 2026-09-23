@@ -1,0 +1,43 @@
+/*
+ * Order matters. Tailwind must be imported HERE, by the app that actually
+ * depends on it -- @vianova/tokens does not, so a nested @import inside its
+ * generated theme.css cannot resolve. theme.css then layers the design tokens
+ * and its @theme inline mappings on top.
+ */
+@import "tailwindcss";
+@import "@vianova/tokens/theme.css";
+@import "tw-animate-css";
+
+/*
+ * Tailwind v4 infers content sources from the CSS file's location. The registry
+ * lives outside app/, so it must be declared explicitly or every utility used
+ * only by a registry component gets tree-shaken out of the docs build.
+ */
+@source "../app";
+@source "../components";
+@source "../registry";
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  :root {
+    /*
+     * Point Tailwind's font-mono at the face next/font actually loaded. The
+     * token's own stack stays as the fallback: it names 'Geist Mono' by intent,
+     * but next/font serves it under a generated family name, so the literal
+     * name would never match.
+     */
+    --font-mono: var(--font-geist-mono), var(--font-family-mono);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    /* next/font exposes Inter as --font-inter; fall back to the token stack. */
+    font-family: var(--font-inter), var(--font-family-sans);
+    letter-spacing: var(--tracking-normal);
+    -webkit-font-smoothing: antialiased;
+  }
+}

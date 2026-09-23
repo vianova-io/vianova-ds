@@ -1,0 +1,26 @@
+{
+  "name": "vianova-ds",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "test": "turbo run test",
+    "smoke": "./scripts/registry-smoke-test.sh",
+    "brand:clean": "pnpm --filter @vianova/www exec tsx ../../scripts/clean-figma-svg.ts",
+    "brand:png": "pnpm --filter @vianova/www exec tsx ../../scripts/render-brand-png.ts",
+    "brand:negate": "pnpm --filter @vianova/www exec node ../../scripts/negate-brand-svg.mjs",
+    "brand:verify": "pnpm --filter @vianova/www exec node ../../scripts/verify-brand-negative.mjs"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  }
+}

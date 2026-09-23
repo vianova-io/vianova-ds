@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # A push made by GITHUB_TOKEN does not trigger workflows, so anything CI
+  # commits for itself -- the Linux baselines, for one -- needs a manual run
+  # to be verified against.
+  workflow_dispatch:
+
+# The repo default is read-only today, but that is a settings toggle nobody
+# reviews. Pinning it here means flipping it to "read and write" cannot
+# silently hand this workflow -- and every lifecycle script in the dependency
+# tree it installs -- push access to the repo.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Keeps `next build` from phoning home on every run.
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # No `version:` here on purpose. The action errors out when the version
+      # is pinned in two places, and package.json's packageManager field is the
+      # one that also governs local installs.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Tokens first: everything downstream imports the built output.
+      - name: Build tokens
+        run: pnpm --filter @vianova/tokens build
+
+      - name: "Token tests: Figma parity, WCAG AA, colour-blind safety"
+        run: pnpm --filter @vianova/tokens test
+
+      # Guards the generated artefacts against a stale commit: if re-running the
+      # import or the registry index changes tracked files, the working tree is
+      # dirty and someone forgot to commit generated output.
+      - name: Check generated registry manifest is up to date
+        run: |
+          pnpm --filter @vianova/www registry:index
+          if ! git diff --quiet -- apps/www/registry.json; then
+            echo "::error::apps/www/registry.json is stale. Run 'pnpm --filter @vianova/www registry:index' and commit the result."
+            git diff -- apps/www/registry.json
+            exit 1
+          fi
+
+      - name: Typecheck
+        run: pnpm --filter @vianova/www typecheck
+
+      # The filter AST is the only registry code with real logic and no visual
+      # coverage -- a screenshot cannot tell you removeNode left an empty group.
+      - name: "Unit tests: filter AST"
+        run: pnpm --filter @vianova/www test
+
+      - name: Build docs site
+        run: pnpm --filter @vianova/www build
+
+      # The only check that exercises the real distribution path end to end.
+      # Has already caught an undeclared registryDependency and a type collision.
+      - name: Registry consume smoke test
+        run: ./scripts/registry-smoke-test.sh
+
+      - name: Install Playwright browser
+        run: pnpm --filter @vianova/www exec playwright install --with-deps chromium
+
+      # Every bug this suite exists for was invisible to typecheck and the unit
+      # tests: blank swatches, hydration mismatches, a silently dead map, a
+      # component that threw only once its menu opened.
+      - name: "Accessibility: axe over every example"
+        run: pnpm --filter @vianova/www test:a11y
+
+      # A focus ring painted outside a control's box is cut by any ancestor
+      # with overflow != visible. Nothing about a component in isolation shows
+      # this, so blocks are crawled too -- that is where it was found by hand.
+      - name: "Accessibility: no focus ring is clipped"
+        run: pnpm --filter @vianova/www test:rings
+
+      # Control heights live in five separate class strings across five files.
+      # Nothing except this measures whether they still agree, and a toolbar
+      # that is 4px out of alignment fails no other check.
+      - name: "Controls share one height ladder"
+        run: pnpm --filter @vianova/www test:sizes
+
+      # Foundations is the only page the crawls above never reach: they go
+      # through /preview and /blocks, and this is a docs route. That is how its
+      # colour swatches once shipped 170 contrast failures without anything
+      # going red. Checks the code labels, the clipboard and the rings.
+      - name: "Foundations colours are labelled, copyable and legible"
+        run: pnpm --filter @vianova/www test:colors
+
+      # Playwright suffixes snapshots per platform, so macOS baselines are not
+      # used on Linux. Until Linux baselines are committed this warns instead of
+      # failing, which is honest about the gap rather than pretending to cover it.
+      - name: Visual regression
+        run: |
+          if ls apps/www/e2e/visual.spec.ts-snapshots/*-linux.png >/dev/null 2>&1; then
+            pnpm --filter @vianova/www test:visual
+          else
+            echo "::warning::No Linux visual baselines yet. Generate them once on Linux with 'pnpm --filter @vianova/www test:visual:update' and commit apps/www/e2e/**/*-linux.png."
+          fi
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/www/playwright-report
+          retention-days: 7
