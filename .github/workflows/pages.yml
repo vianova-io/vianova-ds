@@ -90,11 +90,22 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # `enablement: true` creates the Pages site on first run and sets its
-      # source to GitHub Actions, so this does not need a human in repo
-      # settings. It lives here rather than in `build` because this is the job
-      # that holds `pages: write`; the build job runs `pnpm install` and every
-      # lifecycle script in the tree, and must not hold a deploy token.
+      # `enablement: true` is a best-effort: it makes this workflow a no-op
+      # once Pages exists, and tries to create the site if it does not.
+      #
+      # It cannot create it on its own. GITHUB_TOKEN, even with `pages: write`,
+      # gets "Resource not accessible by integration" from the create-site API
+      # -- creating a Pages site needs repository ADMIN, which an Actions token
+      # is not granted. Someone with admin has to set
+      # Settings -> Pages -> Source = "GitHub Actions" once; after that this
+      # step simply reads the existing config and every later push deploys.
+      #
+      # Deliberately left to fail loudly until then: a deploy workflow that
+      # cannot deploy should be red, not quietly green.
+      #
+      # Lives here rather than in `build` because this is the job that holds
+      # `pages: write`; the build job runs `pnpm install` and every lifecycle
+      # script in the tree, and must not hold a deploy token.
       #
       # Its outputs are not used -- the basePath is set explicitly in `env`
       # above, so the two cannot disagree about where the site lives.

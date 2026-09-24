@@ -140,9 +140,16 @@ request time, which is what lets Pages host it and what lets the registry under
 
 ### One manual step, once
 
-Settings → Pages → Source = **GitHub Actions**. This needs repository *admin*
-and there is no API for it. Until it is set, the workflow builds and uploads an
-artifact that never gets served.
+Settings → Pages → Source = **GitHub Actions**. This needs repository *admin*.
+
+The workflow asks for it too (`configure-pages` with `enablement: true`), but
+that cannot substitute: `GITHUB_TOKEN` gets *"Resource not accessible by
+integration"* from the create-site API however its permissions are set, because
+creating a Pages site requires admin and an Actions token is never granted it.
+
+Until someone sets it, the build job succeeds and uploads a perfectly good
+artifact, and the deploy job fails — which is the intended shape. Once set, no
+further manual steps: every push to `main` deploys.
 
 ### The sub-path, and the one thing it breaks
 
