@@ -1,0 +1,96 @@
+name: Pages
+
+# Deliberately a separate workflow from ci.yml.
+#
+# Deploying needs `pages: write` and `id-token: write`. ci.yml is pinned to
+# `contents: read` and runs on `pull_request`, which can include forks -- so
+# putting these permissions there would hand an elevated token to a workflow
+# that runs untrusted PR code and every lifecycle script in the dependency tree
+# it installs. Keeping the elevated scope in a workflow that only ever runs on
+# `main` means untrusted code cannot reach it.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  # NOT cancel-in-progress, unlike ci.yml: a cancelled deploy can leave the
+  # site half-updated, and the run is short enough that queueing is cheap.
+  cancel-in-progress: false
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  # Pages serves a project repo from a sub-path, never the domain root.
+  # next.config.ts turns this into `basePath`, and lib/asset.ts reads the same
+  # variable so the two cannot drift.
+  NEXT_PUBLIC_BASE_PATH: /vianova-ds
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # build-changelog.ts reads the git log and renders a "partial
+          # history" banner when it cannot see one. actions/checkout defaults
+          # to a depth of 1.
+          fetch-depth: 0
+
+      # No `version:` here: package.json's packageManager field governs.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: actions/configure-pages@v5
+
+      - run: pnpm install --frozen-lockfile
+
+      # The www `build` script does NOT build the tokens package, and
+      # registry:build reads packages/tokens/dist/registry-theme.json.
+      - name: Build tokens
+        run: pnpm --filter @vianova/tokens build
+
+      # Chains maplibre:worker -> registry:build (writes public/r, which is
+      # gitignored and so must be generated here) -> changelog -> next build.
+      - name: Build and export the site
+        run: pnpm --filter @vianova/www build
+
+      # basePath does not rewrite raw src/href strings. Catching that here
+      # rather than after deploy matters because two of the failures it finds
+      # are silent in a browser.
+      - name: No unprefixed asset paths in the export
+        run: pnpm --filter @vianova/www check:export
+
+      # Pages' Jekyll step strips underscore-prefixed directories, which would
+      # take out all of _next/. deploy-pages serves the artifact as-is and does
+      # not run Jekyll, so this is belt-and-braces -- and it keeps a future
+      # switch to a branch-based deploy from breaking silently.
+      - run: touch apps/www/out/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/www/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # Scoped to this job only: the build job, which runs `pnpm install` and
+    # every lifecycle script in the tree, never holds the deploy token.
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

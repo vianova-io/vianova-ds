@@ -2,7 +2,7 @@
 
 import { CopyButton } from "@/registry/vianova/patterns/copy-button";
 
-const SNIPPET = "npx shadcn@latest add https://vianova-ds.vercel.app/r/stat-tile.json";
+const SNIPPET = "npx shadcn@latest add https://vianova-io.github.io/vianova-ds/r/stat-tile.json";
 
 export default function CopyButtonDefault() {
   return (

@@ -124,3 +124,51 @@ jobs:
           name: playwright-report
           path: apps/www/playwright-report
           retention-days: 7
+
+  # Everything in `verify` runs against the export served from the domain ROOT,
+  # which is the right default -- it keeps five suites working with no spec
+  # changes. But the site actually deploys under /vianova-ds, and `basePath`
+  # does not rewrite raw src/href strings, so an asset 404 is a deployed-only
+  # failure that no root-served test can see. Two of those are silent: the
+  # maplibre worker renders an empty map reporting no error, and an
+  # `<a download>` at a 404 saves an empty file.
+  #
+  # A parallel job, so wall clock is unchanged; it costs a second build.
+  pages-shape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # `build` does not build the tokens package; registry:build reads its
+      # dist/registry-theme.json.
+      - name: Build tokens
+        run: pnpm --filter @vianova/tokens build
+
+      - name: Build the site as GitHub Pages will serve it
+        run: pnpm --filter @vianova/www build
+        env:
+          NEXT_PUBLIC_BASE_PATH: /vianova-ds
+
+      # Browserless, ~1s: literal src/href attributes in the built HTML.
+      - name: No unprefixed asset paths in the export
+        run: pnpm --filter @vianova/www check:export
+        env:
+          NEXT_PUBLIC_BASE_PATH: /vianova-ds
+
+      - name: Install Playwright browser
+        run: pnpm --filter @vianova/www exec playwright install --with-deps chromium
+
+      # The other half: real network requests, including URLs built in JS that
+      # the static scan cannot see.
+      - name: Every asset resolves under the basePath
+        run: pnpm --filter @vianova/www test:pages
+        env:
+          NEXT_PUBLIC_BASE_PATH: /vianova-ds

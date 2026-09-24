@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import { Download } from "lucide-react";
 
+import { asset } from "@/lib/asset";
 import { CopyScope } from "@/components/copy-scope";
 import { FoundationsNav } from "@/components/foundations-nav";
 import tokens from "@vianova/tokens/tokens.json";
@@ -130,9 +131,9 @@ function LogoDownloads({ file, label }: { file: string; label: string }) {
   return (
     <span className="flex flex-wrap gap-1">
       {[
-        { href: `/brand/${file}.svg`, text: "SVG" },
-        { href: `/brand/${file}.png`, text: "PNG" },
-        { href: `/brand/${file}@2x.png`, text: "@2x" },
+        { href: asset(`/brand/${file}.svg`), text: "SVG" },
+        { href: asset(`/brand/${file}.png`), text: "PNG" },
+        { href: asset(`/brand/${file}@2x.png`), text: "@2x" },
       ].map((f) => (
         <a
           key={f.text}
@@ -363,34 +364,34 @@ export default function FoundationsPage() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          {LOGO_ASSETS.filter((a) => a.file.startsWith("vianova-logo")).map((asset) => (
+          {LOGO_ASSETS.filter((a) => a.file.startsWith("vianova-logo")).map((logo) => (
             <div
-              key={asset.file}
+              key={logo.file}
               className="space-y-2 overflow-hidden rounded-lg border border-border"
             >
               <div
                 className={`flex h-28 items-center justify-center px-6 ${
-                  asset.ground === "dark" ? "bg-zinc-950" : "bg-white"
+                  logo.ground === "dark" ? "bg-zinc-950" : "bg-white"
                 }`}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={`/brand/${asset.file}.svg`}
-                  alt={`Vianova ${asset.name}`}
+                  src={asset(`/brand/${logo.file}.svg`)}
+                  alt={`Vianova ${logo.name}`}
                   className="max-h-12 w-auto"
                 />
               </div>
               <div className="space-y-1.5 px-3 pb-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <code className="text-xs">{asset.file}</code>
-                  {"primary" in asset && asset.primary ? (
+                  <code className="text-xs">{logo.file}</code>
+                  {"primary" in logo && logo.primary ? (
                     <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                       PRIMARY
                     </span>
                   ) : null}
                 </div>
-                <p className="text-xs text-muted-foreground">{asset.note}</p>
-                <LogoDownloads file={asset.file} label={asset.name} />
+                <p className="text-xs text-muted-foreground">{logo.note}</p>
+                <LogoDownloads file={logo.file} label={logo.name} />
               </div>
             </div>
           ))}
@@ -401,34 +402,34 @@ export default function FoundationsPage() {
             Symbol — the favicon, and the mark in this page&rsquo;s header
           </p>
           <div className="grid gap-4 sm:grid-cols-3">
-            {LOGO_ASSETS.filter((a) => a.file.startsWith("vianova-symbol")).map((asset) => (
+            {LOGO_ASSETS.filter((a) => a.file.startsWith("vianova-symbol")).map((symbol) => (
               <div
-                key={asset.file}
+                key={symbol.file}
                 className="space-y-2 overflow-hidden rounded-lg border border-border"
               >
                 <div
                   className={`flex h-24 items-center justify-center ${
-                    asset.ground === "dark" ? "bg-zinc-950" : "bg-white"
+                    symbol.ground === "dark" ? "bg-zinc-950" : "bg-white"
                   }`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`/brand/${asset.file}.svg`}
-                    alt={`Vianova ${asset.name}`}
+                    src={asset(`/brand/${symbol.file}.svg`)}
+                    alt={`Vianova ${symbol.name}`}
                     className="h-12 w-auto"
                   />
                 </div>
                 <div className="space-y-1.5 px-3 pb-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <code className="text-xs">{asset.file}</code>
-                    {"primarySymbol" in asset && asset.primarySymbol ? (
+                    <code className="text-xs">{symbol.file}</code>
+                    {"primarySymbol" in symbol && symbol.primarySymbol ? (
                       <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                         PRIMARY
                       </span>
                     ) : null}
                   </div>
-                  <p className="text-xs text-muted-foreground">{asset.note}</p>
-                  <LogoDownloads file={asset.file} label={asset.name} />
+                  <p className="text-xs text-muted-foreground">{symbol.note}</p>
+                  <LogoDownloads file={symbol.file} label={symbol.name} />
                 </div>
               </div>
             ))}
@@ -438,7 +439,7 @@ export default function FoundationsPage() {
               <div key={size} className="space-y-2 text-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src="/brand/vianova-symbol.svg"
+                  src={asset("/brand/vianova-symbol.svg")}
                   alt=""
                   style={{ width: size, height: size }}
                   className="mx-auto"

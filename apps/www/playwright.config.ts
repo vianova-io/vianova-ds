@@ -34,11 +34,16 @@ export default defineConfig({
       },
     },
   ],
+  // The Pages-shaped run has its own config, its own port and its own server.
+  testIgnore: ["**/pages-shape.spec.ts"],
   // Reuses a server if one is already up, so local runs are fast.
   webServer: process.env.PW_BASE_URL
     ? undefined
     : {
-        command: `NEXT_DIST_DIR=.next-build pnpm exec next start --port ${PORT}`,
+        // `next start` cannot serve an `output: "export"` build. These suites
+        // run against the exported files themselves, served from the domain
+        // ROOT with no basePath -- which is why not one spec needed changing.
+        command: `node scripts/serve-static.mjs --dir out --port ${PORT}`,
         url: BASE_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

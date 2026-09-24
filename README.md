@@ -29,7 +29,7 @@ preview, and read as raw text for the code tab. Both are trivial in-app.
 
 ```jsonc
 // components.json
-{ "registries": { "@vianova": "https://vianova-ds.vercel.app/r/{name}.json" } }
+{ "registries": { "@vianova": "https://vianova-io.github.io/vianova-ds/r/{name}.json" } }
 ```
 
 ```bash
@@ -131,31 +131,58 @@ for it. Nothing reaches consuming files until you do.
 
 ## Deploying
 
-Hosted on Vercel. The settings that matter, because the defaults are wrong for a
-monorepo:
+Hosted on **GitHub Pages** at <https://vianova-io.github.io/vianova-ds/>, built
+and published by `.github/workflows/pages.yml` on every push to `main`.
 
-| Setting | Value |
-| --- | --- |
-| Root Directory | `apps/www` |
-| Build Command | leave on default |
-| Output Directory | leave empty |
-| Include files outside Root Directory | enabled — the build needs `packages/tokens` |
+The site is a **static export** (`output: "export"`): no Node server runs at
+request time, which is what lets Pages host it and what lets the registry under
+`public/r/` be fetched as plain files.
 
-Vercel runs `vercel-build` in preference to `build`. That script builds the tokens
-package first (Next has no idea the theme is generated elsewhere) and writes to
-`.next`. The local `build` writes to `.next-build` instead, so that `next build`
-cannot corrupt a running dev server's chunks.
+### One manual step, once
 
-Do not add a `vercel.json` with `outputDirectory` — on a Next.js project that
-setting breaks the post-build check even though the build itself succeeds.
+Settings → Pages → Source = **GitHub Actions**. This needs repository *admin*
+and there is no API for it. Until it is set, the workflow builds and uploads an
+artifact that never gets served.
 
-Commits must carry an email linked to a GitHub account or Vercel blocks the
-deployment. With no `user.email` configured, git invents one from the hostname
-(`…@Miguels-Mini-2.lan`), which matches nothing:
+### The sub-path, and the one thing it breaks
+
+Pages serves a project repo from `/vianova-ds/`, not the domain root, so the
+deploy sets `NEXT_PUBLIC_BASE_PATH=/vianova-ds` and `next.config.ts` turns that
+into `basePath`.
+
+`basePath` prefixes `next/link`, `next/image` and CSS-imported assets — and
+**nothing else**. A raw string in a `src` or `href` is left exactly as written
+and will 404 on the deployed site. Two of those failures are silent: a maplibre
+worker that does not load renders an empty map and reports no error, and an
+`<a download>` pointing at a 404 saves an empty file.
+
+So paths to `public/` are written as:
+
+- **docs pages** — `asset("/brand/…")` from `@/lib/asset`
+- **registry components** — the prefix inlined at the call site, because these
+  files are installed into other people's repos and must not drag a helper along
+
+Two guards enforce it, and they cover different halves:
+
+| Guard | Sees | Misses |
+| --- | --- | --- |
+| `scripts/check-export-paths.mjs` | literal `src`/`href` in the built HTML | URLs built in JavaScript |
+| `e2e/pages-shape.spec.ts` | every real network request under the prefix | routes it does not visit |
+
+Removing the prefix from the maplibre worker passes the first and fails the
+second — which is exactly why both exist.
+
+### Local equivalents
 
 ```bash
-git config user.email "223450897+miguelguerreiro-ext-arch@users.noreply.github.com"
+pnpm --filter @vianova/www build                        # exports to apps/www/out
+NEXT_PUBLIC_BASE_PATH=/vianova-ds pnpm --filter @vianova/www build
+pnpm --filter @vianova/www check:export                 # static path scan
+pnpm --filter @vianova/www test:pages                   # the deployed shape, in a browser
 ```
+
+`next start` is gone — it cannot serve an export. `scripts/serve-static.mjs`
+serves `out/` instead, and is what the Playwright suites run against.
 
 ## Not done yet
 

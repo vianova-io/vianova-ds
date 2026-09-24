@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { asset } from "@/lib/asset";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function DocsLayout({
@@ -15,7 +16,7 @@ export default function DocsLayout({
             {/* The real mark, not a gradient stand-in. Plain img on purpose:
                 a logo should not go through the image optimiser. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/vianova-symbol.svg" alt="" aria-hidden className="size-5" />
+            <img src={asset("/brand/vianova-symbol.svg")} alt="" aria-hidden className="size-5" />
             <span className="text-sm font-semibold">Vianova DS</span>
           </Link>
           <nav className="flex items-center gap-5 text-sm">

@@ -264,7 +264,7 @@ writeFileSync(
     {
       $schema: "https://ui.shadcn.com/schema/registry.json",
       name: "vianova",
-      homepage: "https://vianova-ds.vercel.app",
+      homepage: "https://vianova-io.github.io/vianova-ds",
       items: [{ ...theme, files: [] }, ...items],
     },
     null,
