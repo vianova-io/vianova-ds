@@ -50,8 +50,6 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - uses: actions/configure-pages@v5
-
       - run: pnpm install --frozen-lockfile
 
       # The www `build` script does NOT build the tokens package, and
@@ -92,5 +90,17 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # `enablement: true` creates the Pages site on first run and sets its
+      # source to GitHub Actions, so this does not need a human in repo
+      # settings. It lives here rather than in `build` because this is the job
+      # that holds `pages: write`; the build job runs `pnpm install` and every
+      # lifecycle script in the tree, and must not hold a deploy token.
+      #
+      # Its outputs are not used -- the basePath is set explicitly in `env`
+      # above, so the two cannot disagree about where the site lives.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
       - id: deployment
         uses: actions/deploy-pages@v4
