@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { groupByCategory, type SearchableComponent } from "@/lib/search";
-import { useScrollActivity } from "@/lib/use-scroll-activity";
+import { useScrollActivity } from "@/registry/vianova/hooks/use-scroll-activity";
 import { cn } from "@/registry/vianova/lib/utils";
 
 /**
