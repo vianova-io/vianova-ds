@@ -84,10 +84,17 @@ function externalDeps(source: string): string[] {
   return [...found].sort();
 }
 
-/** Internal `@/registry/vianova/...` imports become namespaced registry deps. */
+/**
+ * Internal `@/registry/vianova/...` imports become namespaced registry deps.
+ *
+ * `patterns` belongs in this list: patterns are published as registry:ui and
+ * install next to ui and product, so a block that composes one depends on it
+ * exactly as it would on a primitive. Leaving it out does not fail the build —
+ * it ships a block whose install is quietly missing a file.
+ */
 function registryDeps(source: string): string[] {
   const found = new Set<string>();
-  for (const m of source.matchAll(/from\s+["']@\/registry\/vianova\/(ui|product|lib|hooks)\/([^"']+)["']/g)) {
+  for (const m of source.matchAll(/from\s+["']@\/registry\/vianova\/(ui|product|patterns|lib|hooks)\/([^"']+)["']/g)) {
     const kind = m[1]!;
     const file = basename(m[2]!);
     found.add(kind === "lib" && file === "utils" ? "@vianova/utils" : `@vianova/${file}`);

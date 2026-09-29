@@ -18,7 +18,7 @@ export function rewriteAliases(source: string): string {
   return source
     .replace(/@\/registry\/vianova\/lib\/utils/g, "@/lib/utils")
     .replace(/@\/registry\/vianova\/hooks\//g, "@/hooks/")
-    .replace(/@\/registry\/vianova\/(?:ui|product)\//g, "@/components/ui/");
+    .replace(/@\/registry\/vianova\/(?:ui|product|patterns)\//g, "@/components/ui/");
 }
 
 export function readRegistryFile(relativePath: string): string {

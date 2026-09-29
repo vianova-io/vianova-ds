@@ -334,7 +334,10 @@ export function ExploreMap({
         </FloatingPanelBody>
       </FloatingPanel>
 
-      <MapControls className="absolute bottom-4 right-4" basemapLabel="Plan" />
+      {/* bottom-12, not bottom-4: the basemap attribution is a 24px bar
+          pinned to the bottom-right of the canvas, and at bottom-4 it covers
+          the zoom-out button completely. */}
+      <MapControls className="absolute bottom-12 right-4" basemapLabel="Plan" />
     </div>
   );
 }

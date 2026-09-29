@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  ListFilter,
   MoreHorizontal,
 } from "lucide-react";
 
@@ -20,6 +21,7 @@ import {
 import { Separator } from "@/registry/vianova/ui/separator";
 import { LegendRamp } from "@/registry/vianova/product/legend-ramp";
 import {
+  VISUALIZATION_TYPES,
   VisualizationPicker,
   type VisualizationTypeId,
 } from "@/registry/vianova/product/visualization-picker";
@@ -36,27 +38,76 @@ import { cn } from "@/registry/vianova/lib/utils";
 export function DataLayerCard({
   name,
   meta,
+  metaIcon,
+  legend,
   visualization,
+  filters,
   filterCount,
+  filtersContent,
+  filtersAction,
   visible = true,
   expanded = true,
   defaultVisualization = "lines",
+  visualizationType,
+  onVisualizationTypeChange,
+  unavailableVisualizations,
+  unavailableVisualizationReason,
   onVisibilityChange,
+  children,
   className,
   ...props
 }: Omit<React.ComponentProps<"div">, "onChange"> & {
   name: string;
   /** Date range and measure, e.g. "Jan 1 – Dec 31, 2024 · Count distinct trip id". */
   meta?: string;
-  /** Label of the active visualisation, shown as a badge. */
+  /** Glyph for the measure the meta line describes, e.g. `<Hash />` for a count. */
+  metaIcon?: React.ReactNode;
+  /**
+   * Defaults to a LegendRamp, which suits a layer coloured by magnitude. Pass
+   * a LegendCategorical for a layer coloured by category, or `null` for a
+   * layer whose styling needs no legend at all.
+   */
+  legend?: React.ReactNode;
+  /**
+   * Overrides the badge text. Omit it and the badge names whichever
+   * visualisation is actually selected, which is the only way the two cannot
+   * drift apart.
+   */
   visualization?: string;
+  /** Show the filters row. Defaults to true whenever `filterCount` is given. */
+  filters?: boolean;
   filterCount?: number;
+  /**
+   * Revealed under the filters row when it is expanded. Supply the actual
+   * filter UI here; without it the row is a label and a count, which is all
+   * the design calls for until a layer can really be filtered.
+   */
+  filtersContent?: React.ReactNode;
+  /** Replaces the default icon button at the end of the filters row. */
+  filtersAction?: React.ReactNode;
   visible?: boolean;
   expanded?: boolean;
   defaultVisualization?: VisualizationTypeId;
+  /** Controlled counterpart of `defaultVisualization`. */
+  visualizationType?: VisualizationTypeId;
+  onVisualizationTypeChange?: (value: VisualizationTypeId) => void;
+  /** Types this layer's geometry cannot be drawn as; shown greyed. */
+  unavailableVisualizations?: readonly VisualizationTypeId[];
+  /** Why those are greyed, shown on hover. */
+  unavailableVisualizationReason?: string;
   onVisibilityChange?: (visible: boolean) => void;
+  /** Extra controls for the active visualisation, e.g. its source file. */
+  children?: React.ReactNode;
 }) {
   const VisibilityIcon = visible ? Eye : EyeOff;
+  const showFilters = filters ?? filterCount !== undefined;
+
+  // Tracked here even when uncontrolled, so the badge can name the selection
+  // rather than the caller having to pass the same fact twice.
+  const [internalType, setInternalType] = React.useState(defaultVisualization);
+  const activeType = visualizationType ?? internalType;
+  const badge =
+    visualization ?? VISUALIZATION_TYPES.find((t) => t.value === activeType)?.label;
 
   if (!expanded) {
     return (
@@ -112,9 +163,14 @@ export function DataLayerCard({
         </div>
       </div>
 
-      {meta ? <p className="text-xs text-muted-foreground">{meta}</p> : null}
+      {meta ? (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground [&_svg]:size-3.5">
+          {metaIcon}
+          {meta}
+        </p>
+      ) : null}
 
-      <LegendRamp />
+      {legend === undefined ? <LegendRamp /> : legend}
 
       <Collapsible defaultOpen>
         <div className="flex items-center gap-2">
@@ -126,21 +182,50 @@ export function DataLayerCard({
               </Button>
             }
           />
-          {visualization ? <Badge variant="secondary">{visualization}</Badge> : null}
+          {badge ? <Badge variant="secondary">{badge}</Badge> : null}
         </div>
-        <CollapsibleContent className="pt-2">
-          <VisualizationPicker defaultValue={defaultVisualization} />
+        <CollapsibleContent className="space-y-2 pt-2">
+          <VisualizationPicker
+            value={activeType}
+            unavailable={unavailableVisualizations}
+            unavailableReason={unavailableVisualizationReason}
+            onValueChange={(next) => {
+              if (visualizationType === undefined) setInternalType(next);
+              onVisualizationTypeChange?.(next);
+            }}
+          />
+          {children}
         </CollapsibleContent>
       </Collapsible>
 
-      {filterCount !== undefined ? (
+      {showFilters ? (
         <>
           <Separator />
-          <Button variant="ghost" size="xs" className="gap-1 px-1">
-            <ChevronRight className="size-3.5" />
-            Filters
-            <Badge variant="secondary">{filterCount}</Badge>
-          </Button>
+          <Collapsible>
+            <div className="flex items-center justify-between gap-2">
+              <CollapsibleTrigger
+                render={
+                  <Button variant="ghost" size="xs" className="group/filters gap-1 px-1">
+                    <ChevronRight className="size-3.5 transition-transform group-data-panel-open/filters:rotate-90" />
+                    Filters
+                    {filterCount !== undefined ? (
+                      <Badge variant="secondary">{filterCount}</Badge>
+                    ) : null}
+                  </Button>
+                }
+              />
+              {filtersAction === undefined ? (
+                <Button variant="ghost" size="icon-xs" aria-label={`Edit ${name} filters`}>
+                  <ListFilter />
+                </Button>
+              ) : (
+                filtersAction
+              )}
+            </div>
+            {filtersContent ? (
+              <CollapsibleContent className="pt-2">{filtersContent}</CollapsibleContent>
+            ) : null}
+          </Collapsible>
         </>
       ) : null}
     </div>

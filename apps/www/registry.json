@@ -160,6 +160,21 @@
       ]
     },
     {
+      "name": "filter-eval",
+      "type": "registry:lib",
+      "title": "Filter Eval",
+      "description": "Filter Eval helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/filter-eval.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "registryDependencies": [
+        "@vianova/filter-ast"
+      ]
+    },
+    {
       "name": "utils",
       "type": "registry:lib",
       "title": "Utils",
@@ -240,6 +255,51 @@
       "files": [
         {
           "path": "registry/vianova/blocks/explore-map.tsx",
+          "type": "registry:block"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "map-workspace",
+      "type": "registry:block",
+      "title": "Map Workspace",
+      "description": "Map Workspace layout, composed from Vianova components.",
+      "dependencies": [
+        "lucide-react",
+        "maplibre-gl",
+        "recharts"
+      ],
+      "registryDependencies": [
+        "@vianova/button",
+        "@vianova/button-group",
+        "@vianova/chart",
+        "@vianova/chart-card",
+        "@vianova/data-layer-card",
+        "@vianova/filter-ast",
+        "@vianova/filter-builder",
+        "@vianova/filter-chip-bar",
+        "@vianova/filter-eval",
+        "@vianova/floating-panel",
+        "@vianova/inline-edit",
+        "@vianova/input-group",
+        "@vianova/legend-ramp",
+        "@vianova/map-canvas",
+        "@vianova/map-controls",
+        "@vianova/popover",
+        "@vianova/ranked-bars",
+        "@vianova/select",
+        "@vianova/skeleton",
+        "@vianova/tabs",
+        "@vianova/use-color-scheme",
+        "@vianova/utils",
+        "@vianova/visualization-picker"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/blocks/map-workspace.tsx",
           "type": "registry:block"
         }
       ],
@@ -2109,6 +2169,27 @@
       "files": [
         {
           "path": "registry/vianova/product/floating-panel.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "legend-categorical",
+      "type": "registry:ui",
+      "title": "Legend Categorical",
+      "description": "Legend Categorical — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "registryDependencies": [
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/legend-categorical.tsx",
           "type": "registry:ui"
         }
       ],

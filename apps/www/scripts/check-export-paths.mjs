@@ -42,7 +42,7 @@ const ATTR = /\b(?:src|href)="(\/[^"]*)"/g;
  * Top-level entries of `public/`. A correctly prefixed value reads
  * "/vianova-ds/maplibre/..." and will not match.
  */
-const BARE = /^\/(maplibre\/|brand\/|avatar\.png)/;
+const BARE = /^\/(maplibre\/|brand\/|data\/|avatar\.png)/;
 
 const SCAN = new Set([".html"]);
 

@@ -38,6 +38,7 @@ const ROUTES = [
   "/",
   "/foundations/",
   "/blocks/explore-map/",
+  "/blocks/map-workspace/",
   "/preview/map-canvas-default/",
   "/preview/avatar-default/",
   "/components/button/",
@@ -119,6 +120,30 @@ test.describe("pages shape", () => {
       expect(s.type, `worker served as "${s.type}", which a browser will refuse`).toMatch(
         /javascript|ecmascript/i,
       );
+    }
+  });
+
+  /**
+   * The flow layer's GeoJSON is a raw path built in JavaScript, so `basePath`
+   * does not rewrite it and the static path scan cannot see it -- the same
+   * blind spot as the maplibre worker. And it fails the same way: the map
+   * simply draws no lines, with the panels still rendering happily around it.
+   */
+  test("the vehicle flows data is fetched, 200, and typed as JSON", async ({ page }) => {
+    const seen: { url: string; status: number; type: string }[] = [];
+    page.on("response", (r) => {
+      if (r.url().includes("vehicle-flows")) {
+        seen.push({ url: r.url(), status: r.status(), type: r.headers()["content-type"] ?? "" });
+      }
+    });
+
+    await page.goto(`${BASE}/blocks/map-workspace/`, { waitUntil: "networkidle" });
+
+    expect(seen.length, "the block never requested its data file at all").toBeGreaterThan(0);
+    for (const s of seen) {
+      expect(new URL(s.url).pathname, "data path is missing the basePath").toContain(PREFIX);
+      expect(s.status, "vehicle-flows.json did not return 200").toBe(200);
+      expect(s.type, `served as "${s.type}"`).toMatch(/json/i);
     }
   });
 

@@ -57,7 +57,36 @@ export type MapCanvasProps = Omit<React.ComponentProps<"div">, "onLoad"> & {
   /** Rendered instead of the map if WebGL is unavailable or the style fails. */
   fallback?: React.ReactNode;
   onLoad?: (map: MapLibreMap) => void;
+  /**
+   * Called once the basemap style is in place, and AGAIN after every style
+   * swap -- which is what switching light/dark does.
+   *
+   * Add your own sources and layers here, not in `onLoad`. `setStyle` replaces
+   * the whole style object, taking every custom source and layer with it, so a
+   * layer added once on load silently vanishes the first time the reader
+   * toggles the theme. Make the callback idempotent (`map.getSource(id)`
+   * before adding) because it runs more than once by design.
+   */
+  onStyleReady?: (map: MapLibreMap) => void;
 };
+
+/**
+ * Calls `fn` once the style is genuinely usable, re-arming until it is.
+ *
+ * `isStyleLoaded()` is the only reliable gate -- addLayer throws against a
+ * style that is still assembling -- but there is no single event that always
+ * arrives after it flips. `load` covers the first style; after a `setStyle`
+ * the first `idle` routinely lands while the new style is still loading, and
+ * announcing into that one and giving up is exactly how custom layers vanish
+ * on a theme change and never come back.
+ */
+function whenStyleReady(map: MapLibreMap, fn: (map: MapLibreMap) => void) {
+  const attempt = () => {
+    if (map.isStyleLoaded()) fn(map);
+    else map.once("idle", attempt);
+  };
+  attempt();
+}
 
 export function MapCanvas({
   mapStyle,
@@ -69,6 +98,7 @@ export function MapCanvas({
   workerUrl,
   fallback,
   onLoad,
+  onStyleReady,
   className,
   ...props
 }: MapCanvasProps) {
@@ -76,6 +106,8 @@ export function MapCanvas({
   const mapRef = React.useRef<MapLibreMap | null>(null);
   const onLoadRef = React.useRef(onLoad);
   onLoadRef.current = onLoad;
+  const onStyleReadyRef = React.useRef(onStyleReady);
+  onStyleReadyRef.current = onStyleReady;
 
   const [failed, setFailed] = React.useState(false);
   // Tracks the style the map is already showing, so the swap effect does not
@@ -151,7 +183,10 @@ export function MapCanvas({
 
     mapRef.current = map;
     appliedStyleRef.current = style;
-    map.on("load", () => onLoadRef.current?.(map));
+    map.on("load", () => {
+      onLoadRef.current?.(map);
+      whenStyleReady(map, (ready) => onStyleReadyRef.current?.(ready));
+    });
     map.on("error", (e) => {
       if ((e as { error?: { status?: number } }).error?.status === 401) setFailed(true);
     });
@@ -170,6 +205,17 @@ export function MapCanvas({
     if (!map || appliedStyleRef.current === style) return;
     appliedStyleRef.current = style;
     map.setStyle(style as string);
+    // setStyle discards every custom source and layer, so whoever added them
+    // has to add them again once the replacement style is ready.
+    //
+    // Waiting for `styledata` first is load-bearing. setStyle is asynchronous,
+    // and for a tick afterwards isStyleLoaded() still answers for the OUTGOING
+    // style -- so checking it straight away reports "ready", re-adds the layers
+    // to the style that is about to be thrown away, and leaves the new one
+    // empty with nothing left to trigger a retry.
+    map.once("styledata", () => {
+      whenStyleReady(map, (ready) => onStyleReadyRef.current?.(ready));
+    });
   }, [style]);
 
   return (

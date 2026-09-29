@@ -37,6 +37,8 @@ export function VisualizationPicker({
   value,
   defaultValue = "lines",
   onValueChange,
+  unavailable,
+  unavailableReason = "Not available for this layer",
   ...props
 }: Omit<
   React.ComponentProps<typeof SegmentedControl>,
@@ -45,6 +47,18 @@ export function VisualizationPicker({
   value?: VisualizationTypeId;
   defaultValue?: VisualizationTypeId;
   onValueChange?: (value: VisualizationTypeId) => void;
+  /**
+   * Types this layer cannot be drawn as. Shown greyed rather than removed: the
+   * seven glyphs are a fixed vocabulary, and dropping some would move the
+   * others, so a reader who knows where "heatmap" sits would have to re-find
+   * it on every layer.
+   *
+   * Which ones apply is a property of the geometry -- a line network has no
+   * zones to fill, and no time dimension to animate as trips.
+   */
+  unavailable?: readonly VisualizationTypeId[];
+  /** Hover text on the greyed glyphs. Say why, not that. */
+  unavailableReason?: string;
 }) {
   const items = React.useMemo(
     () =>
@@ -52,8 +66,10 @@ export function VisualizationPicker({
         value: v,
         label,
         icon: <Icon className="h-[18px] w-auto" aria-hidden />,
+        disabled: unavailable?.includes(v),
+        title: unavailable?.includes(v) ? `${label} — ${unavailableReason}` : label,
       })),
-    [],
+    [unavailable, unavailableReason],
   );
 
   return (

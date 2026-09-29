@@ -9,6 +9,12 @@ export type SegmentedControlItem = {
   label: string;
   /** Rendered instead of the label; the label still names it for assistive tech. */
   icon?: React.ReactNode;
+  /** Offered but not selectable, e.g. an option this data cannot support. */
+  disabled?: boolean;
+  /** Overrides the hover title, which otherwise repeats the label. Use it to
+   *  say WHY a disabled option is disabled -- a greyed control with no reason
+   *  reads as a bug. */
+  title?: string;
 };
 
 /**
@@ -59,13 +65,17 @@ export function SegmentedControl({
         return (
           <label
             key={item.value}
-            title={item.label}
+            title={item.title ?? item.label}
             data-state={selected ? "selected" : "default"}
+            data-disabled={item.disabled || undefined}
             className={cn(
-              "flex flex-1 cursor-pointer items-center justify-center rounded-md transition-colors",
-              "text-muted-foreground hover:text-foreground",
+              "flex flex-1 items-center justify-center rounded-md transition-colors",
+              "text-muted-foreground",
               "has-[input:focus-visible]:ring-[3px] has-[input:focus-visible]:ring-ring/50",
               size === "sm" ? "py-1 text-xs" : "py-1.5 text-sm",
+              item.disabled
+                ? "cursor-not-allowed opacity-40"
+                : "cursor-pointer hover:text-foreground",
               selected && "bg-background text-foreground shadow-sm",
             )}
           >
@@ -74,8 +84,15 @@ export function SegmentedControl({
               name={name ?? generatedName}
               value={item.value}
               checked={selected}
+              disabled={item.disabled}
               onChange={() => select(item.value)}
-              className="sr-only"
+              // outline-none: the visible ring is the label's, via
+              // has-[input:focus-visible]. The browser also draws its own
+              // outline on this input, which sr-only clips away to nothing --
+              // invisible, but still a real focus indicator geometrically, and
+              // the focus-ring audit measures it escaping whatever panel the
+              // control sits in. Dropping it costs no indication at all.
+              className="sr-only outline-none"
             />
             {item.icon ?? item.label}
             {item.icon ? <span className="sr-only">{item.label}</span> : null}
