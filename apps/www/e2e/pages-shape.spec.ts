@@ -53,7 +53,8 @@ async function load(page: Page, route: string) {
   const sameOrigin: string[] = [];
 
   page.on("response", (r) => {
-    if (r.status() >= 400) failures.push({ url: r.url(), detail: `HTTP ${r.status()}` });
+    if (r.status() >= 400)
+      failures.push({ url: r.url(), detail: `HTTP ${r.status()}` });
   });
   page.on("requestfailed", (r) => {
     const why = r.failure()?.errorText ?? "request failed";
@@ -75,7 +76,46 @@ async function load(page: Page, route: string) {
   return { failures, sameOrigin };
 }
 
-const report = (f: Failure[]) => "\n" + f.map((x) => `  ${x.detail}  ${x.url}`).join("\n") + "\n";
+const report = (f: Failure[]) =>
+  "\n" + f.map((x) => `  ${x.detail}  ${x.url}`).join("\n") + "\n";
+
+/**
+ * Wait for one specific asset request, rather than for the network to go quiet.
+ *
+ * `networkidle` is the wrong synchronisation point for anything the page
+ * fetches from JavaScript after hydration. It fires after 500ms without
+ * traffic, and on a slow machine that quiet window opens BEFORE hydration gets
+ * round to the fetch. Measured against this very page: unthrottled, the fetch
+ * landed at 293ms and idle at 1327ms, so it passed; on a 4x-throttled CPU idle
+ * came at 695ms and the fetch at 998ms, so it failed.
+ *
+ * Note the direction, because it is the opposite of the obvious guess:
+ * throttling makes idle fire EARLIER, not later -- slow JS pushes the NEXT
+ * request further away, so the 500ms gap arrives sooner. A slower machine
+ * therefore fails this more reliably, which is exactly why the data assertion
+ * failed on every CI run and passed on every local one.
+ *
+ * The sweep in `load` above still uses idle, and that is fine: it checks URLs
+ * that are present in the markup at load. The two assets whose URLs are built
+ * in JavaScript are the ones that need waiting for, and they have this.
+ */
+async function awaitAsset(
+  page: Page,
+  route: string,
+  match: string,
+  absent: string,
+) {
+  // Armed BEFORE navigating: the response can arrive before the goto settles.
+  const arrived = page.waitForResponse((r) => r.url().includes(match), {
+    timeout: 30_000,
+  });
+  await page.goto(`${BASE}${route}`);
+  // Swallowing the timeout to keep the message about the asset rather than
+  // about Playwright's event loop.
+  const res = await arrived.catch(() => null);
+  expect(res, absent).not.toBeNull();
+  return res!;
+}
 
 test.describe("pages shape", () => {
   for (const route of ROUTES) {
@@ -90,7 +130,10 @@ test.describe("pages shape", () => {
       const unprefixed = sameOrigin
         .map((u) => new URL(u).pathname)
         .filter((p) => !p.startsWith(`${PREFIX}/`) && p !== PREFIX);
-      expect(unprefixed, `requests that escaped ${PREFIX}:\n${unprefixed.join("\n")}`).toEqual([]);
+      expect(
+        unprefixed,
+        `requests that escaped ${PREFIX}:\n${unprefixed.join("\n")}`,
+      ).toEqual([]);
     });
   }
 
@@ -104,23 +147,26 @@ test.describe("pages shape", () => {
    * fetched, returned 200, and came back as JavaScript -- a wrong MIME here is
    * enough on its own to stop the browser executing a module worker.
    */
-  test("the maplibre worker is fetched, 200, and typed as JavaScript", async ({ page }) => {
-    const seen: { status: number; type: string }[] = [];
-    page.on("response", async (r) => {
-      if (r.url().includes("maplibre-gl-worker")) {
-        seen.push({ status: r.status(), type: r.headers()["content-type"] ?? "" });
-      }
-    });
+  test("the maplibre worker is fetched, 200, and typed as JavaScript", async ({
+    page,
+  }) => {
+    const res = await awaitAsset(
+      page,
+      "/preview/map-canvas-default/",
+      "maplibre-gl-worker",
+      "the page never requested the maplibre worker at all",
+    );
 
-    await page.goto(`${BASE}/preview/map-canvas-default/`, { waitUntil: "networkidle" });
-
-    expect(seen.length, "the page never requested the maplibre worker at all").toBeGreaterThan(0);
-    for (const s of seen) {
-      expect(s.status, "worker did not return 200").toBe(200);
-      expect(s.type, `worker served as "${s.type}", which a browser will refuse`).toMatch(
-        /javascript|ecmascript/i,
-      );
-    }
+    expect(
+      new URL(res.url()).pathname,
+      "worker path is missing the basePath",
+    ).toContain(PREFIX);
+    expect(res.status(), "worker did not return 200").toBe(200);
+    const type = res.headers()["content-type"] ?? "";
+    expect(
+      type,
+      `worker served as "${type}", which a browser will refuse`,
+    ).toMatch(/javascript|ecmascript/i);
   });
 
   /**
@@ -129,22 +175,23 @@ test.describe("pages shape", () => {
    * blind spot as the maplibre worker. And it fails the same way: the map
    * simply draws no lines, with the panels still rendering happily around it.
    */
-  test("the vehicle flows data is fetched, 200, and typed as JSON", async ({ page }) => {
-    const seen: { url: string; status: number; type: string }[] = [];
-    page.on("response", (r) => {
-      if (r.url().includes("vehicle-flows")) {
-        seen.push({ url: r.url(), status: r.status(), type: r.headers()["content-type"] ?? "" });
-      }
-    });
+  test("the vehicle flows data is fetched, 200, and typed as JSON", async ({
+    page,
+  }) => {
+    const res = await awaitAsset(
+      page,
+      "/blocks/map-workspace/",
+      "vehicle-flows",
+      "the block never requested its data file at all",
+    );
 
-    await page.goto(`${BASE}/blocks/map-workspace/`, { waitUntil: "networkidle" });
-
-    expect(seen.length, "the block never requested its data file at all").toBeGreaterThan(0);
-    for (const s of seen) {
-      expect(new URL(s.url).pathname, "data path is missing the basePath").toContain(PREFIX);
-      expect(s.status, "vehicle-flows.json did not return 200").toBe(200);
-      expect(s.type, `served as "${s.type}"`).toMatch(/json/i);
-    }
+    expect(
+      new URL(res.url()).pathname,
+      "data path is missing the basePath",
+    ).toContain(PREFIX);
+    expect(res.status(), "vehicle-flows.json did not return 200").toBe(200);
+    const type = res.headers()["content-type"] ?? "";
+    expect(type, `served as "${type}"`).toMatch(/json/i);
   });
 
   /**
