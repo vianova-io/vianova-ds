@@ -24,7 +24,10 @@ function FloatingPanel({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function FloatingPanelHeader({ className, ...props }: React.ComponentProps<"div">) {
+function FloatingPanelHeader({
+  className,
+  ...props
+}: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="floating-panel-header"
@@ -34,7 +37,10 @@ function FloatingPanelHeader({ className, ...props }: React.ComponentProps<"div"
   );
 }
 
-function FloatingPanelTitle({ className, ...props }: React.ComponentProps<"span">) {
+function FloatingPanelTitle({
+  className,
+  ...props
+}: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="floating-panel-title"
@@ -44,7 +50,10 @@ function FloatingPanelTitle({ className, ...props }: React.ComponentProps<"span"
   );
 }
 
-function FloatingPanelActions({ className, ...props }: React.ComponentProps<"div">) {
+function FloatingPanelActions({
+  className,
+  ...props
+}: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="floating-panel-actions"
@@ -86,7 +95,10 @@ function FloatingPanelBody({
   const scrolling = useScrollActivity(scrollRef);
   const [hovering, setHovering] = React.useState(false);
   const [dragging, setDragging] = React.useState(false);
-  const [thumb, setThumb] = React.useState<{ top: number; height: number } | null>(null);
+  const [thumb, setThumb] = React.useState<{
+    top: number;
+    height: number;
+  } | null>(null);
 
   // The body owns a ref because its scroll state depends on one, but a caller
   // may legitimately want its own -- to scroll a layer into view, say. Merged
@@ -100,27 +112,51 @@ function FloatingPanelBody({
     [externalRef],
   );
 
+  /**
+   * The last measurement, mirrored in a ref so the "did anything move?" test
+   * can happen BEFORE setState rather than inside the updater.
+   *
+   * That distinction is the whole bug. Returning the previous object from the
+   * updater looks like it should stop a re-render, and it does bail out of
+   * re-rendering the children -- but React still re-renders THIS component
+   * before it bails, which re-runs the no-deps effect below, which calls
+   * setState again. Measured: 6.5M calls in six seconds, 99.9% of them
+   * correctly reporting nothing had changed, and the loop ran anyway until
+   * React gave up with "Maximum update depth exceeded". The only reliable
+   * answer is not to call the setter at all.
+   */
+  const measured = React.useRef<{ top: number; height: number } | null>(null);
+
   const measure = React.useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     const { scrollTop, scrollHeight, clientHeight } = el;
+    const prev = measured.current;
     // Nothing to scroll, nothing to draw. Drawing a full-height thumb instead
     // would claim the panel is scrollable when it is not.
     if (scrollHeight <= clientHeight + 1) {
-      setThumb((prev) => (prev === null ? prev : null));
+      if (prev === null) return;
+      measured.current = null;
+      setThumb(null);
       return;
     }
-    const height = Math.max(MIN_THUMB, (clientHeight / scrollHeight) * clientHeight);
+    const height = Math.max(
+      MIN_THUMB,
+      (clientHeight / scrollHeight) * clientHeight,
+    );
     const travel = clientHeight - height;
     const top = (scrollTop / (scrollHeight - clientHeight)) * travel;
-    // Returning the previous object when nothing moved is what makes the
-    // measure-after-every-render below safe: an unconditional setState there
-    // would re-render, measure, set state again, and never stop.
-    setThumb((prev) =>
-      prev && Math.abs(prev.top - top) < 0.5 && Math.abs(prev.height - height) < 0.5
-        ? prev
-        : { top, height },
-    );
+    // Sub-pixel jitter is not movement; redrawing for it would be the loop by
+    // another name.
+    if (
+      prev &&
+      Math.abs(prev.top - top) < 0.5 &&
+      Math.abs(prev.height - height) < 0.5
+    )
+      return;
+    const next = { top, height };
+    measured.current = next;
+    setThumb(next);
   }, []);
 
   /**
@@ -132,6 +168,12 @@ function FloatingPanelBody({
    * while the same code produced one under Playwright. A render happens
    * whenever that content changes, so measuring here closes the gap without
    * having to know which mutation did it.
+   *
+   * Safe only because `measure` above returns without calling setState when
+   * nothing moved. If you make it set state unconditionally, this becomes an
+   * infinite render loop -- and the symptom is not just a warning: it starved
+   * the map canvas next to this panel of the re-render it needed to
+   * initialise, so the map silently never appeared.
    */
   React.useEffect(measure);
 
