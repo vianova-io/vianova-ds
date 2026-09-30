@@ -15,7 +15,10 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import type { DataDrivenPropertyValueSpecification, Map as MapLibreMap } from "maplibre-gl";
+import type {
+  DataDrivenPropertyValueSpecification,
+  Map as MapLibreMap,
+} from "maplibre-gl";
 
 import { Button } from "@/registry/vianova/ui/button";
 import { ButtonGroup } from "@/registry/vianova/ui/button-group";
@@ -30,7 +33,11 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/registry/vianova/ui/input-group";
-import { Popover, PopoverContent, PopoverTrigger } from "@/registry/vianova/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/registry/vianova/ui/popover";
 import {
   Select,
   SelectContent,
@@ -48,6 +55,7 @@ import {
 import { DataLayerCard } from "@/registry/vianova/product/data-layer-card";
 import { FilterBuilder } from "@/registry/vianova/product/filter-builder";
 import { FilterChipBar } from "@/registry/vianova/product/filter-chip-bar";
+import { FilterFacets } from "@/registry/vianova/product/filter-facets";
 import {
   FloatingPanel,
   FloatingPanelActions,
@@ -137,7 +145,10 @@ const FILTER_FIELDS: FilterField[] = [
     name: "road",
     label: "Road type",
     type: "enum",
-    options: Object.entries(ROAD_LABELS).map(([value, label]) => ({ value, label })),
+    options: Object.entries(ROAD_LABELS).map(([value, label]) => ({
+      value,
+      label,
+    })),
   },
   { name: "speed", label: "Speed limit", type: "number", unit: "km/h" },
   { name: "volume", label: "Vehicle volume", type: "number", unit: "vehicles" },
@@ -153,7 +164,12 @@ const FILTER_FIELDS: FilterField[] = [
 const UNAVAILABLE: readonly VisualizationTypeId[] = ["zones", "trips"];
 
 /** Every source and layer this block owns, so a redraw can clear them all. */
-const SOURCES = ["flows-lines", "flows-points", "flows-cluster", "flows-grid"] as const;
+const SOURCES = [
+  "flows-lines",
+  "flows-points",
+  "flows-cluster",
+  "flows-grid",
+] as const;
 const LAYERS = [
   "flows-line",
   "flows-point",
@@ -211,9 +227,13 @@ const CELL_METRES = 300;
  */
 function gridCells(points: { position: [number, number]; volume: number }[]) {
   const latSize = CELL_METRES / 111_320;
-  const cells = new Map<string, { x: number; y: number; volume: number; count: number }>();
+  const cells = new Map<
+    string,
+    { x: number; y: number; volume: number; count: number }
+  >();
   for (const { position, volume } of points) {
-    const lonSize = latSize / Math.max(0.1, Math.cos((position[1] * Math.PI) / 180));
+    const lonSize =
+      latSize / Math.max(0.1, Math.cos((position[1] * Math.PI) / 180));
     const x = Math.floor(position[0] / lonSize);
     const y = Math.floor(position[1] / latSize);
     const key = `${x}:${y}`;
@@ -227,7 +247,8 @@ function gridCells(points: { position: [number, number]; volume: number }[]) {
   }
   return [...cells.values()].map((cell) => {
     const lat0 = cell.y * latSize;
-    const lonSize = latSize / Math.max(0.1, Math.cos(((lat0 + latSize / 2) * Math.PI) / 180));
+    const lonSize =
+      latSize / Math.max(0.1, Math.cos(((lat0 + latSize / 2) * Math.PI) / 180));
     const lon0 = cell.x * lonSize;
     const lon1 = lon0 + lonSize;
     const lat1 = lat0 + latSize;
@@ -254,7 +275,10 @@ function gridCells(points: { position: [number, number]; volume: number }[]) {
 /* Scales                                                                      */
 /* -------------------------------------------------------------------------- */
 
-const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
+const compact = new Intl.NumberFormat("en", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
 const plain = new Intl.NumberFormat("en");
 
 /**
@@ -295,9 +319,9 @@ function quantileEdges(values: number[], count: number): number[] {
 function readRamp(scope: HTMLElement | null): string[] {
   if (typeof document === "undefined") return [];
   const style = getComputedStyle(scope ?? document.documentElement);
-  return RAMP_STOPS.map((stop) => style.getPropertyValue(`--map-ramp-${stop}`).trim()).filter(
-    Boolean,
-  );
+  return RAMP_STOPS.map((stop) =>
+    style.getPropertyValue(`--map-ramp-${stop}`).trim(),
+  ).filter(Boolean);
 }
 
 function colorExpression(
@@ -313,14 +337,18 @@ function colorExpression(
   // spans the full scheme rather than crowding into its pale end.
   const steps: unknown[] = ["step", input, ramp[0]];
   for (let i = 1; i < edges.length; i++) {
-    const colour = ramp[Math.round(((ramp.length - 1) * i) / (edges.length - 1))] ?? ramp.at(-1)!;
+    const colour =
+      ramp[Math.round(((ramp.length - 1) * i) / (edges.length - 1))] ??
+      ramp.at(-1)!;
     steps.push(edges[i], colour);
   }
   return steps as DataDrivenPropertyValueSpecification<string>;
 }
 
 /** Busy roads read heavier, and everything thickens as you zoom in. */
-function widthExpression(edges: number[]): DataDrivenPropertyValueSpecification<number> {
+function widthExpression(
+  edges: number[],
+): DataDrivenPropertyValueSpecification<number> {
   const mid = edges[Math.floor(edges.length * 0.6)] ?? 1;
   const high = edges[Math.floor(edges.length * 0.9)] ?? mid + 1;
   const tier = (a: number, b: number, c: number): unknown =>
@@ -368,7 +396,9 @@ export function MapWorkspace({
   const [title, setTitle] = React.useState("Zürich vehicle flows");
   const [all, setAll] = React.useState<FlowFeature[] | null>(null);
   const [failed, setFailed] = React.useState(false);
-  const [filter, setFilter] = React.useState<FilterGroup>(() => newGroup("and"));
+  const [filter, setFilter] = React.useState<FilterGroup>(() =>
+    newGroup("and"),
+  );
   const [visible, setVisible] = React.useState(true);
   const [viz, setViz] = React.useState<VisualizationTypeId>("lines");
   const [chartLayer, setChartLayer] = React.useState("flows");
@@ -408,7 +438,70 @@ export function MapWorkspace({
 
   // One predicate drives the map AND the charts, so the totals beside the map
   // can never describe a different set of roads than the map is drawing.
-  const predicate = React.useMemo(() => compileFilter(filter, FILTER_FIELDS), [filter]);
+  /**
+   * The facets, their ranges and their choices, derived from the WHOLE layer
+   * rather than from what is currently selected.
+   *
+   * Deriving them from the filtered set instead would make the controls close
+   * in behind the reader: narrow the speed range and the slider's own limits
+   * would shrink to match, so widening it again becomes impossible.
+   *
+   * A field is only offered as a facet if the data can actually tell its
+   * values apart. `junction` is false on all 7,205 segments in this extract,
+   * so a Yes/No control for it would offer a "Yes" that always empties the
+   * map -- a control that can only mislead. Choice fields also need to be
+   * countable: road NAME has 1,574 distinct values here, which is a search
+   * problem rather than a pick-list, and stays in the advanced builder.
+   */
+  const { facetFields, bounds, choices } = React.useMemo(() => {
+    const rows = all ?? [];
+    const bounds: Record<string, { min: number; max: number }> = {};
+    const choices: Record<string, { value: string; label: string }[]> = {};
+    const facetFields: typeof FILTER_FIELDS = [];
+
+    for (const field of FILTER_FIELDS) {
+      if (field.type === "number") {
+        const values = rows
+          .map((r) => Number(r.properties[field.name as keyof FlowProperties]))
+          .filter(Number.isFinite);
+        if (!values.length) continue;
+        const min = Math.floor(Math.min(...values));
+        const max = Math.ceil(Math.max(...values));
+        if (min >= max) continue;
+        bounds[field.name] = { min, max };
+        facetFields.push(field);
+        continue;
+      }
+      if (
+        field.type === "enum" ||
+        field.type === "string" ||
+        field.type === "boolean"
+      ) {
+        const present = new Set(
+          rows.map((r) =>
+            String(r.properties[field.name as keyof FlowProperties]),
+          ),
+        );
+        if (present.size < 2 || present.size > 50) continue;
+        if (field.type !== "boolean") {
+          const known = field.options ?? [];
+          choices[field.name] = [...present]
+            .map((value) => ({
+              value,
+              label: known.find((o) => o.value === value)?.label ?? value,
+            }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+        }
+        facetFields.push(field);
+      }
+    }
+    return { facetFields, bounds, choices };
+  }, [all]);
+
+  const predicate = React.useMemo(
+    () => compileFilter(filter, FILTER_FIELDS),
+    [filter],
+  );
   const features = React.useMemo(
     () => (all ? all.filter((f) => predicate(f.properties)) : []),
     [all, predicate],
@@ -423,7 +516,10 @@ export function MapWorkspace({
     [features],
   );
 
-  const cells = React.useMemo(() => (viz === "grid" ? gridCells(points) : []), [viz, points]);
+  const cells = React.useMemo(
+    () => (viz === "grid" ? gridCells(points) : []),
+    [viz, points],
+  );
 
   /**
    * The legend describes whatever the active visualisation encodes. A grid
@@ -554,7 +650,11 @@ export function MapWorkspace({
           },
           // No text-font: the basemap's glyph set is the only one guaranteed to
           // be available, and naming a face it does not ship drops the labels.
-          paint: { "text-color": "#000", "text-halo-color": "#fff", "text-halo-width": 1 },
+          paint: {
+            "text-color": "#000",
+            "text-halo-color": "#fff",
+            "text-halo-width": 1,
+          },
         });
         map.addLayer({
           id: "flows-cluster-single",
@@ -593,8 +693,24 @@ export function MapWorkspace({
               edges.at(-1) ?? 1,
               1,
             ],
-            "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 10, 0.6, 16, 2.4],
-            "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 10, 8, 16, 26],
+            "heatmap-intensity": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              10,
+              0.6,
+              16,
+              2.4,
+            ],
+            "heatmap-radius": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              10,
+              8,
+              16,
+              26,
+            ],
             "heatmap-opacity": 0.85,
             // A heatmap ramp must start transparent at density 0 or it paints
             // the whole viewport with its lowest colour.
@@ -631,9 +747,25 @@ export function MapWorkspace({
             ["linear"],
             ["zoom"],
             10,
-            ["interpolate", ["linear"], ["get", "volume"], edges[0] ?? 0, 1.5, edges.at(-1) ?? 1, 6],
+            [
+              "interpolate",
+              ["linear"],
+              ["get", "volume"],
+              edges[0] ?? 0,
+              1.5,
+              edges.at(-1) ?? 1,
+              6,
+            ],
             16,
-            ["interpolate", ["linear"], ["get", "volume"], edges[0] ?? 0, 3, edges.at(-1) ?? 1, 16],
+            [
+              "interpolate",
+              ["linear"],
+              ["get", "volume"],
+              edges[0] ?? 0,
+              3,
+              edges.at(-1) ?? 1,
+              16,
+            ],
           ],
         },
       });
@@ -653,9 +785,18 @@ export function MapWorkspace({
     const byName = new Map<string, number>();
     for (const { properties } of features) {
       total += properties.volume;
-      byRoad.set(properties.road, (byRoad.get(properties.road) ?? 0) + properties.volume);
-      bySpeed.set(properties.speed, (bySpeed.get(properties.speed) ?? 0) + properties.volume);
-      byName.set(properties.name, (byName.get(properties.name) ?? 0) + properties.volume);
+      byRoad.set(
+        properties.road,
+        (byRoad.get(properties.road) ?? 0) + properties.volume,
+      );
+      bySpeed.set(
+        properties.speed,
+        (bySpeed.get(properties.speed) ?? 0) + properties.volume,
+      );
+      byName.set(
+        properties.name,
+        (byName.get(properties.name) ?? 0) + properties.volume,
+      );
     }
     const roads = [...byRoad.entries()]
       .sort((a, b) => b[1] - a[1])
@@ -717,7 +858,12 @@ export function MapWorkspace({
         <Button variant="secondary" size="icon" aria-label="Collapse sidebar">
           <PanelLeft />
         </Button>
-        <InlineEdit value={title} onValueChange={setTitle} label="Map name" className="font-medium" />
+        <InlineEdit
+          value={title}
+          onValueChange={setTitle}
+          label="Map name"
+          className="font-medium"
+        />
 
         <div className="mx-auto flex items-center gap-2">
           <Button variant="secondary" size="icon" aria-label="Data layers">
@@ -736,7 +882,11 @@ export function MapWorkspace({
             <Button variant="secondary" size="icon" aria-label="Drawing tools">
               <MousePointer2 />
             </Button>
-            <Button variant="secondary" size="icon" aria-label="Choose a drawing tool">
+            <Button
+              variant="secondary"
+              size="icon"
+              aria-label="Choose a drawing tool"
+            >
               <ChevronDown />
             </Button>
           </ButtonGroup>
@@ -801,32 +951,64 @@ export function MapWorkspace({
                 <Popover>
                   <PopoverTrigger
                     render={
-                      <Button variant="ghost" size="icon-xs" aria-label="Edit Vehicle Flows filters">
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label="Edit Vehicle Flows filters"
+                      >
                         <ListFilter />
                       </Button>
                     }
                   />
                   <PopoverContent align="end" className="w-[440px] p-3">
-                    <FilterBuilder fields={FILTER_FIELDS} value={filter} onValueChange={setFilter} />
+                    <FilterBuilder
+                      fields={FILTER_FIELDS}
+                      value={filter}
+                      onValueChange={setFilter}
+                    />
                   </PopoverContent>
                 </Popover>
               }
               filtersContent={
-                <FilterChipBar
-                  value={filter}
-                  fields={FILTER_FIELDS}
-                  onValueChange={setFilter}
-                  onClear={() => setFilter(newGroup("and"))}
-                  emptyMessage="No filters — showing every measured segment."
-                />
+                loading ? (
+                  <Skeleton className="h-32 w-full" />
+                ) : (
+                  <FilterFacets
+                    fields={facetFields}
+                    value={filter}
+                    onValueChange={setFilter}
+                    bounds={bounds}
+                    choices={choices}
+                  />
+                )
               }
             />
 
-            <DataLayerCard name="Accidents ZH 2011-2023" expanded={false} visible={false} />
-            <DataLayerCard name="Speed by Roads" expanded={false} visible={false} />
-            <DataLayerCard name="Overspeeding Events" expanded={false} visible={false} />
-            <DataLayerCard name="Overspeeding" expanded={false} visible={false} />
-            <DataLayerCard name="Heavy braking Events" expanded={false} visible={false} />
+            <DataLayerCard
+              name="Accidents ZH 2011-2023"
+              expanded={false}
+              visible={false}
+            />
+            <DataLayerCard
+              name="Speed by Roads"
+              expanded={false}
+              visible={false}
+            />
+            <DataLayerCard
+              name="Overspeeding Events"
+              expanded={false}
+              visible={false}
+            />
+            <DataLayerCard
+              name="Overspeeding"
+              expanded={false}
+              visible={false}
+            />
+            <DataLayerCard
+              name="Heavy braking Events"
+              expanded={false}
+              visible={false}
+            />
           </div>
         </FloatingPanelBody>
       </FloatingPanel>
@@ -846,11 +1028,16 @@ export function MapWorkspace({
         </FloatingPanelHeader>
 
         <div className="space-y-2 p-2">
-          <Select value={chartLayer} onValueChange={(value) => setChartLayer(value ?? "flows")}>
+          <Select
+            value={chartLayer}
+            onValueChange={(value) => setChartLayer(value ?? "flows")}
+          >
             <SelectTrigger className="w-full" aria-label="Chart source layer">
               {/* Base UI renders the raw value unless given a mapping, which
                   would show "flows" instead of the layer name. */}
-              <SelectValue>{(value: string) => CHART_LAYERS[value] ?? value}</SelectValue>
+              <SelectValue>
+                {(value: string) => CHART_LAYERS[value] ?? value}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {Object.entries(CHART_LAYERS).map(([value, label]) => (
@@ -883,7 +1070,10 @@ export function MapWorkspace({
             ) : (
               <>
                 <ChartCard>
-                  <ChartCardHeader title="Total vehicle volume" icon={<Hash />} />
+                  <ChartCardHeader
+                    title="Total vehicle volume"
+                    icon={<Hash />}
+                  />
                   {/* A hero number, with no ring drawn round it. A ring encodes
                       a share of something, and a running total is not a share
                       of anything. */}
@@ -894,12 +1084,22 @@ export function MapWorkspace({
                 </ChartCard>
 
                 <ChartCard>
-                  <ChartCardHeader title="Volume by road type" icon={<BarChart3 />} />
+                  <ChartCardHeader
+                    title="Volume by road type"
+                    icon={<BarChart3 />}
+                  />
                   {/* Horizontal: "Motorway link" and "Living street" do not fit
                       under a vertical bar at this width without turning
                       sideways or being cut in half. */}
-                  <ChartContainer config={VOLUME_CONFIG} className="h-44 w-full">
-                    <BarChart data={stats.roads} layout="vertical" margin={{ left: 4, right: 8 }}>
+                  <ChartContainer
+                    config={VOLUME_CONFIG}
+                    className="h-44 w-full"
+                  >
+                    <BarChart
+                      data={stats.roads}
+                      layout="vertical"
+                      margin={{ left: 4, right: 8 }}
+                    >
                       <CartesianGrid horizontal={false} />
                       <XAxis type="number" hide />
                       <YAxis
@@ -910,20 +1110,35 @@ export function MapWorkspace({
                         axisLine={false}
                       />
                       <ChartTooltip content={<ChartTooltipContent />} />
-                      <Bar dataKey="volume" fill="var(--color-volume)" radius={3} />
+                      <Bar
+                        dataKey="volume"
+                        fill="var(--color-volume)"
+                        radius={3}
+                      />
                     </BarChart>
                   </ChartContainer>
                 </ChartCard>
 
                 <ChartCard>
-                  <ChartCardHeader title="Volume by speed limit" icon={<BarChart3 />} />
-                  <ChartContainer config={VOLUME_CONFIG} className="h-40 w-full">
+                  <ChartCardHeader
+                    title="Volume by speed limit"
+                    icon={<BarChart3 />}
+                  />
+                  <ChartContainer
+                    config={VOLUME_CONFIG}
+                    className="h-40 w-full"
+                  >
                     {/* No negative left margin: these ticks read "3.2M", and
                         pulling the axis outside the plot clips the first
                         character against the panel. */}
                     <BarChart data={stats.speeds} margin={{ left: 0, top: 4 }}>
                       <CartesianGrid vertical={false} />
-                      <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                      <XAxis
+                        dataKey="label"
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                      />
                       <YAxis
                         tickLine={false}
                         axisLine={false}
@@ -932,10 +1147,16 @@ export function MapWorkspace({
                       />
                       <ChartTooltip
                         content={
-                          <ChartTooltipContent labelFormatter={(l) => `${l} km/h`} />
+                          <ChartTooltipContent
+                            labelFormatter={(l) => `${l} km/h`}
+                          />
                         }
                       />
-                      <Bar dataKey="volume" fill="var(--color-volume)" radius={3} />
+                      <Bar
+                        dataKey="volume"
+                        fill="var(--color-volume)"
+                        radius={3}
+                      />
                     </BarChart>
                   </ChartContainer>
                 </ChartCard>
@@ -959,7 +1180,10 @@ export function MapWorkspace({
       {/* bottom-12, not bottom-4: the basemap attribution is a 24px bar pinned
           to the bottom-right of the canvas, and at bottom-4 it covers the
           zoom-out button completely. */}
-      <MapControls className="absolute bottom-12 right-4" basemapLabel="Satellite" />
+      <MapControls
+        className="absolute bottom-12 right-4"
+        basemapLabel="Satellite"
+      />
     </div>
   );
 }

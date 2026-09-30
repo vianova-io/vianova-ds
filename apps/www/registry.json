@@ -282,6 +282,7 @@
         "@vianova/filter-builder",
         "@vianova/filter-chip-bar",
         "@vianova/filter-eval",
+        "@vianova/filter-facets",
         "@vianova/floating-panel",
         "@vianova/inline-edit",
         "@vianova/input-group",
@@ -2147,6 +2148,36 @@
       "files": [
         {
           "path": "registry/vianova/product/filter-chip-bar.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "filter-facets",
+      "type": "registry:ui",
+      "title": "Filter Facets",
+      "description": "Filter Facets — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/button",
+        "@vianova/combobox",
+        "@vianova/filter-ast",
+        "@vianova/input",
+        "@vianova/slider",
+        "@vianova/toggle-group",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/filter-facets.tsx",
           "type": "registry:ui"
         }
       ],
