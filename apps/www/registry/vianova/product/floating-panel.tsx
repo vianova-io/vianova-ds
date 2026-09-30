@@ -236,7 +236,15 @@ function FloatingPanelBody({
         data-scrolling={scrolling || undefined}
         // scrollbar-none removes the native bar from layout. That is the whole
         // point: it is what frees the column the cards were being pushed out of.
-        className="min-h-0 flex-1 overflow-y-auto scrollbar-none"
+        //
+        // scroll-p-2 is about focus, not spacing. Tabbing to a control below
+        // the fold makes the browser scroll it JUST into view, flush with this
+        // edge -- and a focus ring draws outside its control, so the ring gets
+        // sliced off however much padding the content has. scroll-padding is
+        // the one thing that moves the resting place rather than the content:
+        // the browser now stops 8px short, and the ring lands inside. It
+        // changes nothing at rest, so no screenshot moves.
+        className="min-h-0 flex-1 scroll-p-2 overflow-y-auto scrollbar-none"
         {...props}
       />
       {thumb ? (
