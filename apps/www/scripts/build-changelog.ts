@@ -41,11 +41,11 @@ function git(args: string[]): string {
 /**
  * Returns true when history is still incomplete after trying to deepen it.
  *
- * Vercel clones shallow and its build container cannot always reach the remote
- * afterwards, so --unshallow fails. The first version of this swallowed that
- * and rendered ten commits as though they were the whole project history — a
- * changelog that is quietly wrong is worse than one that is obviously partial,
- * so the result is reported and the page says so.
+ * actions/checkout defaults to fetch-depth: 1, and a runner cannot always
+ * reach the remote afterwards, so --unshallow fails. The first version of this
+ * swallowed that and rendered ten commits as though they were the whole project
+ * history — a changelog that is quietly wrong is worse than one that is
+ * obviously partial, so the result is reported and the page says so.
  */
 function deepenHistory(): boolean {
   const isShallow = () => {
@@ -93,8 +93,11 @@ function parse(raw: string): ChangelogEntry | null {
 }
 
 function repoUrl(): string | null {
-  const { VERCEL_GIT_REPO_OWNER: owner, VERCEL_GIT_REPO_SLUG: slug } = process.env;
-  if (owner && slug) return `https://github.com/${owner}/${slug}`;
+  // Actions sets this to "owner/repo". Preferred over the remote because a
+  // clone's origin may point at a fork, or at the private repo this was
+  // published from, and the changelog links must resolve for a reader.
+  const { GITHUB_REPOSITORY: repo } = process.env;
+  if (repo) return `https://github.com/${repo}`;
   try {
     const remote = git(["remote", "get-url", "origin"]).trim();
     const m = /github\.com[:/](.+?)(?:\.git)?$/.exec(remote);

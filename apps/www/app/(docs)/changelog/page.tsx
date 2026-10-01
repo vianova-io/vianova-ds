@@ -93,8 +93,8 @@ export default function ChangelogPage() {
       </header>
 
       {/* Says so when the build could not see the whole history, rather than
-          presenting a truncated log as complete. Vercel clones shallow and its
-          container cannot always reach the remote to deepen it. */}
+          presenting a truncated log as complete. actions/checkout clones
+          shallow by default and a runner cannot always deepen it. */}
       {partial ? (
         <p className="border-border bg-muted/40 text-muted-foreground rounded-lg border p-3 text-sm">
           This build was made from a shallow clone, so only the most recent{" "}
