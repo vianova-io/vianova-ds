@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/registry/vianova/ui/select";
 import { Separator } from "@/registry/vianova/ui/separator";
+import { Slider } from "@/registry/vianova/ui/slider";
 import { ColorStopList } from "@/registry/vianova/product/color-stop-list";
 import {
   ColorStopSlider,
@@ -22,6 +23,7 @@ import {
   stopsToGradient,
   type ColorStop,
 } from "@/registry/vianova/product/color-stop-slider";
+import { PaletteStrip } from "@/registry/vianova/product/preset-picker";
 import { SegmentedControl } from "@/registry/vianova/product/segmented-control";
 import { cn } from "@/registry/vianova/lib/utils";
 
@@ -49,9 +51,37 @@ const DEFAULT_STOPS: ColorStop[] = [
   { position: 100, color: "#737373", opacity: 100 },
 ];
 
+/** A field the layer can be coloured by. Its `type` picks the panel's body. */
+export type ColorizeField = {
+  name: string;
+  /** Shown instead of `name`, which is usually a raw column name. */
+  label?: string;
+  type: "string" | "number";
+};
+
+export type ColorizeCategory = {
+  value: string;
+  color: string;
+};
+
+/** The bucket every value past `maxCategories` falls into. */
+const OTHER = "Other";
+
+/** Matches the product: eight named values, then Other. */
+const DEFAULT_MAX_CATEGORIES = 8;
+
+const DEFAULT_FIELDS: ColorizeField[] = Object.keys(COLOR_BY_METRICS).map(
+  (name) => ({ name, type: "number" }),
+);
+
 /**
- * Colour configuration for a map layer: which metric drives colour, discrete
- * vs continuous, the preset ramp, the classification method, and the stops.
+ * Colour configuration for a map layer.
+ *
+ * The body depends on what you colour by, because the two cases have nothing
+ * in common. A **numeric** field is a range, so it gets a classification method
+ * and a ramp of stops. A **string** field is a set of values, so it gets a
+ * palette and one swatch per value. Showing either control for the other kind
+ * of field would be meaningless, so the panel branches on `ColorizeField.type`.
  *
  * Stops are held in one place and shared by the slider and the list, so
  * dragging a handle and typing a percentage are the same edit. Selection is
@@ -60,6 +90,22 @@ const DEFAULT_STOPS: ColorStop[] = [
 export function ColorizePanel({
   layerName = "Micromobility",
   metric,
+  fields = DEFAULT_FIELDS,
+  field: controlledField,
+  onFieldChange,
+  mode: controlledMode,
+  onModeChange,
+  categories = [],
+  totalCategories,
+  maxCategories = DEFAULT_MAX_CATEGORIES,
+  otherColor = "#a1a1aa",
+  singleColor = "#3b82f6",
+  onCategorySelect,
+  opacity: controlledOpacity,
+  onOpacityChange,
+  presetName = "Spectrum",
+  presetColors,
+  onBrowsePresets,
   stops: controlledStops,
   onStopsChange,
   onApply,
@@ -71,16 +117,91 @@ export function ColorizePanel({
 }: Omit<React.ComponentProps<"div">, "onChange"> & {
   layerName?: string;
   metric?: string;
+  /** Defaults to the three numeric metrics, which keeps the ramp body. */
+  fields?: ColorizeField[];
+  field?: string;
+  onFieldChange?: (field: string) => void;
+  /** "discrete"/"continuous" for a numeric field; "single"/"categories" for a
+   *  string one. Left uncontrolled it follows the field's type. */
+  mode?: string;
+  onModeChange?: (mode: string) => void;
+  /** Already truncated to the top N by the caller, which knows the dataset. */
+  categories?: ColorizeCategory[];
+  /** Distinct values in the data, for the "showing top N of M" caption. */
+  totalCategories?: number;
+  maxCategories?: number;
+  otherColor?: string;
+  singleColor?: string;
+  /** Fired by a category's swatch. The colour picker itself belongs to the
+   *  caller, which is what lets it be a step of a PanelStepper. */
+  onCategorySelect?: (value: string) => void;
+  opacity?: number;
+  onOpacityChange?: (opacity: number) => void;
+  presetName?: string;
+  presetColors?: string[];
+  onBrowsePresets?: () => void;
   stops?: ColorStop[];
   onStopsChange?: (stops: ColorStop[]) => void;
   onApply?: (stops: ColorStop[]) => void;
   onCancel?: () => void;
+  /** @deprecated Back is the stepper's job. Beside its parent there is nothing
+   *  to go back to, and docked the stepper draws its own. */
   onBack?: () => void;
   onClose?: () => void;
 }) {
   const [internalStops, setInternalStops] = React.useState(DEFAULT_STOPS);
   const stops = controlledStops ?? internalStops;
   const [selected, setSelected] = React.useState(2);
+
+  const firstField = fields[0]?.name ?? "";
+  const [internalField, setInternalField] = React.useState(
+    metric ?? firstField,
+  );
+  const field = controlledField ?? internalField;
+  const fieldType =
+    fields.find((f) => f.name === field)?.type ?? "number";
+  const isCategorical = fieldType === "string";
+
+  const [internalOpacity, setInternalOpacity] = React.useState(100);
+  const opacity = controlledOpacity ?? internalOpacity;
+  const opacityLabelId = React.useId();
+
+  const defaultMode = isCategorical ? "categories" : "continuous";
+  const [internalMode, setInternalMode] = React.useState(defaultMode);
+  // A mode from the other field type cannot apply, so fall back rather than
+  // render a segmented control with nothing selected.
+  const modeCandidate = controlledMode ?? internalMode;
+  const modeItems = isCategorical
+    ? [
+        { value: "single", label: "Single" },
+        { value: "categories", label: "Categories" },
+      ]
+    : [
+        { value: "discrete", label: "Discrete" },
+        { value: "continuous", label: "Continuous" },
+      ];
+  const mode = modeItems.some((m) => m.value === modeCandidate)
+    ? modeCandidate
+    : defaultMode;
+
+  const shown = categories.slice(0, maxCategories);
+  const total = totalCategories ?? categories.length;
+  const ramp = presetColors ?? shown.map((c) => c.color);
+
+  const setField = (next: string) => {
+    if (controlledField === undefined) setInternalField(next);
+    onFieldChange?.(next);
+  };
+
+  const setMode = (next: string) => {
+    if (controlledMode === undefined) setInternalMode(next);
+    onModeChange?.(next);
+  };
+
+  const setOpacity = (next: number) => {
+    if (controlledOpacity === undefined) setInternalOpacity(next);
+    onOpacityChange?.(next);
+  };
 
   const setStops = (next: ColorStop[]) => {
     if (controlledStops === undefined) setInternalStops(next);
@@ -106,19 +227,44 @@ export function ColorizePanel({
     setSelected(next.length - 1);
   };
 
+  const fieldLabels = Object.fromEntries(
+    fields.map((f) => [f.name, f.label ?? COLOR_BY_METRICS[f.name] ?? f.name]),
+  );
+
+  const swatch = (color: string, label: string, value?: string) => (
+    <button
+      type="button"
+      // Named, not just "Choose color". Nine identically labelled buttons is
+      // what the product ships, and it leaves a screen reader user unable to
+      // tell which value they are about to recolour.
+      aria-label={`Choose color for ${label}`}
+      onClick={value === undefined ? undefined : () => onCategorySelect?.(value)}
+      className="size-5 shrink-0 rounded-sm border border-border/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+      style={{ backgroundColor: color }}
+    />
+  );
+
   return (
     <div
       data-slot="colorize-panel"
+      data-field-type={fieldType}
       className={cn(
-        "flex w-[380px] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg",
+        "flex w-[360px] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg",
         className,
       )}
       {...props}
     >
       <header className="flex items-center gap-2 px-3 py-2.5">
-        <Button variant="ghost" size="icon-xs" aria-label="Back" onClick={onBack}>
-          <ChevronLeft />
-        </Button>
+        {onBack ? (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Back"
+            onClick={onBack}
+          >
+            <ChevronLeft />
+          </Button>
+        ) : null}
         <span className="min-w-0 truncate text-sm">
           <span className="font-semibold">Colorize</span>
           <span className="text-muted-foreground"> · {layerName}</span>
@@ -138,15 +284,19 @@ export function ColorizePanel({
       <div className="space-y-3 p-3">
         <div className="space-y-1.5">
           <Label htmlFor="color-by">Color by</Label>
-          <Select defaultValue={metric ?? "vehicle-count"}>
+          <Select
+            value={field}
+            // Base UI allows clearing a Select, which this one never offers.
+            onValueChange={(next) => next !== null && setField(next)}
+          >
             <SelectTrigger id="color-by" className="w-full">
               {/* Base UI renders the raw value unless given a mapping. */}
-              <SelectValue>{(v: string) => COLOR_BY_METRICS[v] ?? v}</SelectValue>
+              <SelectValue>{(v: string) => fieldLabels[v] ?? v}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {Object.entries(COLOR_BY_METRICS).map(([v, label]) => (
-                <SelectItem key={v} value={v}>
-                  {label}
+              {fields.map((f) => (
+                <SelectItem key={f.name} value={f.name}>
+                  {fieldLabels[f.name]}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -157,91 +307,163 @@ export function ColorizePanel({
           <Label>Mode</Label>
           <SegmentedControl
             aria-label="Colour mode"
-            defaultValue="continuous"
-            items={[
-              { value: "discrete", label: "Discrete" },
-              { value: "continuous", label: "Continuous" },
-            ]}
+            value={mode}
+            onValueChange={setMode}
+            items={modeItems}
           />
         </div>
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label>Preset</Label>
-            <Badge variant="secondary">Custom</Badge>
+            {isCategorical ? null : <Badge variant="secondary">Custom</Badge>}
           </div>
           <button
             type="button"
+            aria-label="Preset"
+            onClick={onBrowsePresets}
             className="flex h-9 w-full items-center gap-3 rounded-md border border-input px-2 text-sm transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
           >
-            <span
-              aria-hidden
-              className="h-5 w-16 shrink-0 rounded-sm border border-border"
-              style={{ background: stopsToGradient(stops) }}
-            />
-            <span className="truncate">Greys</span>
+            {isCategorical ? (
+              <PaletteStrip colors={ramp} className="w-16 shrink-0" />
+            ) : (
+              <span
+                aria-hidden
+                className="h-5 w-16 shrink-0 rounded-sm border border-border"
+                style={{ background: stopsToGradient(stops) }}
+              />
+            )}
+            <span className="truncate">{isCategorical ? presetName : "Greys"}</span>
             <span className="ml-auto flex shrink-0 items-center gap-0.5 text-muted-foreground">
               Browse
               <ChevronRight className="size-3.5" />
             </span>
           </button>
         </div>
-      </div>
-      <Separator />
 
-      <div className="space-y-3 p-3">
-        <Label>Classification</Label>
-        <div className="flex items-center gap-2">
-          <Select defaultValue="equal-intervals">
-            <SelectTrigger className="min-w-0 flex-1" aria-label="Classification method">
-              <SelectValue>{(v: string) => CLASSIFICATION_LABELS[v] ?? v}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {CLASSIFICATION_METHODS.map((m) => (
-                <SelectItem key={m.value} value={m.value}>
-                  {m.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input
-            aria-label="Number of classes"
-            defaultValue="4 classes"
-            className="w-28 shrink-0 text-center"
-          />
-        </div>
-        <ColorStopSlider
-          stops={stops}
-          selectedIndex={selected}
-          onSelect={setSelected}
-          onChange={setStops}
-        />
+        {isCategorical ? (
+          <div className="space-y-1.5">
+            {/* Base UI puts the real <input> inside Slider.Thumb, so neither
+                htmlFor nor aria-label on the root reaches it. Only
+                aria-labelledby at the visible label does. */}
+            <Label id={opacityLabelId}>Opacity</Label>
+            <div className="flex items-center gap-3">
+              <Slider
+                aria-labelledby={opacityLabelId}
+                value={[opacity]}
+                onValueChange={(v) =>
+                  setOpacity(Array.isArray(v) ? (v[0] ?? 0) : v)
+                }
+                max={100}
+                step={1}
+                className="min-w-0 flex-1"
+              />
+              <Input
+                aria-label="Opacity percentage"
+                value={`${opacity}%`}
+                readOnly
+                className="w-16 shrink-0 text-center"
+              />
+            </div>
+          </div>
+        ) : null}
       </div>
-      <Separator />
 
-      <div className="space-y-2 p-3">
-        <div className="flex items-center justify-between">
-          <Label>Stops</Label>
-          <Button variant="ghost" size="xs" className="gap-1" onClick={addStop}>
-            <Plus className="size-3.5" />
-            Add stop
-          </Button>
-        </div>
-        <ColorStopList
-          stops={stops}
-          selectedIndex={selected}
-          onSelect={setSelected}
-          onChange={setStops}
-        />
-      </div>
-      <Separator />
+      {isCategorical ? (
+        <>
+          <Separator />
+          <div className="space-y-2 p-3">
+            {mode === "single" ? (
+              <div className="flex h-9 items-center gap-3">
+                {swatch(singleColor, "all features")}
+                <span className="truncate text-sm">All features</span>
+              </div>
+            ) : (
+              <>
+                {total > shown.length ? (
+                  <p className="text-xs text-muted-foreground">
+                    showing top {shown.length} of {total} values
+                  </p>
+                ) : null}
+                {shown.map((c) => (
+                  <div key={c.value} className="flex h-9 items-center gap-3">
+                    {swatch(c.color, c.value, c.value)}
+                    <span className="truncate text-sm">{c.value}</span>
+                  </div>
+                ))}
+                {total > shown.length ? (
+                  <div className="flex h-9 items-center gap-3">
+                    {swatch(otherColor, OTHER, OTHER)}
+                    <span className="truncate text-sm">{OTHER}</span>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <Separator />
+          <div className="space-y-3 p-3">
+            <Label>Classification</Label>
+            <div className="flex items-center gap-2">
+              <Select defaultValue="equal-intervals">
+                <SelectTrigger
+                  className="min-w-0 flex-1"
+                  aria-label="Classification method"
+                >
+                  <SelectValue>
+                    {(v: string) => CLASSIFICATION_LABELS[v] ?? v}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {CLASSIFICATION_METHODS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                aria-label="Number of classes"
+                defaultValue="4 classes"
+                className="w-28 shrink-0 text-center"
+              />
+            </div>
+            <ColorStopSlider
+              stops={stops}
+              selectedIndex={selected}
+              onSelect={setSelected}
+              onChange={setStops}
+            />
+          </div>
+          <Separator />
 
-      <footer className="flex items-center justify-end gap-2 p-3">
-        <Button variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button onClick={() => onApply?.(stops)}>Apply</Button>
-      </footer>
+          <div className="space-y-2 p-3">
+            <div className="flex items-center justify-between">
+              <Label>Stops</Label>
+              <Button variant="ghost" size="xs" className="gap-1" onClick={addStop}>
+                <Plus className="size-3.5" />
+                Add stop
+              </Button>
+            </div>
+            <ColorStopList
+              stops={stops}
+              selectedIndex={selected}
+              onSelect={setSelected}
+              onChange={setStops}
+            />
+          </div>
+          <Separator />
+
+          <footer className="flex items-center justify-end gap-2 p-3">
+            <Button variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button onClick={() => onApply?.(stops)}>Apply</Button>
+          </footer>
+        </>
+      )}
     </div>
   );
 }

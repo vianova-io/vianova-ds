@@ -1971,9 +1971,11 @@
         "@vianova/color-stop-slider",
         "@vianova/input",
         "@vianova/label",
+        "@vianova/preset-picker",
         "@vianova/segmented-control",
         "@vianova/select",
         "@vianova/separator",
+        "@vianova/slider",
         "@vianova/utils"
       ],
       "files": [
@@ -2292,6 +2294,59 @@
       "files": [
         {
           "path": "registry/vianova/product/map-controls.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "panel-stepper",
+      "type": "registry:ui",
+      "title": "Panel Stepper",
+      "description": "Panel Stepper — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/button",
+        "@vianova/popover",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/panel-stepper.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "preset-picker",
+      "type": "registry:ui",
+      "title": "Preset Picker",
+      "description": "Preset Picker — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/select",
+        "@vianova/toggle",
+        "@vianova/tooltip",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/preset-picker.tsx",
           "type": "registry:ui"
         }
       ],
