@@ -40,8 +40,13 @@ export default async function BlockPage({
         <p className="text-muted-foreground">{block.description}</p>
       </header>
 
+      {/* Tracks the blocks' own responsive height so the page does not jump
+          when one resolves. map-workspace is 60px taller at lg; explore-map
+          matches exactly. */}
       <React.Suspense
-        fallback={<div className="h-[700px] animate-pulse rounded-xl bg-muted" />}
+        fallback={
+          <div className="h-[max(480px,75svh)] animate-pulse rounded-xl bg-muted md:h-[700px]" />
+        }
       >
         <Demo />
       </React.Suspense>

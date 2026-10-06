@@ -54,6 +54,22 @@ export type MapCanvasProps = Omit<React.ComponentProps<"div">, "onLoad"> & {
    * maplibre-gl-shared.mjs, which it imports relatively.
    */
   workerUrl?: string;
+  /**
+   * Viewport width below which the map stops claiming every gesture over it:
+   * one finger scrolls the page, two fingers move the map, and the wheel needs
+   * a modifier. MapLibre shows its own hint when it blocks one.
+   *
+   * Set this on a map embedded in a page that scrolls. MapLibre's default puts
+   * `touch-action: none` on the canvas, which on a phone means a thumb landing
+   * anywhere on the map pans it instead of scrolling the page -- and the reader
+   * has no way to get past the map. The threshold exists because the trade-off
+   * is not symmetric: it is the right behaviour on a touch device and a
+   * nuisance on a desktop where the map has room of its own, so pass the width
+   * at which the map stops being cramped.
+   *
+   * Omit for MapLibre's default. Full-screen maps want it omitted.
+   */
+  cooperativeGesturesBelow?: number;
   /** Rendered instead of the map if WebGL is unavailable or the style fails. */
   fallback?: React.ReactNode;
   onLoad?: (map: MapLibreMap) => void;
@@ -96,6 +112,7 @@ export function MapCanvas({
   zoom = 11.5,
   interactive = true,
   workerUrl,
+  cooperativeGesturesBelow,
   fallback,
   onLoad,
   onStyleReady,
@@ -174,6 +191,12 @@ export function MapCanvas({
         zoom,
         interactive,
         attributionControl: { compact: true },
+        // Seeded here as well as in the effect below, so the very first touch
+        // is already cooperative. Reading innerWidth is safe: this runs inside
+        // an effect, so only ever in a browser.
+        cooperativeGestures:
+          cooperativeGesturesBelow != null &&
+          window.innerWidth < cooperativeGesturesBelow,
         transformRequest,
       });
     } catch {
@@ -217,6 +240,31 @@ export function MapCanvas({
       whenStyleReady(map, (ready) => onStyleReadyRef.current?.(ready));
     });
   }, [style]);
+
+  /**
+   * Keep cooperative gestures in step with the viewport.
+   *
+   * Toggled on the live handler rather than by rebuilding the map: the
+   * constructor option is only an initial value, and re-creating the map on a
+   * rotation would throw away the camera and every custom layer on it. Shares
+   * the init effect's deps so it re-applies if the map is ever rebuilt.
+   */
+  React.useEffect(() => {
+    const map = mapRef.current;
+    if (!map || cooperativeGesturesBelow == null) return;
+    // 0.02 below the breakpoint, matching how a max-width query has to express
+    // "under 1024" against fractional CSS pixels.
+    const query = window.matchMedia(
+      `(max-width: ${cooperativeGesturesBelow - 0.02}px)`,
+    );
+    const apply = () => {
+      if (query.matches) map.cooperativeGestures.enable();
+      else map.cooperativeGestures.disable();
+    };
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, [cooperativeGesturesBelow, mapboxToken, interactive, canInit]);
 
   return (
     <div

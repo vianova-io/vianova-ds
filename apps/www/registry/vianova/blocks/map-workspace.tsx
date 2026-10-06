@@ -54,7 +54,6 @@ import {
 } from "@/registry/vianova/product/chart-card";
 import { DataLayerCard } from "@/registry/vianova/product/data-layer-card";
 import { FilterBuilder } from "@/registry/vianova/product/filter-builder";
-import { FilterChipBar } from "@/registry/vianova/product/filter-chip-bar";
 import { FilterFacets } from "@/registry/vianova/product/filter-facets";
 import {
   FloatingPanel,
@@ -402,8 +401,28 @@ export function MapWorkspace({
   const [visible, setVisible] = React.useState(true);
   const [viz, setViz] = React.useState<VisualizationTypeId>("lines");
   const [chartLayer, setChartLayer] = React.useState("flows");
+  /**
+   * Which overlay panel is showing.
+   *
+   * Only consulted below lg. From lg up there is room for both panels side by
+   * side -- two 340px panels plus their 16px margins need 712px -- so CSS
+   * forces both visible and this state has no effect. Below that they share
+   * the bottom of the block, so one at a time.
+   *
+   * Deliberately NOT derived from a media query. useIsMobile() reports false on
+   * the first paint, and this site is statically exported, so every phone
+   * visitor would get a frame of the desktop layout before it snapped. Leaving
+   * the decision to CSS also means neither panel ever unmounts, so the filter,
+   * layer and chart state survives a rotation -- as does the uncontrolled
+   * expand/collapse state inside each DataLayerCard.
+   */
+  const [pane, setPane] = React.useState<"data" | "charts">("data");
   const mapRef = React.useRef<MapLibreMap | null>(null);
   const rootRef = React.useRef<HTMLDivElement>(null);
+  // Namespaced so aria-controls still resolves if two of these ever share a page.
+  const uid = React.useId();
+  const dataPaneId = `${uid}-data`;
+  const chartsPaneId = `${uid}-charts`;
 
   /**
    * Brand and Blue run light to dark, so their loudest colour is their
@@ -837,7 +856,15 @@ export function MapWorkspace({
       ref={rootRef}
       data-map-scheme={mapScheme}
       className={cn(
-        "relative isolate h-[760px] w-full overflow-hidden rounded-xl border border-border",
+        // svh, not dvh. dvh tracks the mobile address bar as it hides and
+        // shows, so every scroll gesture would resize this box -- and MapLibre
+        // watches the container with a ResizeObserver, so each one would cost a
+        // map resize. It would also reflow the block when the title's input
+        // takes focus and raises the soft keyboard. svh does not move.
+        //
+        // The 480px floor is for landscape phones: 75svh of a 390px-tall
+        // viewport is 292px, which cannot hold a 56px bar and a docked panel.
+        "relative isolate h-[max(480px,75svh)] w-full overflow-hidden rounded-xl border border-border md:h-[700px] lg:h-[760px]",
         className,
       )}
     >
@@ -847,29 +874,70 @@ export function MapWorkspace({
         workerUrl={WORKER_URL}
         center={[8.5417, 47.3769]} // Zürich, the extent of the flow export
         zoom={11.6}
+        // Below lg this block is a panel on a page that scrolls, so the map
+        // must not swallow a one-finger drag. 1024 is the same boundary the
+        // layout switches on.
+        cooperativeGesturesBelow={1024}
         onStyleReady={(map) => {
           mapRef.current = map;
           syncLayer(map);
         }}
       />
 
-      {/* Top bar */}
-      <div className="absolute inset-x-0 top-0 flex h-14 items-center gap-2 px-4">
-        <Button variant="secondary" size="icon" aria-label="Collapse sidebar">
+      {/*
+        Top bar.
+
+        Below lg this keeps only the controls that do something. Everything
+        hidden here -- the collapse button, the search field, the drawing tools,
+        the two panel icons -- has no handler in this block, so hiding it costs
+        no behaviour and buys back the width the title and the panel switcher
+        need. A hidden child is display:none, so it is not a flex item and does
+        not contribute a gap either.
+
+        The budget is tight enough to be worth writing down. A 375px phone minus
+        the docs page's px-6 gutters leaves the block 327px; minus the border and
+        px-2 that is 309px of bar. The switcher is 2x36 + 8 = 80px, leaving the
+        title ~221px against a 182px read state and a 180px floor in the edit
+        state (InlineEdit's input is min-w-32 plus confirm and cancel). Keeping
+        the collapse button as well would overrun it, and the thing that
+        disappears is the edit state's cancel button -- silently, because this
+        bar is overflow-hidden.
+      */}
+      <div
+        data-slot="map-toolbar"
+        className="absolute inset-x-0 top-0 flex h-14 items-center gap-2 px-2 lg:px-4"
+      >
+        <Button
+          variant="secondary"
+          size="icon"
+          aria-label="Collapse sidebar"
+          className="hidden lg:inline-flex"
+        >
           <PanelLeft />
         </Button>
         <InlineEdit
           value={title}
           onValueChange={setTitle}
           label="Map name"
-          className="font-medium"
+          // min-w-0 so the title can actually truncate. InlineEdit is a flex
+          // item whose read state is itself inline-flex around a `truncate`
+          // span, and truncation needs min-w-0 at every level of that chain --
+          // without it the span refuses to shrink below its text and pushes
+          // the controls to its right out of a bar that is overflow-hidden,
+          // which clips them with no scrollbar and no ellipsis to show for it.
+          className="min-w-0 font-medium"
         />
 
         <div className="mx-auto flex items-center gap-2">
-          <Button variant="secondary" size="icon" aria-label="Data layers">
+          <Button
+            variant="secondary"
+            size="icon"
+            aria-label="Data layers"
+            className="hidden lg:inline-flex"
+          >
             <Layers />
           </Button>
-          <InputGroup className="w-[320px] bg-card/95 backdrop-blur">
+          <InputGroup className="hidden w-[320px] bg-card/95 backdrop-blur lg:flex">
             <InputGroupAddon>
               <Search />
             </InputGroupAddon>
@@ -878,7 +946,7 @@ export function MapWorkspace({
           {/* Split control: the tool on the left, its alternatives on the
               right, so picking the current tool never costs a trip through a
               menu. */}
-          <ButtonGroup>
+          <ButtonGroup className="hidden lg:flex">
             <Button variant="secondary" size="icon" aria-label="Drawing tools">
               <MousePointer2 />
             </Button>
@@ -890,19 +958,95 @@ export function MapWorkspace({
               <ChevronDown />
             </Button>
           </ButtonGroup>
-          <Button variant="secondary" size="icon" aria-label="Charts">
+          <Button
+            variant="secondary"
+            size="icon"
+            aria-label="Charts"
+            className="hidden lg:inline-flex"
+          >
             <BarChart3 />
           </Button>
         </div>
 
-        <Button size="sm" className="gap-1.5">
+        {/*
+          Panel switcher, below lg only.
+
+          A separate control rather than wiring the Layers and Charts icons
+          above, because from lg up CSS shows both panels no matter what `pane`
+          says -- a control that existed at every width would announce
+          aria-expanded="false" over a panel that is plainly on screen. One that
+          only exists below lg cannot lie about it.
+
+          Two buttons with aria-expanded/aria-controls, not a toggle group: this
+          reveals and hides a region, which is the disclosure pattern, and
+          aria-controls states a relationship a toggle group has no way to
+          express. Plain Buttons also keep this block's registry dependencies
+          unchanged.
+
+          The 36px box stays -- the control-size ladder pins icon buttons to
+          exactly 36px -- and `after:-inset-2` grows the hit area to 52px for a
+          thumb without moving a pixel. Same trick sidebar.tsx uses, and
+          elementFromPoint resolves a hit on the pseudo-element back to the
+          button, so it is testable rather than merely asserted.
+        */}
+        <div data-slot="panel-switcher" className="flex items-center gap-2 lg:hidden">
+          {(
+            [
+              ["data", "Data layers", Layers, dataPaneId],
+              ["charts", "Charts", BarChart3, chartsPaneId],
+            ] as const
+          ).map(([id, label, Icon, controls]) => (
+            <Button
+              key={id}
+              variant={pane === id ? "default" : "secondary"}
+              size="icon"
+              aria-label={label}
+              aria-expanded={pane === id}
+              aria-controls={controls}
+              onClick={() => setPane(id)}
+              className="relative after:absolute after:-inset-2 after:content-['']"
+            >
+              <Icon />
+            </Button>
+          ))}
+        </div>
+
+        {/* The one control here that is not decorative, so it survives on a
+            phone -- as an icon until there is room for its label. */}
+        <Button size="sm" className="gap-1.5" aria-label="Export report">
           <Sparkles className="size-4" />
-          Export report
+          <span className="hidden sm:inline">Export report</span>
         </Button>
       </div>
 
-      {/* Data panel */}
-      <FloatingPanel className="absolute left-4 top-16 max-h-[calc(100%-10rem)] w-[340px]">
+      {/*
+        Data panel.
+
+        Below lg it docks to the bottom of the block at full width; from lg up
+        it returns to the 340px column on the left. Every inset is named at both
+        tiers on purpose. tailwind-merge treats top/right/bottom/left as four
+        separate conflict groups, and inset-x collides only with left and right,
+        so `inset-x-2 bottom-10` + `lg:left-4 lg:top-16` leaves ALL FOUR set at
+        lg -- left:16px and right:8px, top:64px and bottom:40px -- and an
+        absolutely positioned box with both insets on an axis stretches. Nothing
+        gets dropped to warn you; the panel just goes full-bleed and the
+        invisible half swallows clicks. Hence the explicit *-auto resets.
+
+        bottom-10 rather than bottom-2 because MapLibre's attribution sits
+        bottom-right at z-index 2 while everything in here is z-auto, so the
+        badge paints OVER this panel rather than under it. Compact, it occupies
+        10px to 34px from the bottom; 40px is the first value that clears it, so
+        the badge is not stealing a tap target from the panel's own corner.
+      */}
+      <FloatingPanel
+        id={dataPaneId}
+        className={cn(
+          "absolute inset-x-2 bottom-10 top-auto max-h-[55%] w-auto",
+          "lg:inset-x-auto lg:left-4 lg:right-auto lg:top-16 lg:bottom-auto lg:max-h-[calc(100%-10rem)] lg:w-[340px]",
+          "lg:flex",
+          pane === "data" ? "flex" : "hidden",
+        )}
+      >
         <FloatingPanelHeader>
           <Tabs defaultValue="data">
             <TabsList>
@@ -960,7 +1104,18 @@ export function MapWorkspace({
                       </Button>
                     }
                   />
-                  <PopoverContent align="end" className="w-[440px] p-3">
+                  {/* 440px is wider than a phone. The popup is portalled and
+                      fixed-positioned, and Base UI's collision handling SHIFTS
+                      it but never SHRINKS it, so at 375px the right-hand ~65px
+                      -- the value inputs -- hangs off-screen with no way to
+                      reach it. --available-width comes off the positioner and
+                      inherits down to here, so it already accounts for the
+                      anchor and the collision padding; a viewport calc() would
+                      not. */}
+                  <PopoverContent
+                    align="end"
+                    className="w-[440px] max-w-[var(--available-width)] p-3"
+                  >
                     <FilterBuilder
                       fields={FILTER_FIELDS}
                       value={filter}
@@ -1013,8 +1168,17 @@ export function MapWorkspace({
         </FloatingPanelBody>
       </FloatingPanel>
 
-      {/* Charts panel */}
-      <FloatingPanel className="absolute right-4 top-16 max-h-[calc(100%-10rem)] w-[340px]">
+      {/* Charts panel. Same docking rules as the data panel above, including
+          why every inset is spelled out at both tiers. */}
+      <FloatingPanel
+        id={chartsPaneId}
+        className={cn(
+          "absolute inset-x-2 bottom-10 top-auto max-h-[55%] w-auto",
+          "lg:inset-x-auto lg:right-4 lg:left-auto lg:top-16 lg:bottom-auto lg:max-h-[calc(100%-10rem)] lg:w-[340px]",
+          "lg:flex",
+          pane === "charts" ? "flex" : "hidden",
+        )}
+      >
         <FloatingPanelHeader className="border-b border-border p-3">
           <FloatingPanelTitle className="px-0">Charts</FloatingPanelTitle>
           <FloatingPanelActions>
@@ -1180,8 +1344,14 @@ export function MapWorkspace({
       {/* bottom-12, not bottom-4: the basemap attribution is a 24px bar pinned
           to the bottom-right of the canvas, and at bottom-4 it covers the
           zoom-out button completely. */}
+      {/* Desktop only. These controls are decorative in this block -- no
+          onZoomIn, onZoomOut or onBasemapClick is passed -- so hiding them
+          below lg removes no behaviour, frees the right-hand strip that the
+          docked panel needs, and drops two no-op buttons from a phone's tab
+          order. Pinch and double-tap are MapLibre's own handlers and are
+          untouched, which is the affordance a touch user reaches for anyway. */}
       <MapControls
-        className="absolute bottom-12 right-4"
+        className="absolute bottom-12 right-4 hidden lg:flex"
         basemapLabel="Satellite"
       />
     </div>

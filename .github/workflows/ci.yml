@@ -99,6 +99,14 @@ jobs:
       - name: "Controls share one height ladder"
         run: pnpm --filter @vianova/www test:sizes
 
+      # Every other suite here runs at the single 900px project viewport, which
+      # is one layout out of three. This one sets its own sizes and measures the
+      # map blocks at phone, tablet and desktop: panels that do not stretch or
+      # overlap, a top bar that fits inside a box that would clip it silently,
+      # and an attribution nothing is sitting on.
+      - name: "Map blocks lay out at phone and tablet widths"
+        run: pnpm --filter @vianova/www test:responsive
+
       # Foundations is the only page the crawls above never reach: they go
       # through /preview and /blocks, and this is a docs route. That is how its
       # colour swatches once shipped 170 contrast failures without anything

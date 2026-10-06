@@ -244,7 +244,13 @@ function FloatingPanelBody({
         // the one thing that moves the resting place rather than the content:
         // the browser now stops 8px short, and the ring lands inside. It
         // changes nothing at rest, so no screenshot moves.
-        className="min-h-0 flex-1 scroll-p-2 overflow-y-auto scrollbar-none"
+        // overscroll-contain stops a flick that reaches the end of this list
+        // from chaining into whatever is behind the panel. That is academic on
+        // a desktop sidebar and not academic at all when the panel is docked
+        // over a map on a phone: without it, running out of list hands the
+        // gesture to the page and the reader is suddenly scrolling the document
+        // they were trying to read a layer in.
+        className="min-h-0 flex-1 scroll-p-2 overflow-y-auto overscroll-contain scrollbar-none"
         {...props}
       />
       {thumb ? (

@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-import { EXAMPLES , settle } from "./examples";
+import { BLOCKS, EXAMPLES, settle } from "./examples";
 
 /**
  * Accessibility crawl over every example, using the chrome-less /preview route
@@ -84,4 +84,56 @@ test.describe("accessibility", () => {
       ).toEqual([]);
     });
   }
+
+  /**
+   * The blocks, at a phone width.
+   *
+   * They had no accessibility coverage at all until now: this suite walks
+   * /preview, which only exists for examples, so the one place the library's
+   * primitives are composed into something real went unchecked. The phone
+   * viewport is the one that matters most here -- below lg the blocks grow a
+   * panel switcher that exists at no other width, and its aria-expanded /
+   * aria-controls wiring is exactly the kind of thing that looks right in a
+   * screenshot and is wrong to a screen reader.
+   *
+   * Scoped to the block with .include() so the docs shell's own markup -- nav,
+   * theme switcher, code samples -- is not attributed to the block.
+   */
+  test.describe("blocks on a phone", () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    for (const block of BLOCKS) {
+      test(`block ${block} has no serious or critical violations`, async ({ page }) => {
+        await page.goto(`/blocks/${block}`);
+        await settle(page);
+
+        const results = await new AxeBuilder({ page })
+          .include("[data-slot=map-toolbar]")
+          .include("[data-slot=floating-panel]")
+          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+          .analyze();
+
+        const blocking = results.violations.filter((v) => BLOCKING.has(v.impact ?? ""));
+        const advisory = results.violations.filter((v) => !BLOCKING.has(v.impact ?? ""));
+        if (advisory.length) {
+          console.log(
+            `[block ${block}] advisory: ${advisory.map((v) => `${v.id}(${v.impact})`).join(", ")}`,
+          );
+        }
+
+        expect(
+          blocking.map((v) => ({
+            id: v.id,
+            impact: v.impact,
+            help: v.help,
+            nodes: v.nodes.slice(0, 3).map((n) => ({
+              html: n.html.slice(0, 160),
+              why: (n.failureSummary ?? "").replace(/\s+/g, " ").slice(0, 240),
+            })),
+          })),
+          `block ${block} at 390px`,
+        ).toEqual([]);
+      });
+    }
+  });
 });

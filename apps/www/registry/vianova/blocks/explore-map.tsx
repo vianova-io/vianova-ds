@@ -177,6 +177,18 @@ export function ExploreMap({
    */
   mapboxToken?: string;
 }) {
+  /**
+   * Which overlay panel is showing. Only consulted below lg, where the two
+   * panels share the bottom of the block; from lg up CSS shows both and this
+   * has no effect. See the longer note in map-workspace.tsx for why this is
+   * state and a media query rather than useIsMobile().
+   */
+  const [pane, setPane] = React.useState<"data" | "charts">("data");
+  // Namespaced so aria-controls still resolves if two of these share a page.
+  const uid = React.useId();
+  const dataPaneId = `${uid}-data`;
+  const chartsPaneId = `${uid}-charts`;
+
   const heatmap = React.useMemo(() => {
     const rand = mulberry32(778899);
     return DAYS.map(() =>
@@ -191,7 +203,9 @@ export function ExploreMap({
   return (
     <div
       className={cn(
-        "relative isolate h-[700px] w-full overflow-hidden rounded-xl border border-border",
+        // svh rather than dvh, and a 480px floor for landscape phones -- see
+        // the longer note on the same line in map-workspace.tsx.
+        "relative isolate h-[max(480px,75svh)] w-full overflow-hidden rounded-xl border border-border md:h-[700px]",
         className,
       )}
     >
@@ -201,42 +215,112 @@ export function ExploreMap({
         workerUrl={WORKER_URL}
         center={[-1.6778, 48.1173]}
         zoom={11.5}
+        // Below lg this sits on a page that scrolls, so a one-finger drag must
+        // reach the page rather than pan the map. Same boundary as the layout.
+        cooperativeGesturesBelow={1024}
         fallback={<MapFallback />}
       />
 
-      {/* Top bar */}
-      <div className="absolute inset-x-0 top-0 flex h-14 items-center gap-2 px-4">
-        <Button variant="ghost" size="icon" aria-label="Menu">
+      {/* Top bar. Below lg it keeps only the controls that do something; see
+          the note on the same bar in map-workspace.tsx for the width budget
+          this buys and why the menu button has to go with the rest. */}
+      <div
+        data-slot="map-toolbar"
+        className="absolute inset-x-0 top-0 flex h-14 items-center gap-2 px-2 lg:px-4"
+      >
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Menu"
+          className="hidden lg:inline-flex"
+        >
           <Menu />
         </Button>
-        <span className="text-sm font-medium">Carte d&rsquo;Exploration</span>
+        {/* min-w-0 truncate, or this wraps to two lines inside a 56px row: a
+            flex item will not shrink below its min-content width on its own,
+            and the bar is overflow-hidden so there is nothing to scroll. */}
+        <span className="min-w-0 truncate text-sm font-medium">
+          Carte d&rsquo;Exploration
+        </span>
 
         <div className="mx-auto flex items-center gap-2">
-          <Button variant="secondary" size="icon" aria-label="Layers">
+          <Button
+            variant="secondary"
+            size="icon"
+            aria-label="Layers"
+            className="hidden lg:inline-flex"
+          >
             <Layers />
           </Button>
-          <InputGroup className="w-[320px] bg-card/95 backdrop-blur">
+          <InputGroup className="hidden w-[320px] bg-card/95 backdrop-blur lg:flex">
             <InputGroupAddon>
               <Search />
             </InputGroupAddon>
             <InputGroupInput placeholder="Search for places, POIs" />
           </InputGroup>
-          <Button variant="secondary" size="icon" aria-label="Select tool">
+          <Button
+            variant="secondary"
+            size="icon"
+            aria-label="Select tool"
+            className="hidden lg:inline-flex"
+          >
             <MousePointer2 />
           </Button>
-          <Button variant="secondary" size="icon" aria-label="Charts">
+          <Button
+            variant="secondary"
+            size="icon"
+            aria-label="Charts"
+            className="hidden lg:inline-flex"
+          >
             <BarChart3 />
           </Button>
         </div>
 
-        <Button size="sm" className="gap-1.5">
+        {/* Panel switcher, below lg only. Disclosure semantics and the
+            after:-inset-2 hit slop are explained in map-workspace.tsx. */}
+        <div data-slot="panel-switcher" className="flex items-center gap-2 lg:hidden">
+          {(
+            [
+              ["data", "Layers", Layers, dataPaneId],
+              ["charts", "Charts", BarChart3, chartsPaneId],
+            ] as const
+          ).map(([id, label, Icon, controls]) => (
+            <Button
+              key={id}
+              variant={pane === id ? "default" : "secondary"}
+              size="icon"
+              aria-label={label}
+              aria-expanded={pane === id}
+              aria-controls={controls}
+              onClick={() => setPane(id)}
+              className="relative after:absolute after:-inset-2 after:content-['']"
+            >
+              <Icon />
+            </Button>
+          ))}
+        </div>
+
+        <Button size="sm" className="gap-1.5" aria-label="Export report">
           <Sparkles className="size-4" />
-          Export report
+          <span className="hidden sm:inline">Export report</span>
         </Button>
       </div>
 
       {/* Data panel */}
-      <FloatingPanel className="absolute left-4 top-16 max-h-[calc(100%-10rem)] w-[340px]">
+      {/* Docks to the bottom of the block below lg, returns to its 340px column
+          from lg up. Every inset is named at both tiers because tailwind-merge
+          does not pair them -- and bottom-10 clears MapLibre's attribution
+          badge, which paints above this panel rather than below it. The full
+          reasoning is in map-workspace.tsx. */}
+      <FloatingPanel
+        id={dataPaneId}
+        className={cn(
+          "absolute inset-x-2 bottom-10 top-auto max-h-[55%] w-auto",
+          "lg:inset-x-auto lg:left-4 lg:right-auto lg:top-16 lg:bottom-auto lg:max-h-[calc(100%-10rem)] lg:w-[340px]",
+          "lg:flex",
+          pane === "data" ? "flex" : "hidden",
+        )}
+      >
         <FloatingPanelHeader>
           <Tabs defaultValue="data">
             <TabsList>
@@ -276,7 +360,16 @@ export function ExploreMap({
       </FloatingPanel>
 
       {/* Charts panel */}
-      <FloatingPanel className="absolute right-4 top-16 max-h-[calc(100%-10rem)] w-[340px]">
+      {/* Same docking rules as the data panel above. */}
+      <FloatingPanel
+        id={chartsPaneId}
+        className={cn(
+          "absolute inset-x-2 bottom-10 top-auto max-h-[55%] w-auto",
+          "lg:inset-x-auto lg:right-4 lg:left-auto lg:top-16 lg:bottom-auto lg:max-h-[calc(100%-10rem)] lg:w-[340px]",
+          "lg:flex",
+          pane === "charts" ? "flex" : "hidden",
+        )}
+      >
         <FloatingPanelHeader className="border-b border-border p-3">
           <FloatingPanelTitle className="px-0">Charts</FloatingPanelTitle>
           <FloatingPanelActions>
@@ -337,7 +430,12 @@ export function ExploreMap({
       {/* bottom-12, not bottom-4: the basemap attribution is a 24px bar
           pinned to the bottom-right of the canvas, and at bottom-4 it covers
           the zoom-out button completely. */}
-      <MapControls className="absolute bottom-12 right-4" basemapLabel="Plan" />
+      {/* Desktop only -- decorative in this block, so hiding it below lg costs
+          no behaviour and frees the strip the docked panel needs. */}
+      <MapControls
+        className="absolute bottom-12 right-4 hidden lg:flex"
+        basemapLabel="Plan"
+      />
     </div>
   );
 }

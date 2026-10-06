@@ -17,6 +17,7 @@
     "changelog": "tsx scripts/build-changelog.ts",
     "test:rings": "playwright test e2e/focus-ring.spec.ts",
     "test:sizes": "playwright test e2e/control-size.spec.ts",
+    "test:responsive": "playwright test e2e/responsive.spec.ts",
     "test:colors": "playwright test e2e/foundations-colors.spec.ts",
     "test:pages": "playwright test --config playwright.pages.config.ts",
     "check:export": "node scripts/check-export-paths.mjs"

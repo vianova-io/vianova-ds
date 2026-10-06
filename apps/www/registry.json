@@ -280,7 +280,6 @@
         "@vianova/data-layer-card",
         "@vianova/filter-ast",
         "@vianova/filter-builder",
-        "@vianova/filter-chip-bar",
         "@vianova/filter-eval",
         "@vianova/filter-facets",
         "@vianova/floating-panel",

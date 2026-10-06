@@ -198,6 +198,28 @@ test.describe("focus rings", () => {
   for (const { example } of EXAMPLES)
     test(`${example} draws every focus ring in full`, ({ page }) => run(page, `/preview/${example}`));
 
-  for (const block of BLOCKS)
-    test(`block ${block} draws every focus ring in full`, ({ page }) => run(page, `/blocks/${block}`));
+  /**
+   * Blocks get crawled at two sizes, because they have two layouts.
+   *
+   * The project viewport is 900px, which is below the lg the map blocks switch
+   * on -- so without the desktop pass here the side-by-side layout would have no
+   * coverage at all. The phone pass is not symmetry: below lg the panels dock to
+   * the bottom of the block, which makes a NEW scrolling clipper with a much
+   * shorter scrollport, and a ring sliced off by a scrollport edge is the exact
+   * defect this file exists for.
+   *
+   * Set here rather than on the project so the 96 example baselines, which are
+   * fullPage at 900px, keep reproducing.
+   */
+  for (const [label, viewport] of [
+    ["desktop", { width: 1280, height: 900 }],
+    ["phone", { width: 390, height: 844 }],
+  ] as const) {
+    test.describe(label, () => {
+      test.use({ viewport });
+      for (const block of BLOCKS)
+        test(`block ${block} draws every focus ring in full`, ({ page }) =>
+          run(page, `/blocks/${block}`));
+    });
+  }
 });
