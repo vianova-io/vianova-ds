@@ -98,7 +98,19 @@ export function PaginationBar({
         <span className="tabular-nums">{pageCount}</span>
       </p>
 
-      <div className="flex items-center gap-4">
+      {/*
+        Wraps, like the row above it. The outer bar has always been
+        `flex-wrap`, but this group was not, so it stayed one unbreakable
+        375.31px line -- "Per page", a 72px select and the page buttons -- at
+        every viewport width. On a 327px column it did not wrap or shrink, it
+        simply hung off the end and scrolled the whole document sideways, and
+        it did so by so little (2px under Linux metrics, 0.31px under macOS)
+        that it read as a rounding artefact rather than a layout bug.
+
+        `justify-end` keeps it against the right edge once wrapped, which is
+        where the outer `justify-between` puts it when it does fit.
+      */}
+      <div className="flex flex-wrap items-center justify-end gap-4">
         {pageSize !== undefined ? (
           <div className="flex items-center gap-2">
             <label htmlFor={selectId} className="text-muted-foreground text-sm">
