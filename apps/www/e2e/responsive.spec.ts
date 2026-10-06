@@ -364,25 +364,26 @@ test.describe("map-workspace filter popover on a phone", () => {
  * Routes chosen for the shell, not for coverage: one of each layout the header
  * sits on top of.
  *
- * `/showcase` and `/foundations` are deliberately absent, and it is worth
- * saying why rather than leaving a reader to assume the list is arbitrary.
- * Both still overflow at 375px from their own CONTENT, independently of the
- * header, and both predate this work:
+ * `/foundations` is in the list for a second reason. Its map ramps were the
+ * other thing pushing this page sideways -- eleven `flex-1` swatches each
+ * printing a hex, which `flex-1` cannot shrink below, so the row refused to
+ * fit 327px and took `scrollWidth` to 487 instead of truncating. The hex is
+ * now hidden below `sm` and this is what holds that.
  *
- *   /foundations  scrollWidth 487 -- the colour-ramp rows are a `flex` of
- *                 eleven `flex-1` swatch buttons whose labels keep their
- *                 min-content width, so 11x42px refuses to fit 327px
- *   /showcase     scrollWidth 411 at 375px AND 779 at 768px, from somewhere
- *                 inside the wall of live component previews
- *
- * Neither is the shell and neither is in scope here; adding them would mean
- * this guard failed on arrival and taught the next person to skip it.
+ * `/showcase` is deliberately absent, and it is worth saying why rather than
+ * leaving a reader to assume the list is arbitrary: it still overflows from
+ * its own content, independently of the header, at 375px (scrollWidth 411)
+ * AND at 768px (779), from somewhere inside the wall of live component
+ * previews. Every candidate sits inside its own scroller, so it needs a dig
+ * rather than a guess. Adding it would mean this guard failed on arrival and
+ * taught the next person to skip it.
  */
 const SHELL_ROUTES = [
   "/",
   "/blocks",
   "/blocks/map-workspace",
   "/components/button",
+  "/foundations",
   "/changelog",
 ];
 

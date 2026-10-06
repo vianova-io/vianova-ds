@@ -243,9 +243,17 @@ const FOCUS =
  * One step of a ramp: shows the step, copies the code.
  *
  * `showValue` is set only by the map ramps, which run the full width of the
- * column and so have ~180px a cell. The primitive ramps sit two or three to a
+ * column and so have room for one. The primitive ramps sit two or three to a
  * row and get about 45px, where a hex would wrap or truncate -- so there it
  * stays in the tooltip and the accessible name rather than being dropped.
+ *
+ * Below `sm` the map ramps are in exactly that position and take the same
+ * answer. Eleven stops across a phone's 327px column leave 29px a cell against
+ * the 42px a hex needs, and `flex-1` cannot shrink a cell below its own
+ * min-content -- so the row did not truncate or wrap, it refused to fit and
+ * pushed the whole PAGE to 487px, scrolling the document sideways on every
+ * section of Foundations. Hidden rather than dropped: the hex is still in the
+ * tooltip and the accessible name, which is where the primitive ramps keep it.
  */
 function RampStep({
   code,
@@ -279,7 +287,9 @@ function RampStep({
         swatches clears 4.5:1 with black or white; measured, not assumed.
       */}
       <span className="font-mono text-[10px]">{step}</span>
-      {showValue ? <span className="block font-mono text-[10px]">{hex}</span> : null}
+      {showValue ? (
+        <span className="hidden font-mono text-[10px] sm:block">{hex}</span>
+      ) : null}
       <CopiedMark />
     </button>
   );
