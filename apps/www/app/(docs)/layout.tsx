@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { asset } from "@/lib/asset";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { SiteNav } from "@/components/site-nav";
 
 export default function DocsLayout({
   children,
@@ -19,39 +19,7 @@ export default function DocsLayout({
             <img src={asset("/brand/vianova-symbol.svg")} alt="" aria-hidden className="size-5" />
             <span className="text-sm font-semibold">Vianova DS</span>
           </Link>
-          <nav className="flex items-center gap-5 text-sm">
-            <Link
-              href="/showcase"
-              className="text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Showcase
-            </Link>
-            <Link
-              href="/blocks"
-              className="text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Blocks
-            </Link>
-            <Link
-              href="/components"
-              className="text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Components
-            </Link>
-            <Link
-              href="/foundations"
-              className="text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Foundations
-            </Link>
-            <Link
-              href="/changelog"
-              className="text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Changelog
-            </Link>
-            <ThemeToggle />
-          </nav>
+          <SiteNav />
         </div>
       </header>
 

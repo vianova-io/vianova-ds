@@ -340,3 +340,210 @@ test.describe("map-workspace filter popover on a phone", () => {
     ).toBeLessThanOrEqual(width);
   });
 });
+
+/**
+ * The docs shell itself, which turned out to be the reason a correctly
+ * responsive block still looked wrong on a phone.
+ *
+ * The header nav was `flex items-center gap-5` with no responsive prefix
+ * anywhere and measured 609px against the export -- five links, four gaps and
+ * 160px of theme controls -- in a row that offers it 206px at 375px. Nothing
+ * in the shell is `overflow-hidden`, so the surplus became document overflow:
+ * `scrollWidth` 714 against a 375px viewport, on EVERY page of the site, with
+ * the last two links off-screen. The blocks measured 327px and fitted; the
+ * page around them slid sideways regardless.
+ *
+ * It lives in this file rather than its own spec on purpose. `ci.yml` runs
+ * Playwright through named scripts, so a new spec needs BOTH a package.json
+ * script and a ci.yml step, and `test:responsive` already has both -- the
+ * cheapest way for a guard in this repo to become a silent no-op is to need
+ * two pieces of wiring and get one.
+ */
+
+/**
+ * Routes chosen for the shell, not for coverage: one of each layout the header
+ * sits on top of.
+ *
+ * `/showcase` and `/foundations` are deliberately absent, and it is worth
+ * saying why rather than leaving a reader to assume the list is arbitrary.
+ * Both still overflow at 375px from their own CONTENT, independently of the
+ * header, and both predate this work:
+ *
+ *   /foundations  scrollWidth 487 -- the colour-ramp rows are a `flex` of
+ *                 eleven `flex-1` swatch buttons whose labels keep their
+ *                 min-content width, so 11x42px refuses to fit 327px
+ *   /showcase     scrollWidth 411 at 375px AND 779 at 768px, from somewhere
+ *                 inside the wall of live component previews
+ *
+ * Neither is the shell and neither is in scope here; adding them would mean
+ * this guard failed on arrival and taught the next person to skip it.
+ */
+const SHELL_ROUTES = [
+  "/",
+  "/blocks",
+  "/blocks/map-workspace",
+  "/components/button",
+  "/changelog",
+];
+
+/** 768 and 820 are in deliberately: the full nav fits at neither. */
+const SHELL_WIDTHS = [375, 768, 820, 1280];
+
+for (const width of SHELL_WIDTHS) {
+  test.describe(`docs shell at ${width}px`, () => {
+    test.use({ viewport: { width, height: 812 } });
+
+    for (const route of SHELL_ROUTES) {
+      test(`${route} fits the viewport`, async ({ page }) => {
+        await page.goto(route);
+        await settle(page);
+
+        const measured = await page.evaluate(() => {
+          const vw = window.innerWidth;
+          // An element inside its own scroller is not document overflow --
+          // code blocks, tables and carousels all scroll inside their box by
+          // design -- so walk the ancestors and ignore anything already
+          // clipped. Without this the report is dozens of innocent rows and
+          // the actual offender is somewhere in the middle of them.
+          const clipped = (el: Element) => {
+            let p = el.parentElement;
+            while (p && p !== document.body) {
+              if (/auto|scroll|hidden/.test(getComputedStyle(p).overflowX)) return true;
+              p = p.parentElement;
+            }
+            return false;
+          };
+          const offenders: string[] = [];
+          for (const el of document.querySelectorAll("body *")) {
+            const style = getComputedStyle(el);
+            if (style.display === "none" || style.visibility === "hidden") continue;
+            // Fixed elements are positioned against the viewport and add
+            // nothing to scrollable overflow.
+            if (style.position === "fixed") continue;
+            const b = el.getBoundingClientRect();
+            if (b.width === 0 || (b.right <= vw + 1 && b.left >= -1)) continue;
+            if (clipped(el)) continue;
+            const cls =
+              typeof el.className === "string" && el.className.trim()
+                ? `.${el.className.trim().split(/\s+/).slice(0, 4).join(".")}`
+                : "";
+            offenders.push(
+              `${el.tagName.toLowerCase()}${cls} [${Math.round(b.left)}..${Math.round(b.right)}]`,
+            );
+          }
+
+          // The header row is measured separately as well as through
+          // scrollWidth, because the two catch different things: scrollWidth
+          // would go quiet the moment anyone put `overflow-x-hidden` on the
+          // shell, which hides the symptom while leaving the links as
+          // unreachable as they were.
+          const row = document.querySelector("header > div")!;
+          const kids = [...row.children]
+            .filter((el) => getComputedStyle(el).display !== "none")
+            .map((el) => {
+              const b = el.getBoundingClientRect();
+              return { left: Math.round(b.left), right: Math.round(b.right) };
+            });
+
+          return {
+            vw,
+            scrollWidth: document.documentElement.scrollWidth,
+            offenders: offenders.slice(0, 5),
+            headerLeft: Math.min(...kids.map((k) => k.left)),
+            headerRight: Math.max(...kids.map((k) => k.right)),
+          };
+        });
+
+        expect(
+          measured.headerLeft,
+          "the header row starts off the left edge",
+        ).toBeGreaterThanOrEqual(0);
+        expect(
+          measured.headerRight,
+          `the header row ends at ${measured.headerRight} on a ${measured.vw}px viewport, so part of the nav is off-screen`,
+        ).toBeLessThanOrEqual(measured.vw);
+
+        expect(
+          measured.scrollWidth,
+          `the page scrolls sideways: scrollWidth ${measured.scrollWidth} against a ${measured.vw}px viewport.${
+            measured.offenders.length
+              ? `\nwidest things poking out:\n  ${measured.offenders.join("\n  ")}`
+              : ""
+          }`,
+        ).toBeLessThanOrEqual(measured.vw);
+      });
+    }
+  });
+}
+
+test.describe("docs shell navigation on a phone", () => {
+  test.use({ viewport: { width: 375, height: 812 } });
+
+  test("every destination is reachable behind the menu", async ({ page }) => {
+    await page.goto("/changelog");
+    await settle(page);
+
+    // Kill transitions for this test, because what it measures is where things
+    // come to rest.
+    //
+    // The sheet enters from `translate-x-[2.5rem]` over 200ms and nothing in
+    // Playwright waits for that: `toBeVisible` returns immediately and the
+    // links measure 406px on a 375px viewport, 39px of which is the animation.
+    // Polling the transform instead does not fix it -- the first poll can land
+    // in the frame BEFORE the starting style is applied, see an identity matrix
+    // and resolve early, which is exactly how this test first passed locally
+    // and failed in the suite.
+    await page.addStyleTag({
+      content: "*, *::before, *::after { transition: none !important; animation: none !important; }",
+    });
+
+    // Hidden, not absent: the row stays in the DOM and is revealed by CSS, so
+    // nothing unmounts and no state is lost crossing the breakpoint.
+    await expect(page.locator('header nav[aria-label="Main"]')).toBeHidden();
+
+    const trigger = page.getByRole("button", { name: "Menu" });
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+
+    const sheet = page.locator("[data-slot=sheet-content]");
+    await expect(sheet).toBeVisible();
+
+    // The point of the whole exercise: the links that used to be off the right
+    // edge are all here, all on screen, and all big enough to hit.
+    const links = sheet.locator("nav a");
+    await expect(links).toHaveCount(5);
+    for (let i = 0; i < 5; i++) {
+      const box = (await links.nth(i).boundingBox())!;
+      expect(Math.round(box.x), `link ${i} starts off the left edge`).toBeGreaterThanOrEqual(0);
+      expect(
+        Math.round(box.x + box.width),
+        `link ${i} runs off the right edge`,
+      ).toBeLessThanOrEqual(375);
+      // 44, not the 24 of WCAG 2.5.8 that the a11y suite gates on: this is a
+      // list of destinations built for a thumb, with no control-size ladder to
+      // respect, so there is no reason to sit at the floor.
+      expect(
+        Math.round(box.height),
+        `link ${i} is only ${Math.round(box.height)}px tall`,
+      ).toBeGreaterThanOrEqual(44);
+    }
+
+    // Client-side navigation does not unmount the layout, so a sheet that does
+    // not close itself stays open over the page it just moved to.
+    await links.nth(1).click();
+    await expect(page).toHaveURL(/\/blocks\/?$/);
+    await expect(sheet).toBeHidden();
+  });
+});
+
+test.describe("docs shell navigation on a desktop", () => {
+  test.use({ viewport: { width: 1280, height: 900 } });
+
+  test("the links are inline and the menu button is gone", async ({ page }) => {
+    await page.goto("/changelog");
+    await settle(page);
+
+    await expect(page.locator('header nav[aria-label="Main"] a')).toHaveCount(5);
+    await expect(page.getByRole("button", { name: "Menu" })).toBeHidden();
+  });
+});
