@@ -77,6 +77,37 @@ import { cn } from "@/registry/vianova/lib/utils";
 /* Data                                                                        */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Declared locally so this file compiles in a project without @types/node. The
+ * expression must read `process.env.NEXT_PUBLIC_BASE_PATH` VERBATIM, because
+ * Next substitutes that exact text at build time.
+ */
+declare const process: { env: Record<string, string | undefined> };
+
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+/**
+ * A fake Mobility Data Specification trips feed for Lisbon, September 2026:
+ * 2,000 trips by five operators. Fetched rather than imported -- 700KB of CSV
+ * has no business in the JavaScript payload of a page that may never open it.
+ */
+const DEFAULT_SAMPLE_URL = `${BASE_PATH}/data/mds-trips-lisbon.csv`;
+
+/** What MDS says each trips column means, so the sample reads like a real feed. */
+const MDS_DESCRIPTIONS: Record<string, string> = {
+  trip_id: "Unique identifier for the trip",
+  provider_id: "Identifier of the operator that reported the trip",
+  provider_name: "Operator that runs the vehicle",
+  device_id: "Identifier of the vehicle, stable across trips",
+  vehicle_type: "Kind of vehicle used",
+  propulsion_types: "How the vehicle is powered",
+  start_time: "When the trip started, in UTC",
+  end_time: "When the trip ended, in UTC",
+  trip_duration: "Length of the trip in seconds",
+  trip_distance: "Distance travelled in metres",
+  route: "Path taken, as a line of longitude and latitude points",
+};
+
 type Section = "data" | "zones" | "regulations";
 
 
@@ -1051,18 +1082,54 @@ const SORTS: Record<SortKey, string> = {
 export function DatahubWorkspace({
   className,
   datasets: initial = SAMPLE_DATASETS,
+  sampleUrl = DEFAULT_SAMPLE_URL,
   status = "ready",
   onRetry,
   onUpload,
 }: {
   className?: string;
   datasets?: Dataset[];
+  /** A CSV to load as a sample dataset. Pass null to show only `datasets`. */
+  sampleUrl?: string | null;
   status?: "ready" | "loading" | "error";
   onRetry?: () => void;
   /** Called after a file has been read and added, with the dataset it became. */
   onUpload?: (file: File, dataset: Dataset) => void;
 }) {
   const [datasets, setDatasets] = React.useState(initial);
+
+  // The sample is optional: if it cannot be fetched or read the hub simply
+  // shows the others, rather than an error about something nobody asked for.
+  React.useEffect(() => {
+    if (!sampleUrl) return;
+    const controller = new AbortController();
+    fetch(sampleUrl, { signal: controller.signal })
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+      .then((text) => {
+        const parsed = datasetFromCsv("sample-mds-lisbon", "mds-trips-lisbon-2026-09.csv", text);
+        if (typeof parsed === "string") return;
+        const sample: Dataset = {
+          ...parsed,
+          description:
+            "Fake Mobility Data Specification trips for shared scooters and bikes in Lisbon, September 2026, from five operators.",
+          aiGenerated: false,
+          rowRepresents: "a trip taken on a shared vehicle",
+          owner: "Vianova",
+          domain: "micromobility",
+          uploadedAt: "2026-10-01T09:00:00Z",
+          dateRange: ["2026-09-01", "2026-09-30"],
+          columns: parsed.columns.map((c) => ({
+            ...c,
+            description: MDS_DESCRIPTIONS[c.name] ?? c.description,
+            unit: c.name === "trip_duration" ? "s" : c.name === "trip_distance" ? "m" : c.unit,
+          })),
+        };
+        // Strict Mode runs effects twice in development; never list it twice.
+        setDatasets((all) => (all.some((d) => d.id === sample.id) ? all : [sample, ...all]));
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [sampleUrl]);
   const [section, setSection] = React.useState<Section>("data");
   const [query, setQuery] = React.useState("");
   const [sort, setSort] = React.useState<SortKey>("recent");
