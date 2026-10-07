@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { BLOCKS, settle } from "./examples";
+import { MAP_BLOCKS, NON_MAP_BLOCKS, settle } from "./examples";
 
 /**
  * Geometry of the map blocks at phone, tablet and desktop widths.
@@ -95,7 +95,7 @@ const overlaps = (a: Rect, b: Rect) =>
     b.y + b.height <= a.y
   );
 
-for (const block of BLOCKS) {
+for (const block of MAP_BLOCKS) {
   for (const vp of VIEWPORTS) {
     test.describe(`${block} at ${vp.name} (${vp.width}x${vp.height})`, () => {
       test.use({ viewport: { width: vp.width, height: vp.height } });
@@ -548,3 +548,40 @@ test.describe("docs shell navigation on a desktop", () => {
     await expect(page.getByRole("button", { name: "Menu" })).toBeHidden();
   });
 });
+
+/**
+ * Blocks with no map have no panels to count, so what has to hold is simpler:
+ * the block fits the viewport, and neither of its views scrolls sideways inside
+ * it. Cards, tabs and the toolbar wrap; the column and data tables are the only
+ * things allowed to scroll, and they do so inside their own container.
+ */
+for (const block of NON_MAP_BLOCKS) {
+  for (const vp of VIEWPORTS) {
+    test.describe(`${block} at ${vp.name} (${vp.width}x${vp.height})`, () => {
+      test.use({ viewport: { width: vp.width, height: vp.height } });
+
+      test("fits the viewport in the list and in a dataset", async ({ page }) => {
+        await page.goto(`/blocks/${block}`);
+        await settle(page);
+        const root = page.locator(`[data-slot=${block}]`);
+
+        const measure = () =>
+          root.evaluate((el) => {
+            const b = el.getBoundingClientRect();
+            return {
+              right: Math.round(b.right),
+              vw: window.innerWidth,
+              overflow: el.scrollWidth - el.clientWidth,
+            };
+          });
+
+        for (const view of ["list", "dataset"] as const) {
+          if (view === "dataset") await root.locator("ul button").first().click();
+          const m = await measure();
+          expect(m.right, `${view}: the block runs past the viewport`).toBeLessThanOrEqual(m.vw);
+          expect(m.overflow, `${view}: the block scrolls sideways inside itself`).toBeLessThanOrEqual(1);
+        }
+      });
+    });
+  }
+}

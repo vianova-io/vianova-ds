@@ -1120,6 +1120,7 @@ export function DatahubWorkspace({
 
   return (
     <div
+      data-slot="datahub-workspace"
       className={cn(
         // Same envelope as map-workspace, so the docs page does not jump when
         // one block replaces the other.

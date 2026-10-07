@@ -41,3 +41,11 @@ export async function settle(page: Page) {
  * focus ring turned up in one by hand. Their own route is crawled instead.
  */
 export const BLOCKS: string[] = Object.values(Blocks).map((b) => b.name);
+
+/**
+ * Blocks that are not built around a map. The map suites assume two floating
+ * panels, a toolbar and an attribution badge, so they must not be pointed at
+ * these -- each gets its own checks instead.
+ */
+export const NON_MAP_BLOCKS: string[] = ["datahub-workspace"];
+export const MAP_BLOCKS: string[] = BLOCKS.filter((b) => !NON_MAP_BLOCKS.includes(b));

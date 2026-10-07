@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-import { BLOCKS, EXAMPLES, settle } from "./examples";
+import { BLOCKS, EXAMPLES, NON_MAP_BLOCKS, settle } from "./examples";
 
 /**
  * Accessibility crawl over every example, using the chrome-less /preview route
@@ -107,9 +107,16 @@ test.describe("accessibility", () => {
         await page.goto(`/blocks/${block}`);
         await settle(page);
 
-        const results = await new AxeBuilder({ page })
-          .include("[data-slot=map-toolbar]")
-          .include("[data-slot=floating-panel]")
+        // Map blocks are scoped to their toolbar and panels; a block with no
+        // map is scoped to its own root. axe throws, rather than passing, when
+        // an .include() matches nothing -- so the selectors must exist.
+        const scoped = new AxeBuilder({ page });
+        if (NON_MAP_BLOCKS.includes(block)) {
+          scoped.include(`[data-slot=${block}]`);
+        } else {
+          scoped.include("[data-slot=map-toolbar]").include("[data-slot=floating-panel]");
+        }
+        const results = await scoped
           .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
           .analyze();
 
