@@ -148,6 +148,18 @@
       "files": []
     },
     {
+      "name": "category-style",
+      "type": "registry:lib",
+      "title": "Category Style",
+      "description": "Category Style helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/category-style.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
       "name": "csv",
       "type": "registry:lib",
       "title": "Csv",
@@ -203,6 +215,21 @@
       ]
     },
     {
+      "name": "use-category-point-layer",
+      "type": "registry:hook",
+      "title": "Use Category Point Layer",
+      "description": "Use Category Point Layer hook.",
+      "files": [
+        {
+          "path": "registry/vianova/hooks/use-category-point-layer.ts",
+          "type": "registry:hook"
+        }
+      ],
+      "dependencies": [
+        "maplibre-gl"
+      ]
+    },
+    {
       "name": "use-color-scheme",
       "type": "registry:hook",
       "title": "Use Color Scheme",
@@ -254,10 +281,12 @@
         "@vianova/avatar",
         "@vianova/badge",
         "@vianova/button",
+        "@vianova/category-style",
         "@vianova/confirm-dialog",
         "@vianova/csv",
         "@vianova/empty",
         "@vianova/inline-edit",
+        "@vianova/input",
         "@vianova/input-group",
         "@vianova/popover",
         "@vianova/select",
@@ -323,8 +352,10 @@
       "registryDependencies": [
         "@vianova/button",
         "@vianova/button-group",
+        "@vianova/category-style",
         "@vianova/chart",
         "@vianova/chart-card",
+        "@vianova/csv",
         "@vianova/data-layer-card",
         "@vianova/filter-ast",
         "@vianova/filter-builder",
@@ -333,6 +364,7 @@
         "@vianova/floating-panel",
         "@vianova/inline-edit",
         "@vianova/input-group",
+        "@vianova/legend-categorical",
         "@vianova/legend-ramp",
         "@vianova/map-canvas",
         "@vianova/map-controls",
@@ -341,6 +373,7 @@
         "@vianova/select",
         "@vianova/skeleton",
         "@vianova/tabs",
+        "@vianova/use-category-point-layer",
         "@vianova/use-color-scheme",
         "@vianova/utils",
         "@vianova/visualization-picker"

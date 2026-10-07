@@ -40,6 +40,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/registry/vianova/ui/empty";
+import { Input } from "@/registry/vianova/ui/input";
 import {
   InputGroup,
   InputGroupAddon,
@@ -70,6 +71,16 @@ import { Tabs, TabsList, TabsTrigger } from "@/registry/vianova/ui/tabs";
 import { Textarea } from "@/registry/vianova/ui/textarea";
 import { ConfirmDialog } from "@/registry/vianova/patterns/confirm-dialog";
 import { InlineEdit } from "@/registry/vianova/patterns/inline-edit";
+import {
+  CATEGORY_PALETTE,
+  DEFAULT_LOGO_ZOOM,
+  adviseLogo,
+  prepareLogo,
+  readStyleSet,
+  resolveStyles,
+  writeStyleSet,
+  type CategoryStyle,
+} from "@/registry/vianova/lib/category-style";
 import { inferColumns, parseCsv, type ColumnType } from "@/registry/vianova/lib/csv";
 import { cn } from "@/registry/vianova/lib/utils";
 
@@ -111,9 +122,6 @@ const MDS_DESCRIPTIONS: Record<string, string> = {
 type Section = "data" | "zones" | "regulations";
 
 
-/** A category value's identity on a map: a colour, and optionally a logo. */
-type CategoryStyle = { color: string; logo?: string };
-
 type Column = {
   name: string;
   description: string;
@@ -123,10 +131,14 @@ type Column = {
   values?: string[];
   /** Keyed by value. A value with no entry falls back to the palette. */
   styles?: Record<string, CategoryStyle>;
+  /** Category columns only: a map shows logos from this zoom, colour dots below it. */
+  logoZoom?: number;
 };
 
 type Dataset = {
   id: string;
+  /** Where this dataset's category styles are saved. Defaults to `id`. */
+  storageKey?: string;
   section: Section;
   title: string;
   description: string;
@@ -164,27 +176,6 @@ const TYPE_ICON: Record<ColumnType, React.ComponentType<{ className?: string }>>
   number: Hash,
   text: Type,
 };
-
-/**
- * Identity colours for category values, chosen to stay distinct from one
- * another rather than to follow the theme.
- *
- * Raw hex on purpose: a category's colour is data the author assigns and the
- * map then paints with, not UI chrome, so it must not shift when the theme
- * does. The chart ramp is no substitute -- it is a single hue running light to
- * dark, which is exactly wrong for telling five values apart. The first stop
- * is the product primary.
- */
-const SWATCHES = [
-  "#0f766e",
-  "#2563eb",
-  "#d97706",
-  "#db2777",
-  "#7c3aed",
-  "#65a30d",
-  "#dc2626",
-  "#0891b2",
-];
 
 const col = (
   name: string,
@@ -458,8 +449,13 @@ function previewRows(dataset: Dataset, n = 40): string[][] {
   );
 }
 
-function styleFor(column: Column, value: string, index: number): CategoryStyle {
-  return column.styles?.[value] ?? { color: SWATCHES[index % SWATCHES.length] ?? "#0f766e" };
+function styleFor(column: Column, value: string): CategoryStyle {
+  const values = column.values ?? [];
+  return (
+    resolveStyles(values, { values: column.styles })[value] ?? {
+      color: CATEGORY_PALETTE[0],
+    }
+  );
 }
 
 /** A stylised street grid, standing in for the map thumbnail the platform renders. */
@@ -573,28 +569,79 @@ function CardSkeleton() {
 /* -------------------------------------------------------------------------- */
 
 /**
- * One category value's colour and logo.
+ * A category value as a map draws it close up: its logo on its colour, inside a
+ * white ring so it reads on any basemap.
  *
- * The logo is read with an object URL rather than a data URL: the picker holds
- * the file only for the session, and an object URL costs nothing until it is
- * painted. The previous URL is revoked on replace so a long editing session
- * does not accumulate every logo it ever tried.
+ * The same shape `composeBadge` paints into a map symbol. A solid logo fills the
+ * disc and a transparent one sits on the colour at a smaller size, which is the
+ * difference the picker's preview exists to show.
+ */
+function CategoryBadge({
+  style,
+  size = 24,
+  className,
+}: {
+  style: CategoryStyle;
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <span
+      aria-hidden
+      className={cn("inline-flex shrink-0 rounded-full bg-white p-[8%] shadow-sm", className)}
+      style={{ width: size, height: size }}
+    >
+      <span
+        className="flex size-full items-center justify-center overflow-hidden rounded-full"
+        style={{ backgroundColor: style.color }}
+      >
+        {style.logo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={style.logo}
+            alt=""
+            className={style.logoKind === "solid" ? "size-full object-cover" : "size-[64%] object-contain"}
+          />
+        ) : null}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * One category value's colour and logo, and how they will look on a map.
+ *
+ * Both are always there: the colour is the dot a map draws zoomed out, and the
+ * badge -- the logo on that colour -- is what it draws zoomed in. So the picker
+ * shows both, and says so when a logo will not read on its colour.
  */
 function CategoryStylePicker({
   value,
   style,
+  logoZoom,
   onChange,
 }: {
   value: string;
   style: CategoryStyle;
+  logoZoom: number;
   onChange: (next: CategoryStyle) => void;
 }) {
   const fileRef = React.useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const advice = adviseLogo(style);
 
-  const setLogo = (file: File | undefined) => {
+  const upload = async (file: File | undefined) => {
     if (!file) return;
-    if (style.logo?.startsWith("blob:")) URL.revokeObjectURL(style.logo);
-    onChange({ ...style, logo: URL.createObjectURL(file) });
+    setBusy(true);
+    setError(null);
+    try {
+      onChange({ ...style, ...(await prepareLogo(file)) });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "That file could not be used.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -608,32 +655,39 @@ function CategoryStylePicker({
           />
         }
       >
-        {style.logo ? (
-          <Avatar className="size-5">
-            <AvatarImage src={style.logo} alt="" />
-            <AvatarFallback>{value.slice(0, 1)}</AvatarFallback>
-          </Avatar>
-        ) : (
-          <span
-            className="size-4 rounded-full border"
-            style={{ backgroundColor: style.color }}
-            aria-hidden
-          />
-        )}
+        <CategoryBadge style={style} size={22} />
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 space-y-3">
+      <PopoverContent align="start" className="w-80 space-y-4">
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium">On the map</p>
+          <div className="bg-muted/50 flex items-center justify-around rounded-lg border p-3">
+            <div className="flex flex-col items-center gap-1.5">
+              <span
+                aria-hidden
+                className="size-3.5 rounded-full border border-white"
+                style={{ backgroundColor: style.color }}
+              />
+              <span className="text-muted-foreground text-[11px]">Below zoom {logoZoom}</span>
+            </div>
+            <div className="flex flex-col items-center gap-1.5">
+              <CategoryBadge style={style} size={44} />
+              <span className="text-muted-foreground text-[11px]">From zoom {logoZoom}</span>
+            </div>
+          </div>
+        </div>
+
         <div className="space-y-1.5">
           <p className="text-xs font-medium">Colour</p>
           <div className="flex flex-wrap items-center gap-1.5">
-            {SWATCHES.map((s) => (
+            {CATEGORY_PALETTE.map((swatch) => (
               <button
-                key={s}
+                key={swatch}
                 type="button"
-                aria-label={`Use ${s}`}
-                aria-pressed={style.color === s}
-                onClick={() => onChange({ ...style, color: s })}
+                aria-label={`Use ${swatch}`}
+                aria-pressed={style.color === swatch}
+                onClick={() => onChange({ ...style, color: swatch })}
                 className="focus-visible:ring-ring size-6 rounded-full border focus-visible:ring-2 focus-visible:outline-none aria-pressed:ring-2 aria-pressed:ring-offset-1 aria-pressed:ring-offset-background aria-pressed:ring-foreground"
-                style={{ backgroundColor: s }}
+                style={{ backgroundColor: swatch }}
               />
             ))}
             <label className="text-muted-foreground hover:text-foreground focus-within:ring-ring flex size-6 cursor-pointer items-center justify-center rounded-full border border-dashed text-[10px] focus-within:ring-2">
@@ -642,30 +696,25 @@ function CategoryStylePicker({
               <input
                 type="color"
                 className="sr-only"
+                value={/^#[0-9a-f]{6}$/i.test(style.color) ? style.color : "#0f766e"}
                 onChange={(e) => onChange({ ...style, color: e.target.value })}
               />
             </label>
           </div>
         </div>
+
         <div className="space-y-1.5">
           <p className="text-xs font-medium">Logo</p>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fileRef.current?.click()}
-            >
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
               <ImagePlus data-icon="inline-start" />
-              {style.logo ? "Replace" : "Upload"}
+              {busy ? "Reading…" : style.logo ? "Replace" : "Upload"}
             </Button>
             {style.logo ? (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  if (style.logo?.startsWith("blob:")) URL.revokeObjectURL(style.logo);
-                  onChange({ color: style.color });
-                }}
+                onClick={() => onChange({ color: style.color })}
               >
                 <X data-icon="inline-start" />
                 Remove
@@ -677,15 +726,87 @@ function CategoryStylePicker({
               accept="image/*"
               className="sr-only"
               tabIndex={-1}
+              aria-label={`Logo file for ${value}`}
               onChange={(e) => {
-                setLogo(e.target.files?.[0]);
+                void upload(e.target.files?.[0]);
                 e.target.value = "";
               }}
             />
           </div>
+          {error ? (
+            <p role="alert" className="text-destructive text-xs">
+              {error}
+            </p>
+          ) : null}
+          {advice.map((a) => (
+            <div
+              key={a.message}
+              className={cn(
+                "flex items-start gap-2 rounded-md border p-2 text-xs",
+                a.kind === "warning"
+                  ? "border-destructive/40 text-destructive"
+                  : "text-muted-foreground",
+              )}
+            >
+              {a.kind === "warning" ? <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> : null}
+              <div className="space-y-1.5">
+                <p>{a.message}</p>
+                {a.suggestion ? (
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    onClick={() => onChange({ ...style, color: a.suggestion! })}
+                  >
+                    Use {a.suggestion === "#ffffff" ? "a white" : "a dark"} badge
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ))}
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** The zoom a map switches from colour dots to logos, committed on blur or Enter. */
+function LogoZoomField({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: number;
+  onChange: (next: number) => void;
+}) {
+  const [draft, setDraft] = React.useState(String(value));
+  React.useEffect(() => setDraft(String(value)), [value]);
+
+  const commit = () => {
+    const n = Math.round(Number(draft));
+    if (draft.trim() === "" || !Number.isFinite(n)) {
+      setDraft(String(value));
+      return;
+    }
+    const next = Math.min(22, Math.max(0, n));
+    setDraft(String(next));
+    if (next !== value) onChange(next);
+  };
+
+  return (
+    <Input
+      id={id}
+      type="number"
+      inputMode="numeric"
+      min={0}
+      max={22}
+      step={1}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === "Enter" && commit()}
+      className="h-8 w-16"
+    />
   );
 }
 
@@ -703,6 +824,7 @@ function ColumnRow({
   const [open, setOpen] = React.useState(false);
   const Icon = TYPE_ICON[column.type];
   const expandable = column.type === "category" && !!column.values?.length;
+  const logoZoom = column.logoZoom ?? DEFAULT_LOGO_ZOOM;
 
   return (
     <>
@@ -765,30 +887,50 @@ function ColumnRow({
           />
         </TableCell>
       </TableRow>
-      {open && expandable
-        ? column.values!.map((value, i) => {
-            const style = styleFor(column, value, i);
-            return (
-              <TableRow key={value} className="bg-muted/30">
-                <TableCell colSpan={4} className="py-1 pl-10">
-                  <div className="flex items-center gap-2">
-                    <CategoryStylePicker
-                      value={value}
-                      style={style}
-                      onChange={(next) =>
-                        onChange({
-                          ...column,
-                          styles: { ...column.styles, [value]: next },
-                        })
-                      }
-                    />
-                    <span className="text-sm">{value}</span>
-                  </div>
-                </TableCell>
-              </TableRow>
-            );
-          })
-        : null}
+      {open && expandable ? (
+        <>
+          <TableRow className="bg-muted/30">
+            <TableCell colSpan={4} className="py-2 pl-10">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                <label htmlFor={`${column.name}-logo-zoom`} className="text-muted-foreground">
+                  Show logos from zoom
+                </label>
+                <LogoZoomField
+                  id={`${column.name}-logo-zoom`}
+                  value={logoZoom}
+                  onChange={(next) => onChange({ ...column, logoZoom: next })}
+                />
+                <span className="text-muted-foreground text-xs">
+                  Zoomed out, each value is a colour dot.
+                </span>
+              </div>
+            </TableCell>
+          </TableRow>
+          {column.values!.map((value) => (
+            <TableRow key={value} className="bg-muted/30">
+              <TableCell colSpan={4} className="py-1 pl-10">
+                <div className="flex items-center gap-2">
+                  <CategoryStylePicker
+                    value={value}
+                    style={styleFor(column, value)}
+                    logoZoom={logoZoom}
+                    onChange={(next) =>
+                      onChange({
+                        ...column,
+                        // Written out in full, not just the value that changed:
+                        // a value left on its palette default would otherwise
+                        // drift if the palette order ever did.
+                        styles: { ...resolveStyles(column.values!, { values: column.styles }), [value]: next },
+                      })
+                    }
+                  />
+                  <span className="text-sm">{value}</span>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </>
+      ) : null}
     </>
   );
 }
@@ -874,11 +1016,14 @@ function Fact({
 
 function DatasetDetail({
   dataset,
+  saveFailed,
   onBack,
   onChange,
   onDelete,
 }: {
   dataset: Dataset;
+  /** The last change to a category's colour or logo could not be saved. */
+  saveFailed: boolean;
   onBack: () => void;
   onChange: (next: Dataset) => void;
   onDelete: () => void;
@@ -896,6 +1041,17 @@ function DatasetDetail({
         </Button>
         <h2 className="truncate text-lg font-semibold tracking-tight">{dataset.title}</h2>
       </div>
+
+      {saveFailed ? (
+        <Alert variant="destructive">
+          <TriangleAlert />
+          <AlertTitle>Couldn&apos;t save your logos</AlertTitle>
+          <AlertDescription>
+            This browser&apos;s storage is full or blocked, so the map won&apos;t see these changes
+            and they will be lost on reload.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)]">
         <section className="bg-card h-fit rounded-xl border">
@@ -1045,6 +1201,9 @@ function datasetFromCsv(id: string, filename: string, text: string): Dataset | s
 
   return {
     id,
+    // The id counts uploads in this session, so it names a different file on
+    // the next visit. The filename is what makes the same file find its logos.
+    storageKey: `upload:${filename}`,
     section: "data",
     title: filename,
     description: "",
@@ -1058,6 +1217,44 @@ function datasetFromCsv(id: string, filename: string, text: string): Dataset | s
       .map((row) => parsed.header.map((_, i) => clip(row[i] ?? ""))),
     seed: filename.length,
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Saved category styles                                                       */
+/* -------------------------------------------------------------------------- */
+
+const storageKeyOf = (d: Dataset) => d.storageKey ?? d.id;
+
+/**
+ * Puts back whatever styles this browser has saved for a dataset.
+ *
+ * Done after mount, never in the initial state: the server renders without
+ * localStorage, so reading it while hydrating would put the two out of step.
+ */
+function withSavedStyles(dataset: Dataset): Dataset {
+  let changed = false;
+  const columns = dataset.columns.map((c) => {
+    if (c.type !== "category") return c;
+    const saved = readStyleSet(storageKeyOf(dataset), c.name);
+    if (!saved) return c;
+    changed = true;
+    return { ...c, styles: saved.values, logoZoom: saved.logoZoom };
+  });
+  return changed ? { ...dataset, columns } : dataset;
+}
+
+/** False if any column could not be saved, e.g. the browser's storage is full. */
+function saveStyles(dataset: Dataset): boolean {
+  let ok = true;
+  for (const c of dataset.columns) {
+    if (c.type !== "category" || (!c.styles && c.logoZoom === undefined)) continue;
+    ok =
+      writeStyleSet(storageKeyOf(dataset), c.name, {
+        logoZoom: c.logoZoom ?? DEFAULT_LOGO_ZOOM,
+        values: c.styles ?? {},
+      }) && ok;
+  }
+  return ok;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1097,6 +1294,12 @@ export function DatahubWorkspace({
   onUpload?: (file: File, dataset: Dataset) => void;
 }) {
   const [datasets, setDatasets] = React.useState(initial);
+  const [saveFailed, setSaveFailed] = React.useState(false);
+
+  // Styles saved on an earlier visit, or set on the map workspace's other page.
+  React.useEffect(() => {
+    setDatasets((all) => all.map(withSavedStyles));
+  }, []);
 
   // The sample is optional: if it cannot be fetched or read the hub simply
   // shows the others, rather than an error about something nobody asked for.
@@ -1110,6 +1313,9 @@ export function DatahubWorkspace({
         if (typeof parsed === "string") return;
         const sample: Dataset = {
           ...parsed,
+          // Not the upload key `datasetFromCsv` gave it: the map workspace looks
+          // these styles up by this exact id, so it is part of that contract.
+          storageKey: parsed.id,
           description:
             "Fake Mobility Data Specification trips for shared scooters and bikes in Lisbon, September 2026, from five operators.",
           aiGenerated: false,
@@ -1125,7 +1331,7 @@ export function DatahubWorkspace({
           })),
         };
         // Strict Mode runs effects twice in development; never list it twice.
-        setDatasets((all) => (all.some((d) => d.id === sample.id) ? all : [sample, ...all]));
+        setDatasets((all) => (all.some((d) => d.id === sample.id) ? all : [withSavedStyles(sample), ...all]));
       })
       .catch(() => {});
     return () => controller.abort();
@@ -1156,7 +1362,7 @@ export function DatahubWorkspace({
         setUploadError(result);
         return;
       }
-      setDatasets((all) => [result, ...all]);
+      setDatasets((all) => [withSavedStyles(result), ...all]);
       setSection("data");
       setQuery("");
       setOpenId(result.id);
@@ -1214,9 +1420,11 @@ export function DatahubWorkspace({
         <DatasetDetail
           dataset={open}
           onBack={() => setOpenId(null)}
-          onChange={(next) =>
-            setDatasets((all) => all.map((d) => (d.id === next.id ? next : d)))
-          }
+          saveFailed={saveFailed}
+          onChange={(next) => {
+            setDatasets((all) => all.map((d) => (d.id === next.id ? next : d)));
+            setSaveFailed(!saveStyles(next));
+          }}
           onDelete={() => {
             setDatasets((all) => all.filter((d) => d.id !== open.id));
             setOpenId(null);

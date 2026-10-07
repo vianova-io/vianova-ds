@@ -62,11 +62,13 @@ import {
   FloatingPanelHeader,
   FloatingPanelTitle,
 } from "@/registry/vianova/product/floating-panel";
+import { LegendCategorical } from "@/registry/vianova/product/legend-categorical";
 import { LegendRamp, RAMP_STOPS } from "@/registry/vianova/product/legend-ramp";
 import { MapCanvas } from "@/registry/vianova/product/map-canvas";
 import { MapControls } from "@/registry/vianova/product/map-controls";
 import { RankedBars } from "@/registry/vianova/product/ranked-bars";
 import type { VisualizationTypeId } from "@/registry/vianova/product/visualization-picker";
+import { useCategoryPointLayer, type CategoryPoint } from "@/registry/vianova/hooks/use-category-point-layer";
 import { useColorScheme } from "@/registry/vianova/hooks/use-color-scheme";
 import { InlineEdit } from "@/registry/vianova/patterns/inline-edit";
 import {
@@ -76,6 +78,14 @@ import {
   type FilterGroup,
 } from "@/registry/vianova/lib/filter-ast";
 import { compileFilter } from "@/registry/vianova/lib/filter-eval";
+import {
+  DEFAULT_LOGO_ZOOM,
+  STYLE_STORAGE_KEY,
+  readStyleSet,
+  resolveStyles,
+  type CategoryStyleSet,
+} from "@/registry/vianova/lib/category-style";
+import { inferColumns, parseCsv } from "@/registry/vianova/lib/csv";
 import { cn } from "@/registry/vianova/lib/utils";
 
 /* -------------------------------------------------------------------------- */
@@ -100,6 +110,19 @@ const WORKER_URL = `${BASE_PATH}/maplibre/maplibre-gl-worker.mjs`;
  * that has not decided to show a map yet.
  */
 const DEFAULT_DATA_URL = `${BASE_PATH}/data/vehicle-flows.json`;
+
+/**
+ * The Lisbon trips the data hub ships as a sample. The map reads the colours and
+ * logos someone set there, from this browser's storage, under the same dataset
+ * id and column -- so these two strings are the contract between the two blocks.
+ */
+const TRIPS_URL = `${BASE_PATH}/data/mds-trips-lisbon.csv`;
+const TRIPS_DATASET = "sample-mds-lisbon";
+const TRIPS_COLUMN = "provider_name";
+const LISBON: [number, number] = [-9.14, 38.735];
+
+/** The first vertex of a WKT LINESTRING: where the trip started. */
+const FIRST_VERTEX = /\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/;
 
 type FlowProperties = {
   name: string;
@@ -418,6 +441,75 @@ export function MapWorkspace({
    */
   const [pane, setPane] = React.useState<"data" | "charts">("data");
   const mapRef = React.useRef<MapLibreMap | null>(null);
+  // State as well as the ref: the ref is what the layer code reads, but a hook
+  // that must re-run when the map arrives needs something React can see change.
+  const [map, setMap] = React.useState<MapLibreMap | null>(null);
+
+  const [tripsVisible, setTripsVisible] = React.useState(false);
+  const [trips, setTrips] = React.useState<{
+    points: CategoryPoint[];
+    providers: string[];
+  } | null>(null);
+  const [savedStyles, setSavedStyles] = React.useState<CategoryStyleSet | undefined>();
+
+  // Read after mount, never in the initial state: the server has no storage.
+  React.useEffect(() => {
+    const read = () => setSavedStyles(readStyleSet(TRIPS_DATASET, TRIPS_COLUMN));
+    read();
+    // Fires in this tab when ANOTHER tab writes, which is how a logo set in the
+    // data hub shows up here without a reload.
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || e.key === STYLE_STORAGE_KEY) read();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  // Fetched the first time the layer is switched on, not on mount: most visitors
+  // never turn it on, and it is 700KB.
+  React.useEffect(() => {
+    if (!tripsVisible || trips) return;
+    const controller = new AbortController();
+    fetch(TRIPS_URL, { signal: controller.signal })
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+      .then((text) => {
+        const parsed = parseCsv(text);
+        const at = parsed.header.indexOf("route");
+        const by = parsed.header.indexOf(TRIPS_COLUMN);
+        if (at < 0 || by < 0) return;
+        const points: CategoryPoint[] = [];
+        for (const row of parsed.rows) {
+          const m = FIRST_VERTEX.exec(row[at] ?? "");
+          if (m) points.push({ position: [Number(m[1]), Number(m[2])], category: row[by] ?? "" });
+        }
+        // Same inference the data hub runs, so providers come out in the same
+        // order and an unstyled one is the same colour in both places.
+        const providers = inferColumns(parsed)[by]?.values ?? [];
+        setTrips({ points, providers });
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [tripsVisible, trips]);
+
+  const tripStyles = React.useMemo(
+    () => resolveStyles(trips?.providers ?? [], savedStyles),
+    [trips, savedStyles],
+  );
+  const logoZoom = savedStyles?.logoZoom ?? DEFAULT_LOGO_ZOOM;
+
+  useCategoryPointLayer({
+    map,
+    enabled: tripsVisible,
+    points: trips?.points ?? [],
+    styles: tripStyles,
+    logoZoom,
+  });
+
+  // The flows are Zürich and the trips are Lisbon, so switching the layer on
+  // would otherwise show nothing at all.
+  React.useEffect(() => {
+    if (tripsVisible && map) map.flyTo({ center: LISBON, zoom: 11.5, duration: 1200 });
+  }, [tripsVisible, map]);
   const rootRef = React.useRef<HTMLDivElement>(null);
   // Namespaced so aria-controls still resolves if two of these ever share a page.
   const uid = React.useId();
@@ -878,9 +970,10 @@ export function MapWorkspace({
         // must not swallow a one-finger drag. 1024 is the same boundary the
         // layout switches on.
         cooperativeGesturesBelow={1024}
-        onStyleReady={(map) => {
-          mapRef.current = map;
-          syncLayer(map);
+        onStyleReady={(ready) => {
+          mapRef.current = ready;
+          setMap(ready);
+          syncLayer(ready);
         }}
       />
 
@@ -1139,6 +1232,38 @@ export function MapWorkspace({
               }
             />
 
+            <DataLayerCard
+              name="Lisbon trips (MDS)"
+              meta="Sep 1 – Sep 30, 2026 · Trips by provider"
+              visualizationType="points"
+              unavailableVisualizations={[
+                "clusters",
+                "grid",
+                "heatmap",
+                "lines",
+                "zones",
+                "trips",
+              ]}
+              unavailableVisualizationReason="This layer draws each trip's start point"
+              expanded
+              visible={tripsVisible}
+              onVisibilityChange={setTripsVisible}
+              legend={
+                trips ? (
+                  <div className="space-y-1.5">
+                    <LegendCategorical
+                      items={trips.providers.map((label) => ({
+                        label,
+                        color: tripStyles[label]?.color ?? "#888888",
+                      }))}
+                    />
+                    <p className="text-muted-foreground text-[11px]">
+                      Logos from zoom {logoZoom}
+                    </p>
+                  </div>
+                ) : null
+              }
+            />
             <DataLayerCard
               name="Accidents ZH 2011-2023"
               expanded={false}
