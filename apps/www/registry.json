@@ -230,6 +230,40 @@
       "dependencies": []
     },
     {
+      "name": "datahub-workspace",
+      "type": "registry:block",
+      "title": "Datahub Workspace",
+      "description": "Datahub Workspace layout, composed from Vianova components.",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/avatar",
+        "@vianova/badge",
+        "@vianova/button",
+        "@vianova/confirm-dialog",
+        "@vianova/empty",
+        "@vianova/inline-edit",
+        "@vianova/input-group",
+        "@vianova/popover",
+        "@vianova/select",
+        "@vianova/skeleton",
+        "@vianova/table",
+        "@vianova/tabs",
+        "@vianova/textarea",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/blocks/datahub-workspace.tsx",
+          "type": "registry:block"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "explore-map",
       "type": "registry:block",
       "title": "Explore Map",
