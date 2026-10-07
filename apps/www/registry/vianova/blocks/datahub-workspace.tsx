@@ -28,6 +28,7 @@ import {
   X,
 } from "lucide-react";
 
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/registry/vianova/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/registry/vianova/ui/avatar";
 import { Badge } from "@/registry/vianova/ui/badge";
 import { Button } from "@/registry/vianova/ui/button";
@@ -69,6 +70,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/registry/vianova/ui/tabs";
 import { Textarea } from "@/registry/vianova/ui/textarea";
 import { ConfirmDialog } from "@/registry/vianova/patterns/confirm-dialog";
 import { InlineEdit } from "@/registry/vianova/patterns/inline-edit";
+import { inferColumns, parseCsv, type ColumnType } from "@/registry/vianova/lib/csv";
 import { cn } from "@/registry/vianova/lib/utils";
 
 /* -------------------------------------------------------------------------- */
@@ -77,7 +79,6 @@ import { cn } from "@/registry/vianova/lib/utils";
 
 type Section = "data" | "zones" | "regulations";
 
-type ColumnType = "id" | "category" | "geometry" | "timestamp" | "number" | "text";
 
 /** A category value's identity on a map: a colour, and optionally a logo. */
 type CategoryStyle = { color: string; logo?: string };
@@ -110,6 +111,8 @@ type Dataset = {
   dateRange?: [string, string];
   rows: number;
   columns: Column[];
+  /** Real rows, when the dataset came from a file. Otherwise a preview is generated. */
+  preview?: string[][];
   seed: number;
 };
 
@@ -400,6 +403,7 @@ function rng(seed: number) {
 }
 
 function previewRows(dataset: Dataset, n = 40): string[][] {
+  if (dataset.preview) return dataset.preview;
   const next = rng(dataset.seed * 97);
   return Array.from({ length: n }, (_, r) =>
     dataset.columns.map((c) => {
@@ -905,7 +909,8 @@ function DatasetDetail({
                   : "—"}
               </Fact>
               <Fact label="Records">
-                {count.format(dataset.rows)} rows / {dataset.columns.length} columns
+                {count.format(dataset.rows)} {dataset.rows === 1 ? "row" : "rows"} / {dataset.columns.length}{" "}
+                {dataset.columns.length === 1 ? "column" : "columns"}
               </Fact>
             </dl>
             <ConfirmDialog
@@ -980,6 +985,50 @@ function DatasetDetail({
   );
 }
 
+/** Past this a browser tab struggles to hold the text, never mind parse it. */
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const PREVIEW_ROWS = 200;
+/** A geometry cell can be 100KB of hex; the table only needs to show it exists. */
+const CELL_LIMIT = 120;
+
+/**
+ * Turns the text of a CSV into a dataset, or says why it cannot.
+ *
+ * Only the first PREVIEW_ROWS are kept: the dataset's row count comes from the
+ * whole file, but holding every row of a multi-million-row export in React
+ * state would cost more than the preview is worth.
+ */
+function datasetFromCsv(id: string, filename: string, text: string): Dataset | string {
+  const parsed = parseCsv(text);
+  if (parsed.header.length === 0) return "That file is empty.";
+  if (parsed.rows.length === 0) return "That file has column names but no rows.";
+
+  const columns: Column[] = inferColumns(parsed).map((c) => ({
+    name: c.name,
+    type: c.type,
+    values: c.values,
+    description: "",
+    unit: "N/A",
+  }));
+  const clip = (v: string) => (v.length > CELL_LIMIT ? `${v.slice(0, CELL_LIMIT)}…` : v);
+
+  return {
+    id,
+    section: "data",
+    title: filename,
+    description: "",
+    owner: "You",
+    domain: "uploaded",
+    uploadedAt: new Date().toISOString(),
+    rows: parsed.rows.length,
+    columns,
+    preview: parsed.rows
+      .slice(0, PREVIEW_ROWS)
+      .map((row) => parsed.header.map((_, i) => clip(row[i] ?? ""))),
+    seed: filename.length,
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Workspace                                                                   */
 /* -------------------------------------------------------------------------- */
@@ -1010,7 +1059,8 @@ export function DatahubWorkspace({
   datasets?: Dataset[];
   status?: "ready" | "loading" | "error";
   onRetry?: () => void;
-  onUpload?: () => void;
+  /** Called after a file has been read and added, with the dataset it became. */
+  onUpload?: (file: File, dataset: Dataset) => void;
 }) {
   const [datasets, setDatasets] = React.useState(initial);
   const [section, setSection] = React.useState<Section>("data");
@@ -1018,6 +1068,38 @@ export function DatahubWorkspace({
   const [sort, setSort] = React.useState<SortKey>("recent");
   const [regStatus, setRegStatus] = React.useState<"active" | "inactive" | "all">("active");
   const [openId, setOpenId] = React.useState<string | null>(null);
+  const [importing, setImporting] = React.useState(false);
+  const [uploadError, setUploadError] = React.useState<string | null>(null);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const uploads = React.useRef(0);
+
+  const pickFile = () => fileRef.current?.click();
+
+  /** Read in the browser: the file is never sent anywhere. */
+  const upload = async (file: File) => {
+    setUploadError(null);
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setUploadError(`That file is ${Math.round(file.size / 1024 / 1024)} MB. The limit here is 50 MB.`);
+      return;
+    }
+    setImporting(true);
+    try {
+      const result = datasetFromCsv(`upload-${++uploads.current}`, file.name, await file.text());
+      if (typeof result === "string") {
+        setUploadError(result);
+        return;
+      }
+      setDatasets((all) => [result, ...all]);
+      setSection("data");
+      setQuery("");
+      setOpenId(result.id);
+      onUpload?.(file, result);
+    } catch {
+      setUploadError("Couldn't read that file.");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const open = datasets.find((d) => d.id === openId) ?? null;
 
@@ -1045,6 +1127,21 @@ export function DatahubWorkspace({
         className,
       )}
     >
+      {/* Outside both views so Upload works from the list and from its empty state. */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="sr-only"
+        tabIndex={-1}
+        aria-label="Choose a CSV file to upload"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          // Reset so choosing the same file again still fires onChange.
+          e.target.value = "";
+          if (file) void upload(file);
+        }}
+      />
       {open ? (
         <DatasetDetail
           dataset={open}
@@ -1064,11 +1161,24 @@ export function DatahubWorkspace({
               <h2 className="text-xl font-semibold tracking-tight">Data</h2>
               <p className="text-muted-foreground text-sm">Here&apos;s a list of all your data</p>
             </div>
-            <Button onClick={onUpload}>
+            <Button onClick={pickFile} disabled={importing}>
               <Upload data-icon="inline-start" />
-              Upload data
+              {importing ? "Importing…" : "Upload data"}
             </Button>
           </header>
+
+          {uploadError ? (
+            <Alert variant="destructive">
+              <TriangleAlert />
+              <AlertTitle>Couldn&apos;t import that file</AlertTitle>
+              <AlertDescription>{uploadError}</AlertDescription>
+              <AlertAction>
+                <Button variant="ghost" size="xs" onClick={() => setUploadError(null)}>
+                  Dismiss
+                </Button>
+              </AlertAction>
+            </Alert>
+          ) : null}
 
           <Tabs
             value={section}
@@ -1176,7 +1286,7 @@ export function DatahubWorkspace({
                     Clear search
                   </Button>
                 ) : (
-                  <Button onClick={onUpload}>
+                  <Button onClick={pickFile} disabled={importing}>
                     <Upload data-icon="inline-start" />
                     Upload data
                   </Button>

@@ -148,6 +148,18 @@
       "files": []
     },
     {
+      "name": "csv",
+      "type": "registry:lib",
+      "title": "Csv",
+      "description": "Csv helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/csv.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
       "name": "filter-ast",
       "type": "registry:lib",
       "title": "Filter Ast",
@@ -238,10 +250,12 @@
         "lucide-react"
       ],
       "registryDependencies": [
+        "@vianova/alert",
         "@vianova/avatar",
         "@vianova/badge",
         "@vianova/button",
         "@vianova/confirm-dialog",
+        "@vianova/csv",
         "@vianova/empty",
         "@vianova/inline-edit",
         "@vianova/input-group",
