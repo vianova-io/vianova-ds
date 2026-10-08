@@ -1,0 +1,211 @@
+/**
+ * Turning an MDS trips feed into the numbers a report shows.
+ *
+ * Pure and synchronous: a report recomputes on every filter change, and 2,000
+ * trips aggregate in well under a frame. Days and hours are read in the city's
+ * own time zone, not UTC -- a trip at 23:30 in Lisbon in September is 22:30 UTC,
+ * and a "night riding" report that bucketed by UTC would miss an hour of it.
+ */
+
+export type Trip = {
+  provider: string;
+  vehicle: string;
+  device: string;
+  /** Local calendar day, YYYY-MM-DD. */
+  day: string;
+  /** Local hour, 0-23. */
+  hour: number;
+  /** Local weekday, Monday = 0. */
+  weekday: number;
+  durationS: number;
+  distanceM: number;
+};
+
+export type TripFilter = {
+  /** First local day, inclusive, YYYY-MM-DD. */
+  from: string;
+  /** Last local day, inclusive. */
+  to: string;
+  /** Only this `vehicle_type`; every vehicle when absent. */
+  vehicle?: string;
+  /**
+   * Local hours [start, end). Wraps past midnight when start > end, so
+   * [22, 6] is 22:00 to 05:59.
+   */
+  hours?: [number, number];
+};
+
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/**
+ * Rows from `parseCsv`, by header name, so a feed with its columns in another
+ * order still reads. Rows missing a start time or a provider are dropped.
+ */
+export function readTrips(
+  { header, rows }: { header: string[]; rows: string[][] },
+  timeZone = "Europe/Lisbon",
+): Trip[] {
+  const at = (name: string) => header.indexOf(name);
+  const c = {
+    provider: at("provider_name"),
+    vehicle: at("vehicle_type"),
+    device: at("device_id"),
+    start: at("start_time"),
+    duration: at("trip_duration"),
+    distance: at("trip_distance"),
+  };
+  if (c.provider < 0 || c.start < 0) return [];
+
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    weekday: "short",
+    hourCycle: "h23",
+  });
+
+  const trips: Trip[] = [];
+  for (const row of rows) {
+    const provider = row[c.provider];
+    const start = new Date(row[c.start] ?? "");
+    if (!provider || Number.isNaN(start.getTime())) continue;
+    const p: Record<string, string> = {};
+    for (const { type, value } of parts.formatToParts(start)) p[type] = value;
+    trips.push({
+      provider,
+      vehicle: row[c.vehicle] ?? "",
+      device: row[c.device] ?? "",
+      day: `${p.year}-${p.month}-${p.day}`,
+      hour: Number(p.hour),
+      weekday: WEEKDAYS.indexOf(p.weekday ?? ""),
+      durationS: Number(row[c.duration]) || 0,
+      distanceM: Number(row[c.distance]) || 0,
+    });
+  }
+  return trips;
+}
+
+const inHours = (hour: number, [start, end]: [number, number]) =>
+  start <= end ? hour >= start && hour < end : hour >= start || hour < end;
+
+export function filterTrips(trips: Trip[], f: TripFilter): Trip[] {
+  return trips.filter(
+    (t) =>
+      t.day >= f.from &&
+      t.day <= f.to &&
+      (!f.vehicle || t.vehicle === f.vehicle) &&
+      (!f.hours || inHours(t.hour, f.hours)),
+  );
+}
+
+const DAY_MS = 86_400_000;
+const toMs = (day: string) => Date.parse(`${day}T00:00:00Z`);
+const toDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+/** Every day from `from` to `to`, inclusive. */
+export function daysBetween(from: string, to: string): string[] {
+  const out: string[] = [];
+  for (let ms = toMs(from); ms <= toMs(to); ms += DAY_MS) out.push(toDay(ms));
+  return out;
+}
+
+/** The same filter over the same number of days, ending the day before. */
+export function previousPeriod(f: TripFilter): TripFilter {
+  const length = daysBetween(f.from, f.to).length;
+  return {
+    ...f,
+    from: toDay(toMs(f.from) - length * DAY_MS),
+    to: toDay(toMs(f.from) - DAY_MS),
+  };
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const s = [...values].sort((a, b) => a - b);
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
+}
+
+export type TripSummary = {
+  trips: number;
+  vehicles: number;
+  medianDurationMin: number;
+  avgDistanceKm: number;
+  /** Over the days in the period, including days with no trips. */
+  tripsPerVehiclePerDay: number;
+};
+
+export function summarize(trips: Trip[], days: number): TripSummary {
+  const vehicles = new Set(trips.map((t) => t.device)).size;
+  const distance = trips.reduce((sum, t) => sum + t.distanceM, 0);
+  return {
+    trips: trips.length,
+    vehicles,
+    medianDurationMin: median(trips.map((t) => t.durationS)) / 60,
+    avgDistanceKm: trips.length ? distance / trips.length / 1000 : 0,
+    tripsPerVehiclePerDay: vehicles && days ? trips.length / vehicles / days : 0,
+  };
+}
+
+/**
+ * Relative change, or null when there is nothing to compare with. A period
+ * before the feed starts has zero trips, and "+∞%" is not a number anyone wants.
+ */
+export function change(current: number, previous: number): number | null {
+  if (!previous) return null;
+  return (current - previous) / previous;
+}
+
+/** One row per day, one count per provider: the shape a stacked bar chart takes. */
+export function tripsByDay(
+  trips: Trip[],
+  days: string[],
+  providers: string[],
+): Array<{ day: string; counts: number[] }> {
+  const index = new Map(days.map((d, i) => [d, i]));
+  const out = days.map((day) => ({ day, counts: providers.map(() => 0) }));
+  for (const t of trips) {
+    const d = index.get(t.day);
+    const p = providers.indexOf(t.provider);
+    if (d !== undefined && p >= 0) out[d]!.counts[p]!++;
+  }
+  return out;
+}
+
+export type ProviderRow = {
+  provider: string;
+  trips: number;
+  /** 0-1 of all trips in the period. */
+  share: number;
+  vehicles: number;
+  medianDurationMin: number;
+  avgDistanceKm: number;
+};
+
+/** In `providers` order, so the table and the chart legend agree. */
+export function byProvider(trips: Trip[], providers: string[]): ProviderRow[] {
+  return providers.map((provider) => {
+    const own = trips.filter((t) => t.provider === provider);
+    const s = summarize(own, 1);
+    return {
+      provider,
+      trips: own.length,
+      share: trips.length ? own.length / trips.length : 0,
+      vehicles: s.vehicles,
+      medianDurationMin: s.medianDurationMin,
+      avgDistanceKm: s.avgDistanceKm,
+    };
+  });
+}
+
+/** values[weekday][hour], scaled so the busiest cell is 1. */
+export function weekHourGrid(trips: Trip[]): number[][] {
+  const grid = WEEKDAYS.map(() => Array.from({ length: 24 }, () => 0));
+  for (const t of trips) if (t.weekday >= 0) grid[t.weekday]![t.hour]!++;
+  const max = Math.max(1, ...grid.flat());
+  return grid.map((row) => row.map((v) => v / max));
+}
+
+export const WEEKDAY_LABELS = WEEKDAYS;

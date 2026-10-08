@@ -47,5 +47,5 @@ export const BLOCKS: string[] = Object.values(Blocks).map((b) => b.name);
  * panels, a toolbar and an attribution badge, so they must not be pointed at
  * these -- each gets its own checks instead.
  */
-export const NON_MAP_BLOCKS: string[] = ["datahub-workspace"];
+export const NON_MAP_BLOCKS: string[] = ["datahub-workspace", "reports-workspace"];
 export const MAP_BLOCKS: string[] = BLOCKS.filter((b) => !NON_MAP_BLOCKS.includes(b));

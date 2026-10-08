@@ -199,6 +199,18 @@
       ]
     },
     {
+      "name": "trip-report",
+      "type": "registry:lib",
+      "title": "Trip Report",
+      "description": "Trip Report helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/trip-report.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
       "name": "utils",
       "type": "registry:lib",
       "title": "Utils",
@@ -381,6 +393,48 @@
       "files": [
         {
           "path": "registry/vianova/blocks/map-workspace.tsx",
+          "type": "registry:block"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "reports-workspace",
+      "type": "registry:block",
+      "title": "Reports Workspace",
+      "description": "Reports Workspace layout, composed from Vianova components.",
+      "dependencies": [
+        "lucide-react",
+        "recharts"
+      ],
+      "registryDependencies": [
+        "@vianova/activity-heatmap",
+        "@vianova/badge",
+        "@vianova/button",
+        "@vianova/category-style",
+        "@vianova/chart",
+        "@vianova/checkbox",
+        "@vianova/csv",
+        "@vianova/empty",
+        "@vianova/export-menu",
+        "@vianova/field",
+        "@vianova/input",
+        "@vianova/input-group",
+        "@vianova/label",
+        "@vianova/ranked-bars",
+        "@vianova/section-card",
+        "@vianova/select",
+        "@vianova/skeleton",
+        "@vianova/stat-tile",
+        "@vianova/table",
+        "@vianova/trip-report",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/blocks/reports-workspace.tsx",
           "type": "registry:block"
         }
       ],
