@@ -199,6 +199,18 @@
       ]
     },
     {
+      "name": "report-grid",
+      "type": "registry:lib",
+      "title": "Report Grid",
+      "description": "Report Grid helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/report-grid.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
       "name": "trip-report",
       "type": "registry:lib",
       "title": "Trip Report",
@@ -415,24 +427,30 @@
       ],
       "registryDependencies": [
         "@vianova/activity-heatmap",
-        "@vianova/badge",
+        "@vianova/alert",
+        "@vianova/avatar",
         "@vianova/button",
         "@vianova/category-style",
         "@vianova/chart",
         "@vianova/checkbox",
+        "@vianova/confirm-dialog",
         "@vianova/csv",
+        "@vianova/dialog",
+        "@vianova/dropdown-menu",
         "@vianova/empty",
         "@vianova/export-menu",
         "@vianova/field",
         "@vianova/input",
         "@vianova/input-group",
         "@vianova/label",
-        "@vianova/ranked-bars",
-        "@vianova/section-card",
+        "@vianova/markdown-editor",
+        "@vianova/popover",
+        "@vianova/report-grid",
         "@vianova/select",
         "@vianova/skeleton",
-        "@vianova/stat-tile",
         "@vianova/table",
+        "@vianova/textarea",
+        "@vianova/toggle-group",
         "@vianova/trip-report",
         "@vianova/utils"
       ],
@@ -2433,6 +2451,36 @@
       "files": [
         {
           "path": "registry/vianova/product/map-controls.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "markdown-editor",
+      "type": "registry:ui",
+      "title": "Markdown Editor",
+      "description": "Markdown Editor — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "@tiptap/markdown",
+        "@tiptap/react",
+        "@tiptap/starter-kit",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/button",
+        "@vianova/input",
+        "@vianova/native-select",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/markdown-editor.tsx",
           "type": "registry:ui"
         }
       ],

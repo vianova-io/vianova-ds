@@ -19,7 +19,13 @@ export type Trip = {
   weekday: number;
   durationS: number;
   distanceM: number;
+  /** Where the trip started, from the first vertex of `route`. NaN when absent. */
+  lon: number;
+  lat: number;
 };
+
+/** A circle on the map, which is all a sample feed's zones need to be. */
+export type Zone = { center: [lon: number, lat: number]; radiusM: number };
 
 export type TripFilter = {
   /** First local day, inclusive, YYYY-MM-DD. */
@@ -33,6 +39,10 @@ export type TripFilter = {
    * [22, 6] is 22:00 to 05:59.
    */
   hours?: [number, number];
+  /** Monday to Friday, or Saturday and Sunday. Every day when absent. */
+  days?: "work" | "weekend";
+  /** Only trips that started inside this zone. */
+  zone?: Zone;
 };
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -53,6 +63,7 @@ export function readTrips(
     start: at("start_time"),
     duration: at("trip_duration"),
     distance: at("trip_distance"),
+    route: at("route"),
   };
   if (c.provider < 0 || c.start < 0) return [];
 
@@ -82,10 +93,36 @@ export function readTrips(
       weekday: WEEKDAYS.indexOf(p.weekday ?? ""),
       durationS: Number(row[c.duration]) || 0,
       distanceM: Number(row[c.distance]) || 0,
+      ...firstVertex(row[c.route]),
     });
   }
   return trips;
 }
+
+/** The first vertex of a WKT LINESTRING: where the trip started. */
+const FIRST_VERTEX = /\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/;
+
+function firstVertex(wkt: string | undefined): { lon: number; lat: number } {
+  const m = FIRST_VERTEX.exec(wkt ?? "");
+  return m ? { lon: Number(m[1]), lat: Number(m[2]) } : { lon: NaN, lat: NaN };
+}
+
+/**
+ * Metres between two points, flat-earth. Inside a city the error is far below
+ * the size of any zone, and it is an order of magnitude cheaper than haversine.
+ */
+export function metresBetween(
+  [lon1, lat1]: [number, number],
+  [lon2, lat2]: [number, number],
+) {
+  const x =
+    (lon2 - lon1) * 111_320 * Math.cos((((lat1 + lat2) / 2) * Math.PI) / 180);
+  const y = (lat2 - lat1) * 110_540;
+  return Math.hypot(x, y);
+}
+
+export const inZone = (t: Pick<Trip, "lon" | "lat">, z: Zone) =>
+  !Number.isNaN(t.lon) && metresBetween([t.lon, t.lat], z.center) <= z.radiusM;
 
 const inHours = (hour: number, [start, end]: [number, number]) =>
   start <= end ? hour >= start && hour < end : hour >= start || hour < end;
@@ -96,7 +133,9 @@ export function filterTrips(trips: Trip[], f: TripFilter): Trip[] {
       t.day >= f.from &&
       t.day <= f.to &&
       (!f.vehicle || t.vehicle === f.vehicle) &&
-      (!f.hours || inHours(t.hour, f.hours)),
+      (!f.hours || inHours(t.hour, f.hours)) &&
+      (!f.days || (f.days === "work" ? t.weekday < 5 : t.weekday >= 5)) &&
+      (!f.zone || inZone(t, f.zone)),
   );
 }
 
@@ -145,7 +184,8 @@ export function summarize(trips: Trip[], days: number): TripSummary {
     vehicles,
     medianDurationMin: median(trips.map((t) => t.durationS)) / 60,
     avgDistanceKm: trips.length ? distance / trips.length / 1000 : 0,
-    tripsPerVehiclePerDay: vehicles && days ? trips.length / vehicles / days : 0,
+    tripsPerVehiclePerDay:
+      vehicles && days ? trips.length / vehicles / days : 0,
   };
 }
 
@@ -209,3 +249,49 @@ export function weekHourGrid(trips: Trip[]): number[][] {
 }
 
 export const WEEKDAY_LABELS = WEEKDAYS;
+
+export type Metric = "trips" | "vehicles" | "distance" | "duration";
+
+/** One number for a set of trips, in the unit a chart shows it in. */
+export function measure(trips: Trip[], metric: Metric): number {
+  switch (metric) {
+    case "trips":
+      return trips.length;
+    case "vehicles":
+      return new Set(trips.map((t) => t.device)).size;
+    case "distance":
+      return trips.length
+        ? trips.reduce((s, t) => s + t.distanceM, 0) / trips.length / 1000
+        : 0;
+    case "duration":
+      return median(trips.map((t) => t.durationS)) / 60;
+  }
+}
+
+/**
+ * A metric per day, split by provider or as one total.
+ *
+ * Averages are taken within each day and group, never summed from the groups:
+ * the median of a day is not the sum of its operators' medians.
+ */
+export function dailySeries(
+  trips: Trip[],
+  days: string[],
+  metric: Metric,
+  providers: string[] | null,
+): Array<{ day: string; values: number[] }> {
+  const byDay = new Map<string, Trip[]>(days.map((d) => [d, []]));
+  for (const t of trips) byDay.get(t.day)?.push(t);
+  return days.map((day) => {
+    const own = byDay.get(day)!;
+    const values = providers
+      ? providers.map((p) =>
+          measure(
+            own.filter((t) => t.provider === p),
+            metric,
+          ),
+        )
+      : [measure(own, metric)];
+    return { day, values };
+  });
+}
