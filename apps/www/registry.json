@@ -423,6 +423,7 @@
       "description": "Reports Workspace layout, composed from Vianova components.",
       "dependencies": [
         "lucide-react",
+        "react-grid-layout",
         "recharts"
       ],
       "registryDependencies": [

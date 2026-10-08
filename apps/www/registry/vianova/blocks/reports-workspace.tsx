@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import {
   Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -50,6 +51,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  GridLayout,
+  getCompactor,
+  useContainerWidth,
+  type Layout,
+} from "react-grid-layout";
 
 import {
   Alert,
@@ -157,6 +164,7 @@ import {
   GRID_COLUMNS,
   firstFit,
   moveTo,
+  overlaps as overlapsRect,
   pack,
   readingOrder,
   resizeTo,
@@ -1009,6 +1017,133 @@ function seriesRows(w: SeriesWidget, data: ReportData) {
   return { rows, names, shareable, compared: !!prev };
 }
 
+/** An element's size, for charts that change what they show as their card shrinks. */
+function useSize<T extends HTMLElement>() {
+  const ref = React.useRef<T>(null);
+  const [size, setSize] = React.useState({ width: 0, height: 0 });
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) =>
+      setSize({ width: e!.contentRect.width, height: e!.contentRect.height }),
+    );
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, size] as const;
+}
+
+type SeriesKey = { key: string; label: string; color?: string };
+
+/**
+ * A legend that is also a control: click a series to hide it, point at one to
+ * bring it forward. Hiding the last visible series is refused, so a chart is
+ * never left empty by accident.
+ */
+function SeriesLegend({
+  items,
+  hidden,
+  onToggle,
+  onHover,
+}: {
+  items: SeriesKey[];
+  hidden: Set<string>;
+  onToggle: (key: string) => void;
+  onHover: (key: string | null) => void;
+}) {
+  return (
+    <ul className="draggable-cancel flex shrink-0 flex-wrap justify-center gap-x-1 gap-y-0.5 pt-1.5 text-xs">
+      {items.map((s) => {
+        const shown = !hidden.has(s.key);
+        return (
+          <li key={s.key}>
+            <button
+              type="button"
+              aria-pressed={shown}
+              title={shown ? `Hide ${s.label}` : `Show ${s.label}`}
+              onClick={() => onToggle(s.key)}
+              onMouseEnter={() => onHover(s.key)}
+              onMouseLeave={() => onHover(null)}
+              onFocus={() => onHover(s.key)}
+              onBlur={() => onHover(null)}
+              className={cn(
+                "focus-visible:ring-ring inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 transition-colors focus-visible:ring-2 focus-visible:outline-none",
+                shown
+                  ? "text-foreground/80 hover:bg-muted"
+                  : "text-muted-foreground hover:bg-muted line-through opacity-60",
+              )}
+            >
+              <span
+                aria-hidden
+                className="size-2.5 shrink-0 rounded-[3px]"
+                style={{ background: s.color }}
+              />
+              {s.label}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+type TooltipRow = {
+  key: string;
+  label: string;
+  color?: string;
+  text: string;
+  value: number;
+};
+
+/**
+ * The product's tooltip: the full date, then each series largest first, with
+ * a total when the series add up to something.
+ */
+function SeriesTooltip({
+  day,
+  rows,
+  total,
+  previous,
+}: {
+  day: string;
+  rows: TooltipRow[];
+  total?: string;
+  previous?: string;
+}) {
+  return (
+    <div className="bg-popover text-popover-foreground min-w-44 rounded-lg px-2.5 py-2 text-xs shadow-lg ring-1 ring-foreground/10">
+      <p className="mb-1.5 font-medium">{longDay(day)}</p>
+      <ul className="space-y-1">
+        {rows.map((r) => (
+          <li key={r.key} className="flex items-center justify-between gap-4">
+            <span className="text-muted-foreground flex min-w-0 items-center gap-1.5">
+              <span
+                aria-hidden
+                className="size-2.5 shrink-0 rounded-[3px]"
+                style={{ background: r.color }}
+              />
+              <span className="truncate">{r.label}</span>
+            </span>
+            <span className="font-mono font-medium tabular-nums">{r.text}</span>
+          </li>
+        ))}
+      </ul>
+      {total ? (
+        <p className="mt-1.5 flex justify-between gap-4 border-t pt-1.5">
+          <span className="text-muted-foreground">Total</span>
+          <span className="font-mono font-medium tabular-nums">{total}</span>
+        </p>
+      ) : null}
+      {previous ? (
+        <p className="text-muted-foreground mt-1 flex justify-between gap-4">
+          <span>Previous period</span>
+          <span className="font-mono tabular-nums">{previous}</span>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function SeriesBody({
   widget: w,
   data,
@@ -1024,19 +1159,30 @@ function SeriesBody({
   );
   const percent = w.display === "percent" && shareable;
   const both = w.display === "both" && shareable;
+  const [hidden, setHidden] = React.useState<Set<string>>(() => new Set());
+  const [focus, setFocus] = React.useState<string | null>(null);
+  const [boxRef, box] = useSize<HTMLDivElement>();
+  const gradient = `area-${React.useId().replace(/[^a-zA-Z0-9]/g, "")}`;
 
-  const config = React.useMemo(() => {
-    const c: ChartConfig = {};
-    names.forEach((n, i) => {
-      c[`s${i}`] = {
+  const series: SeriesKey[] = React.useMemo(
+    () =>
+      names.map((n, i) => ({
+        key: `s${i}`,
         label: n,
-        color: w.byOperator ? data.styles[n]?.color : "var(--chart-1)",
-      };
-    });
+        color: w.byOperator
+          ? (data.styles[n]?.color ?? "var(--chart-1)")
+          : "var(--chart-1)",
+      })),
+    [names, w.byOperator, data.styles],
+  );
+  const config = React.useMemo(() => {
+    const c: ChartConfig = Object.fromEntries(
+      series.map((s) => [s.key, { label: s.label, color: s.color }]),
+    );
     if (compared)
       c.prev = { label: "Previous period", color: "var(--muted-foreground)" };
     return c;
-  }, [names, w.byOperator, data.styles, compared]);
+  }, [series, compared]);
 
   const valueText = (row: Record<string, unknown>, k: number) => {
     if (percent) return formatPercent(Number(row[`p${k}`]));
@@ -1062,39 +1208,80 @@ function SeriesBody({
     return <WidgetTable columns={columns} rows={rows} />;
   }
 
+  // What the card has room for. A small card drops the legend and the y axis
+  // before it squeezes the plot into a sliver.
+  const multi = series.length > 1;
+  const narrow = !preview && box.width > 0 && box.width < 360;
+  const short = !preview && box.height > 0 && box.height < 150;
+  const showLegend = multi && !preview && !short;
+  const showY = !short;
+  const visible = series.filter((s) => !hidden.has(s.key));
+  const topKey = visible[visible.length - 1]?.key;
+  const plotWidth = Math.max(0, box.width - 48);
+  const labelsFit =
+    !preview && !percent && rows.length > 0 && plotWidth / rows.length >= 26;
+  const yMax = Math.max(
+    0,
+    ...rows.map((r) => visible.reduce((s, v) => s + Number(r[v.key] ?? 0), 0)),
+  );
+  const yWidth = percent
+    ? 44
+    : Math.max(28, compact.format(yMax).length * 7 + 12);
+  const dim = (key: string) => (focus && focus !== key ? 0.2 : 1);
+
+  const toggle = (key: string) =>
+    setHidden((h) => {
+      const next = new Set(h);
+      if (next.has(key)) next.delete(key);
+      else if (series.length - next.size > 1) next.add(key);
+      return next;
+    });
+
   const tooltip = (
     <ChartTooltip
-      content={
-        <ChartTooltipContent
-          labelFormatter={(_, payload) => {
-            const day = payload?.[0]?.payload?.day;
-            return typeof day === "string" ? longDay(day) : null;
-          }}
-          formatter={(value, name, item) => {
-            const key = String(name);
-            const row = item.payload as Record<string, unknown>;
-            const text =
-              key === "prev"
-                ? formatMetric(Number(value), w.metric)
-                : valueText(row, Number(key.slice(1)));
-            return (
-              <div className="flex w-full items-center justify-between gap-4">
-                <span className="text-muted-foreground flex items-center gap-1.5">
-                  <span
-                    aria-hidden
-                    className="size-2.5 shrink-0 rounded-[2px]"
-                    style={{ background: item.color }}
-                  />
-                  {config[key]?.label}
-                </span>
-                <span className="text-foreground font-mono font-medium tabular-nums">
-                  {text}
-                </span>
-              </div>
-            );
-          }}
-        />
+      cursor={
+        w.style === "bar"
+          ? { fill: "var(--muted)", opacity: 0.6 }
+          : {
+              stroke: "var(--muted-foreground)",
+              strokeDasharray: "4 4",
+              strokeOpacity: 0.6,
+            }
       }
+      content={(props) => {
+        const row = props.payload?.[0]?.payload as
+          Record<string, unknown> | undefined;
+        if (!props.active || !row) return null;
+        const items: TooltipRow[] = visible
+          .map((s) => {
+            const k = Number(s.key.slice(1));
+            return {
+              key: s.key,
+              label: s.label,
+              color: s.color,
+              value: Number(row[`v${k}`] ?? 0),
+              text: valueText(row, k),
+            };
+          })
+          .sort((a, b) => b.value - a.value);
+        const sum = items.reduce((s, r) => s + r.value, 0);
+        return (
+          <SeriesTooltip
+            day={String(row.day)}
+            rows={items}
+            total={
+              multi && shareable && !percent
+                ? formatMetric(sum, w.metric)
+                : undefined
+            }
+            previous={
+              compared && row.prev != null
+                ? formatMetric(Number(row.prev), w.metric)
+                : undefined
+            }
+          />
+        );
+      }}
     />
   );
 
@@ -1104,18 +1291,19 @@ function SeriesBody({
       tickLine={false}
       axisLine={false}
       tickMargin={8}
-      minTickGap={preview ? 40 : 56}
+      minTickGap={preview || narrow ? 32 : 56}
       interval="preserveStartEnd"
       tickFormatter={(d: string) =>
-        w.style === "bar" ? shortDay(d) : axisDay(d)
+        w.style === "bar" || narrow || preview ? shortDay(d) : axisDay(d)
       }
     />
   );
-  const yAxis = (
+  const yAxis = showY ? (
     <YAxis
       tickLine={false}
       axisLine={false}
-      width={percent ? 48 : 40}
+      width={yWidth}
+      tickCount={short || preview ? 3 : 5}
       // A fleet barely moves day to day; from zero its line would be flat.
       domain={
         percent
@@ -1126,86 +1314,110 @@ function SeriesBody({
       }
       tickFormatter={(v: number) => (percent ? `${v}%` : compact.format(v))}
     />
+  ) : (
+    <YAxis
+      hide
+      domain={
+        percent
+          ? [0, 100]
+          : w.metric === "vehicles"
+            ? ["auto", "auto"]
+            : [0, "auto"]
+      }
+    />
   );
-  const legend =
-    names.length > 1 && !preview ? (
-      <ChartLegend content={<ChartLegendContent className="flex-wrap" />} />
-    ) : null;
-  // On the canvas a chart fills the cells it was given; aspect-auto undoes
-  // the container's default 16:9, which would ignore them.
-  const height = preview ? "h-36" : "h-full min-h-28 aspect-auto";
+  const grid = <CartesianGrid vertical={false} strokeDasharray="3 3" />;
+  const legend = showLegend ? (
+    <SeriesLegend
+      items={series}
+      hidden={hidden}
+      onToggle={toggle}
+      onHover={setFocus}
+    />
+  ) : null;
 
-  if (w.style === "bar") {
-    return (
-      <ChartContainer config={config} className={cn(height, "w-full")}>
-        <BarChart data={rows} margin={{ top: 18, right: 4, left: 0 }}>
-          <CartesianGrid vertical={false} />
-          {xAxis}
-          {yAxis}
-          {tooltip}
-          {legend}
-          {names.map((_, i) => (
-            <Bar
-              key={i}
-              dataKey={`s${i}`}
-              stackId="a"
-              fill={`var(--color-s${i})`}
-              radius={i === names.length - 1 ? [3, 3, 0, 0] : 0}
-              isAnimationActive={!preview}
-            >
-              {/* The day's total above its stack, as the product shows it, when
-                  the bars are wide enough to carry a label. */}
-              {i === names.length - 1 &&
-              !percent &&
-              !preview &&
-              rows.length <= 35 ? (
-                <LabelList
-                  dataKey="total"
-                  position="top"
-                  className="fill-foreground"
-                  fontSize={10}
-                  formatter={(v: unknown) => compact.format(Number(v))}
-                />
-              ) : null}
-            </Bar>
-          ))}
-        </BarChart>
-      </ChartContainer>
-    );
-  }
-
-  // One series reads as an area; several as plain lines, which stay legible
-  // where they cross.
-  return (
-    <ChartContainer config={config} className={cn(height, "w-full")}>
-      <ComposedChart data={rows} margin={{ top: 8, right: 4, left: 0 }}>
-        <CartesianGrid />
+  const chart =
+    w.style === "bar" ? (
+      <BarChart
+        data={rows}
+        margin={{ top: labelsFit ? 18 : 6, right: 4, left: 0, bottom: 0 }}
+        barCategoryGap="18%"
+      >
+        {grid}
         {xAxis}
         {yAxis}
         {tooltip}
-        {legend}
-        {names.length === 1 ? (
+        {series.map((s) => (
+          <Bar
+            key={s.key}
+            dataKey={s.key}
+            stackId="a"
+            hide={hidden.has(s.key)}
+            fill={`var(--color-${s.key})`}
+            fillOpacity={dim(s.key)}
+            maxBarSize={36}
+            // Only the stack's top is rounded, whichever series is on top now.
+            radius={s.key === topKey ? [4, 4, 0, 0] : 0}
+            isAnimationActive={!preview}
+          >
+            {s.key === topKey && labelsFit ? (
+              <LabelList
+                dataKey={(r: Record<string, number>) =>
+                  visible.reduce((t, v) => t + Number(r[v.key] ?? 0), 0)
+                }
+                position="top"
+                className="fill-muted-foreground"
+                fontSize={10}
+                formatter={(v: unknown) => compact.format(Number(v))}
+              />
+            ) : null}
+          </Bar>
+        ))}
+      </BarChart>
+    ) : (
+      <ComposedChart
+        data={rows}
+        margin={{ top: 8, right: 6, left: 0, bottom: 0 }}
+      >
+        <defs>
+          <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--color-s0)" stopOpacity={0.32} />
+            <stop
+              offset="100%"
+              stopColor="var(--color-s0)"
+              stopOpacity={0.02}
+            />
+          </linearGradient>
+        </defs>
+        {grid}
+        {xAxis}
+        {yAxis}
+        {tooltip}
+        {multi ? (
+          series.map((s) => (
+            <Line
+              key={s.key}
+              dataKey={s.key}
+              type="monotone"
+              hide={hidden.has(s.key)}
+              stroke={`var(--color-${s.key})`}
+              strokeWidth={focus === s.key ? 2.75 : 2}
+              strokeOpacity={dim(s.key)}
+              dot={false}
+              activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--card)" }}
+              isAnimationActive={!preview}
+            />
+          ))
+        ) : (
           <Area
             dataKey="s0"
             type="monotone"
             stroke="var(--color-s0)"
             strokeWidth={2}
-            fill="var(--color-s0)"
-            fillOpacity={0.12}
+            fill={`url(#${gradient})`}
+            activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--card)" }}
             isAnimationActive={!preview}
           />
-        ) : (
-          names.map((_, i) => (
-            <Line
-              key={i}
-              dataKey={`s${i}`}
-              type="monotone"
-              stroke={`var(--color-s${i})`}
-              strokeWidth={2}
-              dot={false}
-              isAnimationActive={!preview}
-            />
-          ))
         )}
         {compared ? (
           <Line
@@ -1215,11 +1427,29 @@ function SeriesBody({
             strokeWidth={1.5}
             strokeDasharray="4 4"
             dot={false}
+            activeDot={false}
             connectNulls
           />
         ) : null}
       </ComposedChart>
-    </ChartContainer>
+    );
+
+  return (
+    <div
+      ref={boxRef}
+      className={cn(
+        "flex min-h-0 w-full flex-col",
+        preview ? "h-36" : "h-full min-h-28",
+      )}
+    >
+      <ChartContainer
+        config={config}
+        className="aspect-auto min-h-0 w-full flex-1"
+      >
+        {chart}
+      </ChartContainer>
+      {legend}
+    </div>
   );
 }
 
@@ -1264,9 +1494,11 @@ const SUMMARY_COLUMNS: Column[] = [
 function KpiBody({
   widget,
   data,
+  preview,
 }: {
   widget: Extract<WidgetSpec, { kind: "kpi" }>;
   data: ReportData;
+  preview?: boolean;
 }) {
   const now = measure(data.trips, widget.metric);
   const before = data.previous?.trips.length
@@ -1279,8 +1511,17 @@ function KpiBody({
       : delta > 0
         ? ArrowUp
         : ArrowDown;
+  const trend = React.useMemo(
+    () =>
+      dailySeries(data.trips, data.days, widget.metric, null).map((d) => ({
+        day: d.day,
+        v: d.values[0] ?? 0,
+      })),
+    [data, widget.metric],
+  );
+  const gradient = `kpi-${React.useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   return (
-    <div className="flex min-h-32 flex-col items-center justify-center gap-1 text-center">
+    <div className="flex h-full min-h-28 flex-col items-center justify-center gap-1 text-center">
       <p className="text-primary text-4xl font-semibold tracking-tight tabular-nums">
         {widget.metric === "trips" || widget.metric === "vehicles"
           ? compact.format(now)
@@ -1290,15 +1531,72 @@ function KpiBody({
         {METRICS[widget.metric].label}
       </p>
       {delta !== null ? (
-        <p className="text-muted-foreground inline-flex items-center gap-1 text-xs tabular-nums">
+        <p
+          className={cn(
+            "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums",
+            // A rise in trips or fleet reads as good; distance and duration are
+            // neither, so they stay neutral.
+            widget.metric === "trips" || widget.metric === "vehicles"
+              ? delta > 0
+                ? "bg-success/10 text-success"
+                : "bg-destructive/10 text-destructive"
+              : "bg-muted text-muted-foreground",
+          )}
+        >
           {Arrow ? <Arrow className="size-3" aria-hidden /> : null}
           {delta > 0 ? "+" : ""}
-          {(delta * 100).toFixed(1)}% vs previous period
+          {(delta * 100).toFixed(1)}% vs previous
         </p>
       ) : data.previous ? (
         <p className="text-muted-foreground text-xs">
           No earlier trips to compare with
         </p>
+      ) : null}
+      {/* The period's shape under the number: is it steady, or did one day make it? */}
+      {!preview && trend.length > 1 ? (
+        <div aria-hidden inert className="mt-1 h-10 w-full max-w-64">
+          <ChartContainer
+            config={{
+              v: {
+                label: METRICS[widget.metric].label,
+                color: "var(--chart-1)",
+              },
+            }}
+            className="aspect-auto size-full"
+          >
+            <AreaChart
+              // Decoration: no keyboard stop or announcement of its own.
+              accessibilityLayer={false}
+              data={trend}
+              margin={{ top: 2, right: 0, left: 0, bottom: 0 }}
+            >
+              <defs>
+                <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
+                  <stop
+                    offset="0%"
+                    stopColor="var(--color-v)"
+                    stopOpacity={0.3}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor="var(--color-v)"
+                    stopOpacity={0}
+                  />
+                </linearGradient>
+              </defs>
+              {/* Scaled to its own range: from zero, a steady month draws flat. */}
+              <YAxis hide domain={["dataMin", "dataMax"]} />
+              <Area
+                dataKey="v"
+                type="monotone"
+                stroke="var(--color-v)"
+                strokeWidth={1.5}
+                fill={`url(#${gradient})`}
+                isAnimationActive={false}
+              />
+            </AreaChart>
+          </ChartContainer>
+        </div>
       ) : null}
     </div>
   );
@@ -1314,16 +1612,31 @@ function BarlistBody({ data }: { data: ReportData }) {
       {rows.map((r) => (
         <li key={r.provider} className="space-y-1">
           <div className="flex items-baseline justify-between gap-2 text-xs">
-            <span className="truncate">{r.provider}</span>
-            <span className="tabular-nums">{r.trips.toLocaleString("en")}</span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span
+                aria-hidden
+                className="size-2 shrink-0 rounded-full"
+                style={{ background: data.styles[r.provider]?.color }}
+              />
+              <span className="truncate">{r.provider}</span>
+            </span>
+            <span className="tabular-nums">
+              {r.trips.toLocaleString("en")}
+              <span className="text-muted-foreground ml-1.5">
+                {formatPercent(r.share * 100)}
+              </span>
+            </span>
           </div>
           <div
             className="bg-muted h-1.5 overflow-hidden rounded-full"
             aria-hidden
           >
             <div
-              className="bg-primary h-full rounded-full"
-              style={{ width: `${(r.trips / max) * 100}%` }}
+              className="h-full rounded-full transition-[width] duration-500"
+              style={{
+                width: `${(r.trips / max) * 100}%`,
+                background: data.styles[r.provider]?.color ?? "var(--primary)",
+              }}
             />
           </div>
         </li>
@@ -1359,44 +1672,71 @@ function DonutBody({ data, preview }: { data: ReportData; preview?: boolean }) {
       { label: r.vehicle, color: DONUT_COLORS[i % DONUT_COLORS.length] },
     ]),
   );
-  const total = rows.reduce((s, r) => s + r.trips, 0) || 1;
+  const total = rows.reduce((s, r) => s + r.trips, 0);
   return (
-    <ChartContainer
-      config={config}
-      className={cn(preview ? "h-36" : "h-full min-h-28 aspect-auto", "w-full")}
+    <div
+      className={cn(
+        "flex min-h-0 w-full flex-col",
+        preview ? "h-36" : "h-full min-h-28",
+      )}
     >
-      <PieChart>
-        <ChartTooltip
-          content={<ChartTooltipContent nameKey="key" hideLabel />}
-        />
-        <Pie
-          data={rows}
-          dataKey="trips"
-          nameKey="key"
-          innerRadius="55%"
-          outerRadius="80%"
-          strokeWidth={2}
-          stroke="var(--card)"
-          isAnimationActive={!preview}
+      <div className="relative min-h-0 w-full flex-1">
+        {/* The whole in the middle; the parts are in the legend below. Drawn
+            over the chart rather than in it, so it stays centred in the ring
+            whatever size the card is. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
         >
+          <span className="text-lg leading-none font-semibold tabular-nums">
+            {compact.format(total)}
+          </span>
+          <span className="text-muted-foreground mt-1 text-[10px]">trips</span>
+        </div>
+        <ChartContainer config={config} className="aspect-auto size-full">
+          <PieChart>
+            <ChartTooltip
+              content={<ChartTooltipContent nameKey="key" hideLabel />}
+            />
+            <Pie
+              data={rows}
+              dataKey="trips"
+              nameKey="key"
+              innerRadius="62%"
+              outerRadius="88%"
+              paddingAngle={2}
+              cornerRadius={4}
+              strokeWidth={0}
+              isAnimationActive={!preview}
+            >
+              {rows.map((r) => (
+                <Cell key={r.key} fill={`var(--color-${r.key})`} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ChartContainer>
+      </div>
+      {!preview ? (
+        <ul className="flex shrink-0 flex-wrap justify-center gap-x-4 gap-y-1 pt-1.5 text-xs">
           {rows.map((r) => (
-            <Cell key={r.key} fill={`var(--color-${r.key})`} />
+            <li
+              key={r.key}
+              className="text-muted-foreground flex items-center gap-1.5"
+            >
+              <span
+                aria-hidden
+                className="size-2.5 rounded-[3px]"
+                style={{ background: config[r.key]?.color }}
+              />
+              {r.vehicle}
+              <span className="text-foreground font-medium tabular-nums">
+                {total ? Math.round((r.trips / total) * 100) : 0}%
+              </span>
+            </li>
           ))}
-          <LabelList
-            dataKey="trips"
-            position="outside"
-            className="fill-muted-foreground"
-            fontSize={10}
-            formatter={(v: unknown) =>
-              `${Math.round((Number(v) / total) * 100)}%`
-            }
-          />
-        </Pie>
-        {!preview ? (
-          <ChartLegend content={<ChartLegendContent nameKey="key" />} />
-        ) : null}
-      </PieChart>
-    </ChartContainer>
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
@@ -1465,7 +1805,7 @@ function WidgetBody({
         />
       );
     case "kpi":
-      return <KpiBody widget={widget} data={data} />;
+      return <KpiBody widget={widget} data={data} preview={preview} />;
     case "barlist":
       return <BarlistBody data={data} />;
     case "donut":
@@ -1968,12 +2308,19 @@ function TextWidget({
 /* Canvas                                                                      */
 /* -------------------------------------------------------------------------- */
 
-/** Cell height and gutter, in pixels: the pointer maths needs real numbers. */
-const ROW_PX = 128;
+/** The product's grid: 132px rows and 16px gutters, so a 4 by 2 chart is 280px tall. */
+const ROW_PX = 132;
 const GAP_PX = 16;
 /** Below this the grid would make cells too small to use, so it stacks. */
 const STACK_BELOW_PX = 560;
-const PICKER_CELLS = { w: 4, h: 3 };
+/** What a chart asks for when it is added from a cell, as in the product. */
+const DEFAULT_CHART = { w: 4, h: 2 };
+
+/**
+ * Free placement, as in the product: no gravity pulling widgets to the top,
+ * and a widget dragged onto another pushes it out of the way.
+ */
+const FREE_LAYOUT = getCompactor(null, false, false);
 
 const cellSpan = (r: Rect) => ({
   gridColumn: `${r.x + 1} / span ${r.w}`,
@@ -1982,129 +2329,132 @@ const cellSpan = (r: Rect) => ({
 
 type Placement = { spec: WidgetSpec; cells: { w: number; h: number } };
 
+const sameRect = (a: Rect, b: Rect) =>
+  a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+
+/** The rectangle between two cells, whichever way the pointer went. */
+const spanning = (
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): Rect => ({
+  x: Math.min(a.x, b.x),
+  y: Math.min(a.y, b.y),
+  w: Math.abs(a.x - b.x) + 1,
+  h: Math.abs(a.y - b.y) + 1,
+});
+
+const PICKER_TYPES: Array<"all" | Exclude<ChartType, "text">> = [
+  "all",
+  ...CHART_TYPES,
+];
+
 /**
- * Chart, then a chart of that type from the library, inside the cell that was
- * chosen. Two short steps instead of a dialog, so the choice is made where the
- * chart will go.
+ * The chart library, in one step: type chips over a list of previews. One
+ * click places a chart, and pointing at one moves the landing outline to the
+ * cells that chart would take, so the choice is made seeing where it goes.
  */
-function CellPicker({
+function ChartPicker({
   data,
+  onPreview,
   onPick,
-  onClose,
 }: {
   data: ReportData;
-  onPick: (t: Placement) => void;
-  onClose: () => void;
+  onPreview: (t: Template | null) => void;
+  onPick: (t: Template) => void;
 }) {
-  const [type, setType] = React.useState<Exclude<ChartType, "text"> | null>(
-    null,
+  const [type, setType] = React.useState<(typeof PICKER_TYPES)[number]>("all");
+  const hoveredRef = React.useRef<string | null>(null);
+  const items = LIBRARY.filter(
+    (t) => type === "all" || typeOf(t.spec) === type,
   );
-  const ref = React.useRef<HTMLDivElement>(null);
-
-  // Focus the first choice of each step, so the keyboard never lands on <body>.
-  React.useEffect(() => {
-    ref.current?.querySelector<HTMLElement>("[data-pick]")?.focus();
-  }, [type]);
-
-  // Closes on a press anywhere outside, as a popover would.
-  React.useEffect(() => {
-    const down = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener("pointerdown", down);
-    return () => document.removeEventListener("pointerdown", down);
-  }, [onClose]);
-
-  const items = type ? LIBRARY.filter((t) => typeOf(t.spec) === type) : [];
-
   return (
-    <div
-      ref={ref}
-      role="dialog"
-      aria-label={
-        type ? `Choose a ${TYPE_LABELS[type]} chart` : "Choose a chart type"
-      }
-      data-slot="cell-picker"
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.stopPropagation();
-          if (type) setType(null);
-          else onClose();
-        }
-      }}
-      className="bg-popover text-popover-foreground flex h-full min-h-0 flex-col gap-2 overflow-hidden rounded-xl p-2 shadow-lg ring-1 ring-foreground/10"
-    >
-      <div className="flex shrink-0 items-center gap-1">
-        {type ? (
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label="Back to chart types"
-            onClick={() => setType(null)}
-          >
-            <ChevronLeft />
-          </Button>
-        ) : null}
-        <p className="flex-1 truncate px-1 text-sm font-medium">
-          {type ? `${TYPE_LABELS[type]} charts` : "Choose a chart type"}
-        </p>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label="Close"
-          onClick={onClose}
-        >
-          <X />
-        </Button>
+    <div className="flex max-h-[min(30rem,70svh)] flex-col gap-2">
+      <div
+        role="radiogroup"
+        aria-label="Chart type"
+        className="flex shrink-0 flex-wrap gap-1"
+      >
+        {PICKER_TYPES.map((t) => {
+          const Icon = t === "all" ? null : TYPE_ICON[t];
+          const n =
+            t === "all"
+              ? LIBRARY.length
+              : LIBRARY.filter((l) => typeOf(l.spec) === t).length;
+          return (
+            <button
+              key={t}
+              type="button"
+              role="radio"
+              aria-checked={type === t}
+              disabled={n === 0}
+              onClick={() => setType(t)}
+              className="aria-checked:bg-primary aria-checked:text-primary-foreground aria-checked:border-primary hover:bg-muted focus-visible:ring-ring inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-40"
+            >
+              {Icon ? <Icon className="size-3.5" aria-hidden /> : null}
+              {t === "all" ? "All" : TYPE_LABELS[t]}
+              <span
+                // Faded only when unselected: on the teal chip it would drop
+                // below 4.5:1.
+                className={cn("tabular-nums", type !== t && "opacity-60")}
+              >
+                {n}
+              </span>
+            </button>
+          );
+        })}
       </div>
-      {type === null ? (
-        <ul className="grid min-h-0 grid-cols-2 gap-1 overflow-auto">
-          {CHART_TYPES.map((t) => {
-            const Icon = TYPE_ICON[t];
-            const n = LIBRARY.filter((l) => typeOf(l.spec) === t).length;
-            return (
-              <li key={t}>
-                <button
-                  type="button"
-                  data-pick
-                  disabled={n === 0}
-                  onClick={() => setType(t)}
-                  className="hover:bg-muted focus-visible:ring-ring flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
-                >
-                  <Icon
-                    className="text-muted-foreground size-4 shrink-0"
-                    aria-hidden
-                  />
-                  <span className="flex-1 truncate">{TYPE_LABELS[t]}</span>
-                  <span className="text-muted-foreground text-xs tabular-nums">
-                    {n}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <ul className="min-h-0 space-y-1 overflow-auto">
-          {items.map((t) => (
-            <li key={t.id}>
+      <ul
+        className="-mx-1 grid min-h-0 grid-cols-2 gap-2 overflow-auto px-1 pb-1"
+        onPointerLeave={() => {
+          hoveredRef.current = null;
+          onPreview(null);
+        }}
+      >
+        {items.map((t) => {
+          const Icon = TYPE_ICON[typeOf(t.spec)];
+          return (
+            <li key={t.id} className="min-w-0">
               <button
                 type="button"
                 data-pick
+                // Pointer move rather than enter: the preview inside the card is
+                // what the pointer lands on, and an enter is not reliably seen
+                // through it. The id check keeps it from re-rendering per pixel.
+                onPointerMove={() => {
+                  if (hoveredRef.current === t.id) return;
+                  hoveredRef.current = t.id;
+                  onPreview(t);
+                }}
+                onFocus={() => {
+                  hoveredRef.current = t.id;
+                  onPreview(t);
+                }}
                 onClick={() => onPick(t)}
-                className="hover:bg-muted focus-visible:ring-ring flex w-full flex-col gap-1 rounded-md border p-2 text-left focus-visible:ring-2 focus-visible:outline-none"
+                className="hover:border-primary/60 focus-visible:ring-ring bg-card flex w-full flex-col gap-1.5 rounded-lg border p-2 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
               >
-                <span className="truncate text-sm font-medium">
-                  {nameOf(t.spec)}
+                <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
+                  <Icon
+                    className="text-muted-foreground size-3.5 shrink-0"
+                    aria-hidden
+                  />
+                  <span className="truncate">{nameOf(t.spec)}</span>
                 </span>
-                <span inert className="pointer-events-none block">
-                  <WidgetBody widget={t.spec} data={data} preview />
+                <span
+                  inert
+                  className="pointer-events-none block h-24 overflow-hidden"
+                >
+                  <span className="block origin-top-left scale-[0.66] [width:151%]">
+                    <WidgetBody widget={t.spec} data={data} preview />
+                  </span>
+                </span>
+                <span className="text-muted-foreground text-[10px] tabular-nums">
+                  {t.cells.w} × {t.cells.h} cells
                 </span>
               </button>
             </li>
-          ))}
-        </ul>
-      )}
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -2129,22 +2479,20 @@ function nextFree(
   }
 }
 
-type Drag = {
-  id: string;
-  mode: "move" | "resize";
-  pointer: { x: number; y: number };
-  origin: Rect;
-  /** Where the pointer is asking for, drawn even when it does not fit. */
-  attempt: Rect;
-  /** The same, when it fits; null when it would cover another widget. */
-  target: Rect | null;
-};
+/**
+ * Where a new widget will land: the cells it was drawn over, or the room at the
+ * chosen cell for its own size. `drawn` keeps a drawn size over a chart's own.
+ */
+type Target = { rect: Rect; drawn: boolean; mode: "choose" | "chart" };
 
 /**
  * The report as the product lays it out: a 12-column grid of cells, at least
- * six rows deep. An empty cell offers a chart or a text when pointed at or
- * focused; a widget is moved by its grip and resized by its corner, by pointer
- * or arrow keys, and never onto another.
+ * six rows deep, with widgets placed by react-grid-layout as in the product.
+ *
+ * An empty cell under the pointer shows where a chart would land and offers a
+ * chart or a text; dragging across empty cells draws a slot of any size first.
+ * A widget is moved by its grip and resized by its corner -- or, from the
+ * keyboard, by the grip with the arrow keys (Shift to resize).
  *
  * Narrower than a usable grid, it stacks the widgets in reading order and
  * offers the same two choices at the end.
@@ -2163,50 +2511,70 @@ function ReportCanvas({
   onChange: (widgets: Widget[]) => void;
   onPlacedText: (id: string) => void;
 }) {
-  const wrapRef = React.useRef<HTMLDivElement>(null);
+  const { width, containerRef, mounted } = useContainerWidth({
+    measureBeforeMount: true,
+  });
   const gridRef = React.useRef<HTMLDivElement>(null);
-  const [width, setWidth] = React.useState(0);
+  const anchorRef = React.useRef<HTMLDivElement>(null);
   const [active, setActive] = React.useState<{ x: number; y: number } | null>(
     null,
   );
-  const [picking, setPicking] = React.useState<{ x: number; y: number } | null>(
+  const [hover, setHover] = React.useState<{ x: number; y: number } | null>(
     null,
   );
-  const [drag, setDrag] = React.useState<Drag | null>(null);
+  const [hoverKind, setHoverKind] = React.useState<"chart" | "text">("chart");
+  const [draw, setDraw] = React.useState<{
+    from: { x: number; y: number };
+    to: { x: number; y: number };
+  } | null>(null);
+  const [target, setTarget] = React.useState<Target | null>(null);
+  const [previewRect, setPreviewRect] = React.useState<Rect | null>(null);
+  const [moving, setMoving] = React.useState<Rect | null>(null);
+  // Fixed while a widget is dragged or resized. Growing the canvas under the
+  // pointer makes the browser scroll, which reads as more drag, which grows the
+  // canvas again: a card dragged past the bottom edge would never stop growing.
+  const [frozenRows, setFrozenRows] = React.useState<number | null>(null);
+  const [flash, setFlash] = React.useState<string | null>(null);
+  const [stackPicking, setStackPicking] = React.useState(false);
   const [said, setSaid] = React.useState("");
 
-  React.useLayoutEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) =>
-      setWidth(entry!.contentRect.width),
-    );
-    ro.observe(el);
-    setWidth(el.getBoundingClientRect().width);
-    return () => ro.disconnect();
-  }, []);
-
-  const stacked = width > 0 && width < STACK_BELOW_PX;
+  const stacked = mounted && width < STACK_BELOW_PX;
   const layouts = widgets.map((w) => w.layout);
-  const pickerRect = picking
-    ? {
-        x: Math.min(picking.x, GRID_COLUMNS - PICKER_CELLS.w),
-        y: picking.y,
-        ...PICKER_CELLS,
-      }
-    : null;
-  const rows = rowCount([
-    ...layouts,
-    ...(pickerRect ? [pickerRect] : []),
-    ...(drag ? [drag.attempt] : []),
-  ]);
+  const drawRect = draw ? spanning(draw.from, draw.to) : null;
+  const drawFits = drawRect
+    ? !layouts.some((r) => overlapsRect(r, drawRect))
+    : false;
+  const rows =
+    frozenRows ??
+    rowCount([
+      ...layouts,
+      ...(target ? [target.rect] : []),
+      ...(previewRect ? [previewRect] : []),
+      ...(drawRect ? [drawRect] : []),
+    ]);
   const colPx = (width - GAP_PX * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
+  const height = rows * ROW_PX + (rows - 1) * GAP_PX;
+  const taken = (x: number, y: number) =>
+    layouts.some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+
+  React.useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(null), 1400);
+    return () => clearTimeout(t);
+  }, [flash]);
 
   const update = (id: string, next: Widget) =>
     onChange(widgets.map((w) => (w.id === id ? next : w)));
   const remove = (id: string) => onChange(widgets.filter((w) => w.id !== id));
-  const othersThan = (id: string) =>
-    widgets.filter((w) => w.id !== id).map((w) => w.layout);
+
+  const cellAt = (clientX: number, clientY: number) => {
+    const box = gridRef.current?.getBoundingClientRect();
+    if (!box) return null;
+    const x = Math.floor((clientX - box.left + GAP_PX / 2) / (colPx + GAP_PX));
+    const y = Math.floor((clientY - box.top + GAP_PX / 2) / (ROW_PX + GAP_PX));
+    if (x < 0 || x >= GRID_COLUMNS || y < 0 || y >= rows) return null;
+    return { x, y };
+  };
 
   const focusCell = (c: { x: number; y: number }) => {
     setActive(c);
@@ -2217,110 +2585,61 @@ function ReportCanvas({
     );
   };
 
-  /** Puts a chart or text at a cell, shrinking to the room there is. */
-  const placeAt = (at: { x: number; y: number } | null, p: Placement) => {
+  /** The cells a chart or text would take from a cell, for the hover outline. */
+  const footprint = (c: { x: number; y: number }, kind: "chart" | "text") =>
+    roomAt(
+      c.x,
+      c.y,
+      kind === "text" ? { w: GRID_COLUMNS - c.x, h: 1 } : DEFAULT_CHART,
+      layouts,
+    );
+
+  const place = (t: Target | null, p: Placement) => {
     const min = minCells(p.spec);
-    const room = at ? roomAt(at.x, at.y, p.cells, layouts) : null;
-    const rect =
-      room && room.w >= min.w && room.h >= min.h
-        ? room
-        : firstFit(Math.max(p.cells.w, min.w), p.cells.h, layouts);
+    let rect: Rect;
+    if (t?.drawn) rect = t.rect;
+    else {
+      const room = t ? roomAt(t.rect.x, t.rect.y, p.cells, layouts) : null;
+      rect =
+        room && room.w >= min.w && room.h >= min.h
+          ? room
+          : firstFit(Math.max(p.cells.w, min.w), p.cells.h, layouts);
+    }
     const widget = { ...p.spec, id: newId("w"), layout: rect } as Widget;
     onChange([...widgets, widget]);
-    setPicking(null);
+    setTarget(null);
+    setPreviewRect(null);
+    setStackPicking(false);
+    setFlash(widget.id);
     setSaid(
-      room && rect === room
-        ? `Added ${nameOf(p.spec)}.`
-        : `Not enough room there, so ${nameOf(p.spec)} went to row ${rect.y + 1}, column ${rect.x + 1}.`,
+      `Added ${nameOf(p.spec)} at row ${rect.y + 1}, column ${rect.x + 1}, ${rect.w} by ${rect.h} cells.`,
     );
     if (p.spec.kind === "text") onPlacedText(widget.id);
   };
 
-  const addText = (at: { x: number; y: number } | null) =>
-    placeAt(at, {
+  const placeText = (t: Target | null) =>
+    place(t, {
       spec: { kind: "text", markdown: TEXT_SEED },
-      cells: { w: GRID_COLUMNS - (at?.x ?? 0), h: 1 },
+      cells: { w: t ? GRID_COLUMNS - t.rect.x : GRID_COLUMNS, h: 1 },
     });
 
-  /* Pointer: move by the grip, resize by the corner. ------------------------ */
-
-  const startDrag = (e: React.PointerEvent, w: Widget, mode: Drag["mode"]) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setDrag({
-      id: w.id,
-      mode,
-      pointer: { x: e.clientX, y: e.clientY },
-      origin: w.layout,
-      attempt: w.layout,
-      target: w.layout,
+  /** Commits what react-grid-layout settled on, for every widget it moved. */
+  const commitLayout = (next: Layout) => {
+    const byId = new Map(next.map((l) => [l.i, l]));
+    let changed = false;
+    const out = widgets.map((w) => {
+      const l = byId.get(w.id);
+      if (!l) return w;
+      const rect = { x: l.x, y: l.y, w: l.w, h: l.h };
+      if (sameRect(rect, w.layout)) return w;
+      changed = true;
+      return { ...w, layout: rect };
     });
+    if (changed) onChange(out);
   };
 
-  const moveDrag = (e: React.PointerEvent) => {
-    if (!drag) return;
-    const w = widgets.find((x) => x.id === drag.id);
-    if (!w) return;
-    const dx = Math.round((e.clientX - drag.pointer.x) / (colPx + GAP_PX));
-    const dy = Math.round((e.clientY - drag.pointer.y) / (ROW_PX + GAP_PX));
-    const o = drag.origin;
-    const others = othersThan(w.id);
-    if (drag.mode === "move") {
-      const attempt = {
-        ...o,
-        x: Math.max(0, Math.min(GRID_COLUMNS - o.w, o.x + dx)),
-        y: Math.max(0, o.y + dy),
-      };
-      setDrag({
-        ...drag,
-        attempt,
-        target: moveTo(o, attempt.x, attempt.y, others),
-      });
-    } else {
-      const min = minCells(w);
-      const attempt = {
-        ...o,
-        w: Math.max(min.w, Math.min(GRID_COLUMNS - o.x, o.w + dx)),
-        h: Math.max(min.h, o.h + dy),
-      };
-      setDrag({
-        ...drag,
-        attempt,
-        target: resizeTo(o, attempt.w, attempt.h, others, min),
-      });
-    }
-  };
-
-  const endDrag = () => {
-    if (!drag) return;
-    const w = widgets.find((x) => x.id === drag.id);
-    if (
-      w &&
-      drag.target &&
-      (drag.target.x !== w.layout.x ||
-        drag.target.y !== w.layout.y ||
-        drag.target.w !== w.layout.w ||
-        drag.target.h !== w.layout.h)
-    ) {
-      update(w.id, { ...w, layout: drag.target });
-      setSaid(describe(nameOf(w), drag.mode, drag.target));
-    } else if (w && !drag.target) {
-      setSaid(
-        `${nameOf(w)} would cover another widget there, so it stayed put.`,
-      );
-    }
-    setDrag(null);
-  };
-
-  const describe = (name: string, mode: Drag["mode"], r: Rect) =>
-    mode === "move"
-      ? `${name} moved to row ${r.y + 1}, column ${r.x + 1}.`
-      : `${name} is now ${r.w} columns by ${r.h} rows.`;
-
-  /* Keyboard: the same, one cell per arrow press. -------------------------- */
-
-  const nudge = (e: React.KeyboardEvent, w: Widget, mode: Drag["mode"]) => {
+  /** The grip's keyboard: arrows move a cell, Shift and arrows resize. */
+  const nudge = (e: React.KeyboardEvent, w: Widget) => {
     const d = {
       ArrowLeft: [-1, 0],
       ArrowRight: [1, 0],
@@ -2331,22 +2650,23 @@ function ReportCanvas({
     e.preventDefault();
     const [dx, dy] = d as [number, number];
     const o = w.layout;
-    const others = othersThan(w.id);
-    const next =
-      mode === "move"
-        ? moveTo(o, o.x + dx, o.y + dy, others)
-        : resizeTo(o, o.w + dx, o.h + dy, others, minCells(w));
-    if (
-      next &&
-      (next.x !== o.x || next.y !== o.y || next.w !== o.w || next.h !== o.h)
-    ) {
+    const others = widgets.filter((x) => x.id !== w.id).map((x) => x.layout);
+    const resizing = e.shiftKey;
+    const next = resizing
+      ? resizeTo(o, o.w + dx, o.h + dy, others, minCells(w))
+      : moveTo(o, o.x + dx, o.y + dy, others);
+    if (next && !sameRect(next, o)) {
       update(w.id, { ...w, layout: next });
-      setSaid(describe(nameOf(w), mode, next));
+      setSaid(
+        resizing
+          ? `${nameOf(w)} is now ${next.w} columns by ${next.h} rows.`
+          : `${nameOf(w)} moved to row ${next.y + 1}, column ${next.x + 1}.`,
+      );
     } else {
       setSaid(
-        mode === "move"
-          ? "Can't move further that way."
-          : "Can't resize further that way.",
+        resizing
+          ? "Can't resize further that way."
+          : "Can't move further that way.",
       );
     }
   };
@@ -2377,7 +2697,7 @@ function ReportCanvas({
   if (stacked) {
     return (
       <div
-        ref={wrapRef}
+        ref={containerRef}
         className="space-y-4"
         data-slot="report-canvas"
         data-layout="stacked"
@@ -2394,27 +2714,22 @@ function ReportCanvas({
           className="rounded-xl border border-dashed p-3"
           style={{ minHeight: ROW_PX }}
         >
-          {picking ? (
-            <div style={{ height: PICKER_CELLS.h * ROW_PX }}>
-              <CellPicker
-                data={data}
-                onClose={() => setPicking(null)}
-                onPick={(t) => placeAt(null, t)}
-              />
-            </div>
+          {stackPicking ? (
+            <ChartPicker
+              data={data}
+              onPreview={() => {}}
+              onPick={(t) => place(null, t)}
+            />
           ) : (
             <div
-              className="flex h-full flex-wrap items-center justify-center gap-2"
+              className="flex flex-wrap items-center justify-center gap-2"
               style={{ minHeight: ROW_PX - 26 }}
             >
-              <Button
-                variant="outline"
-                onClick={() => setPicking({ x: 0, y: 0 })}
-              >
+              <Button variant="outline" onClick={() => setStackPicking(true)}>
                 <ChartColumn data-icon="inline-start" />
                 Create a chart
               </Button>
-              <Button variant="outline" onClick={() => addText(null)}>
+              <Button variant="outline" onClick={() => placeText(null)}>
                 <Type data-icon="inline-start" />
                 Create text
               </Button>
@@ -2428,176 +2743,375 @@ function ReportCanvas({
 
   const cells: Array<{ x: number; y: number }> = [];
   for (let y = 0; y < rows; y++)
-    for (let x = 0; x < GRID_COLUMNS; x++)
-      if (
-        !layouts.some(
-          (r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h,
-        )
-      )
-        cells.push({ x, y });
+    for (let x = 0; x < GRID_COLUMNS; x++) cells.push({ x, y });
+  const free = cells.filter((c) => !taken(c.x, c.y));
   // One cell is the canvas's single tab stop; the arrow keys move between the rest.
-  const current =
-    active && cells.some((c) => c.x === active.x && c.y === active.y)
-      ? active
-      : cells[0];
+  const current = active && !taken(active.x, active.y) ? active : free[0];
+  const showHover =
+    hover && !target && !draw && !moving && !taken(hover.x, hover.y);
+  const hoverRect = showHover ? footprint(hover, hoverKind) : null;
+  const landing = previewRect ?? target?.rect ?? null;
+
+  const rglLayout: Layout = widgets.map((w) => {
+    const min = minCells(w);
+    return { i: w.id, ...w.layout, minW: min.w, minH: min.h };
+  });
 
   return (
-    <div ref={wrapRef} data-slot="report-canvas" data-layout="grid">
+    <div
+      ref={containerRef}
+      data-slot="report-canvas"
+      data-layout="grid"
+      className="report-canvas"
+    >
       <p id="report-canvas-help" className="sr-only">
         Empty cells: use the arrow keys to move between them, then Tab to Chart
-        or Text. Move or resize a widget with its handles and the arrow keys.
+        or Text. Move a widget with its grip and the arrow keys; hold Shift to
+        resize it.
       </p>
-      <div
-        ref={gridRef}
-        role="group"
-        aria-label="Report canvas"
-        aria-describedby="report-canvas-help"
-        className="relative grid"
-        style={{
-          gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))`,
-          gridAutoRows: `${ROW_PX}px`,
-          gap: `${GAP_PX}px`,
-        }}
-      >
-        {cells.map((c) => {
-          const isCurrent = current?.x === c.x && current?.y === c.y;
-          return (
-            <div
-              key={`${c.x}-${c.y}`}
-              data-cell={`${c.x}-${c.y}`}
-              tabIndex={isCurrent ? 0 : -1}
-              // A group, so it may carry a name: a plain div may not.
-              role="group"
-              aria-label={`Empty cell, row ${c.y + 1}, column ${c.x + 1}`}
-              onFocus={(e) => {
-                if (e.target === e.currentTarget) setActive(c);
-              }}
-              onKeyDown={(e) => {
-                if (e.target !== e.currentTarget) return;
-                const d = {
-                  ArrowLeft: [-1, 0],
-                  ArrowRight: [1, 0],
-                  ArrowUp: [0, -1],
-                  ArrowDown: [0, 1],
-                }[e.key];
-                if (!d) return;
-                e.preventDefault();
-                const next = nextFree(c, d[0]!, d[1]!, layouts, rows);
-                if (next) focusCell(next);
-              }}
-              style={cellSpan({ ...c, w: 1, h: 1 })}
-              className="group/cell bg-muted/50 hover:bg-muted focus-visible:ring-ring focus-within:bg-muted relative @container rounded-lg transition-colors focus-visible:ring-2 focus-visible:outline-none"
-            >
-              <div className="absolute inset-0 hidden flex-col items-stretch justify-center gap-1 p-1.5 group-focus-within/cell:flex group-hover/cell:flex">
-                <Button
-                  variant="outline"
-                  size="xs"
-                  tabIndex={isCurrent ? 0 : -1}
-                  aria-label="Create a chart here"
-                  title="Create a chart"
-                  className="bg-background w-full min-w-0"
-                  onClick={() => setPicking(c)}
-                >
-                  <ChartColumn />
-                  <span className="hidden truncate @[4.5rem]:inline">
-                    Chart
-                  </span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="xs"
-                  tabIndex={isCurrent ? 0 : -1}
-                  aria-label="Create text here"
-                  title="Create text"
-                  className="bg-background w-full min-w-0"
-                  onClick={() => addText(c)}
-                >
-                  <Type />
-                  <span className="hidden truncate @[4.5rem]:inline">Text</span>
-                </Button>
+      <div className="relative" style={{ height }}>
+        {/* The cells: drawn under everything, and where pointing, drawing and adding happen. */}
+        <div
+          ref={gridRef}
+          role="group"
+          aria-label="Report canvas"
+          aria-describedby="report-canvas-help"
+          className="absolute inset-0 grid"
+          style={{
+            gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))`,
+            gridTemplateRows: `repeat(${rows}, ${ROW_PX}px)`,
+            gap: `${GAP_PX}px`,
+          }}
+          onPointerMove={(e) => {
+            const c = cellAt(e.clientX, e.clientY);
+            if (draw && c) {
+              setDraw({ ...draw, to: c });
+              return;
+            }
+            if (!c || (hover && c.x === hover.x && c.y === hover.y)) return;
+            setHover(c);
+            setHoverKind("chart");
+          }}
+          onPointerLeave={() => {
+            if (!draw) setHover(null);
+          }}
+          onPointerDown={(e) => {
+            if (e.button !== 0 || target) return;
+            if ((e.target as HTMLElement).closest("button")) return;
+            const c = cellAt(e.clientX, e.clientY);
+            if (!c || taken(c.x, c.y)) return;
+            e.currentTarget.setPointerCapture(e.pointerId);
+            setDraw({ from: c, to: c });
+          }}
+          onPointerUp={() => {
+            if (!draw) return;
+            const rect = spanning(draw.from, draw.to);
+            setDraw(null);
+            // A press without a drag is a hover, not a drawing.
+            if (rect.w === 1 && rect.h === 1) return;
+            if (!drawFits) {
+              setSaid("That area covers a widget. Draw over empty cells only.");
+              return;
+            }
+            setTarget({ rect, drawn: true, mode: "choose" });
+          }}
+        >
+          {cells.map((c) => {
+            const isTaken = taken(c.x, c.y);
+            const isCurrent =
+              !isTaken && current?.x === c.x && current?.y === c.y;
+            const isHover = showHover && hover!.x === c.x && hover!.y === c.y;
+            return (
+              <div
+                key={`${c.x}-${c.y}`}
+                data-cell={`${c.x}-${c.y}`}
+                // A group, so it may carry a name: a plain div may not.
+                role={isTaken ? undefined : "group"}
+                aria-label={
+                  isTaken
+                    ? undefined
+                    : `Empty cell, row ${c.y + 1}, column ${c.x + 1}`
+                }
+                aria-hidden={isTaken || undefined}
+                tabIndex={isCurrent ? 0 : -1}
+                onFocus={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  setActive(c);
+                  setHover(c);
+                }}
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  const d = {
+                    ArrowLeft: [-1, 0],
+                    ArrowRight: [1, 0],
+                    ArrowUp: [0, -1],
+                    ArrowDown: [0, 1],
+                  }[e.key];
+                  if (!d) return;
+                  e.preventDefault();
+                  const next = nextFree(c, d[0]!, d[1]!, layouts, rows);
+                  if (next) focusCell(next);
+                }}
+                style={cellSpan({ ...c, w: 1, h: 1 })}
+                className={cn(
+                  "@container relative rounded-lg transition-colors duration-150 focus-visible:outline-none",
+                  "bg-muted/40 focus-visible:ring-ring focus-visible:ring-2",
+                  isHover && "bg-muted",
+                )}
+              >
+                {isHover ? (
+                  <div className="draggable-cancel absolute inset-0 z-20 flex flex-col items-stretch justify-center gap-1 p-1.5">
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      tabIndex={isCurrent ? 0 : -1}
+                      aria-label="Create a chart here"
+                      title="Create a chart"
+                      className="bg-background hover:border-primary hover:text-primary w-full min-w-0 shadow-xs"
+                      onMouseEnter={() => setHoverKind("chart")}
+                      onFocus={() => setHoverKind("chart")}
+                      onClick={() =>
+                        setTarget({
+                          rect: hoverRect ?? { ...c, ...DEFAULT_CHART },
+                          drawn: false,
+                          mode: "chart",
+                        })
+                      }
+                    >
+                      <ChartColumn />
+                      <span className="hidden truncate @[4.5rem]:inline">
+                        Chart
+                      </span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      tabIndex={isCurrent ? 0 : -1}
+                      aria-label="Create text here"
+                      title="Create text"
+                      className="bg-background hover:border-primary hover:text-primary w-full min-w-0 shadow-xs"
+                      onMouseEnter={() => setHoverKind("text")}
+                      onFocus={() => setHoverKind("text")}
+                      onClick={() =>
+                        placeText({
+                          rect: { ...c, w: 1, h: 1 },
+                          drawn: false,
+                          mode: "chart",
+                        })
+                      }
+                    >
+                      <Type />
+                      <span className="hidden truncate @[4.5rem]:inline">
+                        Text
+                      </span>
+                    </Button>
+                  </div>
+                ) : null}
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
 
-        {widgets.map((w) => {
-          const name = nameOf(w);
-          const dragging = drag?.id === w.id;
-          return (
+          {/* Where it will land: the hover footprint, a drawn area, or the open picker's target. */}
+          {hoverRect ? (
             <div
-              key={w.id}
-              data-slot="report-slot"
-              style={cellSpan(w.layout)}
+              aria-hidden
+              style={cellSpan(hoverRect)}
+              className="border-primary/50 bg-primary/5 pointer-events-none z-10 rounded-xl border-2 border-dashed transition-all duration-150"
+            />
+          ) : null}
+          {drawRect && !(drawRect.w === 1 && drawRect.h === 1) ? (
+            <div
+              aria-hidden
+              style={cellSpan(drawRect)}
               className={cn(
-                "group/widget relative min-w-0",
-                dragging && "opacity-50",
+                "pointer-events-none z-10 flex items-center justify-center rounded-xl border-2 border-dashed text-xs font-medium",
+                drawFits
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-destructive bg-destructive/10 text-destructive",
               )}
             >
-              {renderWidget(w)}
-              <button
-                type="button"
-                aria-label={`Move ${name}`}
-                title="Drag to move"
-                onPointerDown={(e) => startDrag(e, w, "move")}
-                onPointerMove={moveDrag}
-                onPointerUp={endDrag}
-                onPointerCancel={() => setDrag(null)}
-                onKeyDown={(e) => nudge(e, w, "move")}
-                className="bg-background text-muted-foreground focus-visible:ring-ring absolute top-0 left-1/2 z-10 flex h-3.5 w-8 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none items-center justify-center rounded-full border opacity-0 transition-opacity group-hover/widget:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:outline-none active:cursor-grabbing"
-              >
-                <GripHorizontal className="size-3" aria-hidden />
-              </button>
-              <button
-                type="button"
-                aria-label={`Resize ${name}`}
-                title="Drag to resize"
-                onPointerDown={(e) => startDrag(e, w, "resize")}
-                onPointerMove={moveDrag}
-                onPointerUp={endDrag}
-                onPointerCancel={() => setDrag(null)}
-                onKeyDown={(e) => nudge(e, w, "resize")}
-                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring absolute right-0.5 bottom-0.5 z-10 flex size-4 cursor-se-resize touch-none items-end justify-end rounded-sm opacity-60 group-hover/widget:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:outline-none"
-              >
-                <svg viewBox="0 0 8 8" className="size-2" aria-hidden>
-                  <path
-                    d="M7 1v6H1"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                  />
-                </svg>
-              </button>
+              {drawRect.w} × {drawRect.h}
             </div>
-          );
-        })}
-
-        {drag ? (
-          <div
-            aria-hidden
-            style={cellSpan(drag.attempt)}
-            className={cn(
-              "pointer-events-none z-20 rounded-xl border-2 border-dashed",
-              drag.target
-                ? "border-primary bg-primary/5"
-                : "border-destructive bg-destructive/10",
-            )}
-          />
-        ) : null}
-
-        {picking && pickerRect ? (
-          <div style={cellSpan(pickerRect)} className="z-30 min-w-0">
-            <CellPicker
-              data={data}
-              onClose={() => {
-                const at = picking;
-                setPicking(null);
-                focusCell(at);
-              }}
-              onPick={(t) => placeAt(picking, t)}
+          ) : null}
+          {landing ? (
+            <div
+              aria-hidden
+              style={cellSpan(landing)}
+              className="border-primary bg-primary/10 pointer-events-none z-10 rounded-xl border-2 border-dashed transition-all duration-200"
             />
-          </div>
+          ) : null}
+          {/* The picker hangs off the cell it was opened from, not off the
+              outline: the outline grows as charts are pointed at, and a
+              popover that moved with it would slide out from under the
+              pointer and undo the preview it was showing. */}
+          {target ? (
+            <div
+              ref={anchorRef}
+              aria-hidden
+              style={cellSpan(
+                target.drawn
+                  ? target.rect
+                  : { x: target.rect.x, y: target.rect.y, w: 1, h: 1 },
+              )}
+              className="pointer-events-none"
+            />
+          ) : null}
+        </div>
+
+        {mounted ? (
+          <GridLayout
+            className="report-rgl"
+            width={width}
+            layout={rglLayout}
+            gridConfig={{
+              cols: GRID_COLUMNS,
+              rowHeight: ROW_PX,
+              margin: [GAP_PX, GAP_PX],
+              containerPadding: [0, 0],
+              maxRows: rows,
+            }}
+            dragConfig={{
+              handle: ".report-grip",
+              cancel: ".draggable-cancel",
+              threshold: 4,
+            }}
+            resizeConfig={{
+              handles: ["se"],
+              handleComponent: (axis, ref) => (
+                <span
+                  ref={ref as React.Ref<HTMLSpanElement>}
+                  aria-hidden
+                  className={`react-resizable-handle react-resizable-handle-${axis} report-resize`}
+                />
+              ),
+            }}
+            compactor={FREE_LAYOUT}
+            autoSize={false}
+            style={{ height, position: "absolute", inset: 0 }}
+            onDragStart={(_l, item) => {
+              setHover(null);
+              setFrozenRows(rowCount(layouts) + 3);
+              if (item)
+                setMoving({ x: item.x, y: item.y, w: item.w, h: item.h });
+            }}
+            onDrag={(_l, _o, item) => {
+              if (item)
+                setMoving({ x: item.x, y: item.y, w: item.w, h: item.h });
+            }}
+            onDragStop={(next) => {
+              setMoving(null);
+              setFrozenRows(null);
+              commitLayout(next);
+            }}
+            onResizeStart={(_l, item) => {
+              setHover(null);
+              setFrozenRows(rowCount(layouts) + 3);
+              if (item)
+                setMoving({ x: item.x, y: item.y, w: item.w, h: item.h });
+            }}
+            onResize={(_l, _o, item) => {
+              if (item)
+                setMoving({ x: item.x, y: item.y, w: item.w, h: item.h });
+            }}
+            onResizeStop={(next) => {
+              setMoving(null);
+              setFrozenRows(null);
+              commitLayout(next);
+            }}
+          >
+            {widgets.map((w) => (
+              <div
+                key={w.id}
+                data-slot="report-slot"
+                className={cn("group/widget", flash === w.id && "report-flash")}
+              >
+                {renderWidget(w)}
+                <button
+                  type="button"
+                  aria-label={`Move ${nameOf(w)}`}
+                  aria-describedby="report-canvas-help"
+                  title="Drag to move. Arrow keys move, Shift and arrow keys resize."
+                  onKeyDown={(e) => nudge(e, w)}
+                  className="report-grip bg-background text-muted-foreground hover:text-foreground focus-visible:ring-ring absolute -top-3 left-1/2 z-20 flex h-4 w-10 -translate-x-1/2 cursor-grab items-center justify-center rounded-full border opacity-0 shadow-xs transition-opacity group-hover/widget:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:outline-none active:cursor-grabbing"
+                >
+                  <GripHorizontal className="size-3" aria-hidden />
+                </button>
+              </div>
+            ))}
+          </GridLayout>
         ) : null}
       </div>
+
+      <Popover
+        open={!!target}
+        onOpenChange={(open) => {
+          if (open) return;
+          const at = target?.rect;
+          setTarget(null);
+          setPreviewRect(null);
+          if (at) focusCell({ x: at.x, y: at.y });
+        }}
+      >
+        <PopoverContent
+          anchor={anchorRef}
+          side="right"
+          align="start"
+          sideOffset={10}
+          className="w-[26rem] max-w-[calc(100vw-2rem)] p-3"
+        >
+          {target?.mode === "choose" ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">
+                Add to this {target.rect.w} × {target.rect.h} area
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  data-pick
+                  autoFocus
+                  onClick={() => setTarget({ ...target, mode: "chart" })}
+                  className="hover:border-primary/60 focus-visible:ring-ring flex flex-col items-start gap-1 rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:outline-none"
+                >
+                  <ChartColumn className="text-primary size-5" aria-hidden />
+                  <span className="text-sm font-medium">Chart</span>
+                  <span className="text-muted-foreground text-xs">
+                    Pick one from your chart library
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => placeText(target)}
+                  className="hover:border-primary/60 focus-visible:ring-ring flex flex-col items-start gap-1 rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:outline-none"
+                >
+                  <Type className="text-primary size-5" aria-hidden />
+                  <span className="text-sm font-medium">Text</span>
+                  <span className="text-muted-foreground text-xs">
+                    A heading or a note for a section
+                  </span>
+                </button>
+              </div>
+            </div>
+          ) : target ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Add a chart</p>
+              <ChartPicker
+                data={data}
+                onPreview={(t) => {
+                  if (!t || target.drawn) return setPreviewRect(null);
+                  const room = roomAt(
+                    target.rect.x,
+                    target.rect.y,
+                    t.cells,
+                    layouts,
+                  );
+                  setPreviewRect(room);
+                }}
+                onPick={(t) => place(target, t)}
+              />
+            </div>
+          ) : null}
+        </PopoverContent>
+      </Popover>
       {live}
     </div>
   );
@@ -3554,6 +4068,32 @@ function ReportList({
   );
 }
 
+/**
+ * The grid's moving parts. react-grid-layout positions items inline; these
+ * rules only animate them, draw the placeholder that shows where a dragged
+ * card will land, and draw the resize corner.
+ */
+const REPORT_CSS = `
+@keyframes report-load { from { transform: translateX(-100%) } to { transform: translateX(300%) } }
+@keyframes report-flash { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 55%, transparent) } 100% { box-shadow: 0 0 0 14px transparent } }
+.report-rgl { pointer-events: none; }
+.report-rgl > .react-grid-item { pointer-events: auto; transition: transform 200ms ease, width 200ms ease, height 200ms ease; }
+.report-rgl > .react-grid-item.react-draggable-dragging { transition: none; z-index: 30; }
+.report-rgl > .react-grid-item.react-draggable-dragging > section { box-shadow: 0 18px 40px -12px rgb(0 0 0 / 0.45); transform: rotate(0.6deg) scale(1.01); }
+.report-rgl > .react-grid-item.resizing { transition: none; z-index: 30; }
+.report-rgl > .react-grid-placeholder { background: color-mix(in oklab, var(--primary) 12%, transparent); border: 2px dashed var(--primary); border-radius: 0.75rem; opacity: 1; z-index: 5; transition-duration: 120ms; }
+.report-rgl .report-resize { position: absolute; right: 2px; bottom: 2px; width: 18px; height: 18px; cursor: se-resize; z-index: 20; opacity: 0; transition: opacity 150ms; }
+.report-rgl .report-resize::after { content: ""; position: absolute; right: 4px; bottom: 4px; width: 7px; height: 7px; border-right: 2px solid var(--muted-foreground); border-bottom: 2px solid var(--muted-foreground); border-bottom-right-radius: 2px; }
+.report-rgl > .react-grid-item:hover .report-resize, .report-rgl > .react-grid-item.resizing .report-resize { opacity: 1; }
+.report-flash > section { animation: report-flash 1.2s ease-out 1; }
+@media (prefers-reduced-motion: reduce) {
+  [data-slot=report-loading] > div { animation: none !important; width: 100% !important; opacity: .6; }
+  .report-rgl > .react-grid-item, .report-rgl > .react-grid-placeholder { transition: none !important; }
+  .report-flash > section { animation: none; }
+  .report-rgl > .react-grid-item.react-draggable-dragging > section { transform: none; }
+}
+`;
+
 /* -------------------------------------------------------------------------- */
 /* Workspace                                                                   */
 /* -------------------------------------------------------------------------- */
@@ -3637,8 +4177,10 @@ export function ReportsWorkspace({
         className,
       )}
     >
-      {/* The loading line's sweep. Held still for anyone who asked for less motion. */}
-      <style>{`@keyframes report-load{from{transform:translateX(-100%)}to{transform:translateX(300%)}}@media (prefers-reduced-motion:reduce){[data-slot=report-loading]>div{animation:none!important;width:100%!important;opacity:.6}}`}</style>
+      {/* The loading line's sweep, the grid's motion and its placeholder, in the
+          DS's own tokens rather than react-grid-layout's stylesheet. All of it
+          holds still for anyone who asked for less motion. */}
+      <style>{REPORT_CSS}</style>
       {current ? (
         <ReportView
           report={current}
