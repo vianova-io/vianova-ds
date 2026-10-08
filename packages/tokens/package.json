@@ -17,8 +17,9 @@
     "./registry-theme": "./dist/registry-theme.json"
   },
   "scripts": {
-    "build": "tsx scripts/build.ts",
-    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "build": "tsx scripts/build.ts && tsx scripts/agent-digest.ts",
+    "digest": "tsx scripts/agent-digest.ts",
+    "test": "node --test --experimental-strip-types test/*.test.ts && tsx scripts/agent-digest.ts --check",
     "clean": "rm -rf dist",
     "figma:import": "tsx scripts/import-figma.ts"
   },
