@@ -387,8 +387,17 @@ const SHELL_ROUTES = [
   "/changelog",
 ];
 
-/** 768 and 820 are in deliberately: the full nav fits at neither. */
-const SHELL_WIDTHS = [375, 768, 820, 1280];
+/**
+ * 768 and 820 are in deliberately: the full nav fits at neither.
+ *
+ * 1800 is in for the brand ribbon, and it is the only width that can see the
+ * bug it guards against. The content wrapper is `max-w-[100rem]`, so it only
+ * starts centring -- and only starts adding the margins the ribbon must not
+ * inherit -- above 1600px. Mutation-tested: giving the ribbon the wrapper's
+ * own `max-w-[100rem] mx-auto` passes at 375, 768, 820 AND 1280, and fails
+ * only here. Without this width the ribbon assertions are decoration.
+ */
+const SHELL_WIDTHS = [375, 768, 820, 1280, 1800];
 
 for (const width of SHELL_WIDTHS) {
   test.describe(`docs shell at ${width}px`, () => {
@@ -433,6 +442,16 @@ for (const width of SHELL_WIDTHS) {
             );
           }
 
+          // The brand ribbon, measured here rather than in a test of its own
+          // because the thing that can go wrong with it is the thing this
+          // whole describe is about: it has to span the viewport, and the
+          // wrapper it sits next to is margin-bound at every width above
+          // 100rem.
+          const ribbon = document.querySelector(
+            "[data-slot=brand-ribbon]",
+          ) as HTMLElement | null;
+          const ribbonBox = ribbon ? ribbon.getBoundingClientRect() : null;
+
           // The header row is measured separately as well as through
           // scrollWidth, because the two catch different things: scrollWidth
           // would go quiet the moment anyone put `overflow-x-hidden` on the
@@ -452,8 +471,33 @@ for (const width of SHELL_WIDTHS) {
             offenders: offenders.slice(0, 5),
             headerLeft: Math.min(...kids.map((k) => k.left)),
             headerRight: Math.max(...kids.map((k) => k.right)),
+            ribbon: ribbonBox
+              ? {
+                  left: Math.round(ribbonBox.left),
+                  width: Math.round(ribbonBox.width),
+                  top: Math.round(ribbonBox.top),
+                }
+              : null,
           };
         });
+
+        // The ribbon is brand expression, so it runs edge to edge and sits
+        // above everything else. Checked at every width because the failure
+        // mode is silent above 100rem, where the content wrapper starts
+        // adding margins the ribbon must not inherit.
+        expect(measured.ribbon, "the brand ribbon is missing").not.toBeNull();
+        expect(
+          measured.ribbon!.left,
+          "the brand ribbon is inset from the left edge",
+        ).toBe(0);
+        expect(
+          measured.ribbon!.width,
+          `the brand ribbon is ${measured.ribbon!.width}px across a ${measured.vw}px viewport, so it is not full-bleed`,
+        ).toBe(measured.vw);
+        expect(
+          measured.ribbon!.top,
+          "the brand ribbon is not at the top of the page",
+        ).toBe(0);
 
         expect(
           measured.headerLeft,
