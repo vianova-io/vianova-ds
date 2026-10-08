@@ -624,6 +624,20 @@ const compact = new Intl.NumberFormat("en", {
   notation: "compact",
   maximumFractionDigits: 1,
 });
+/**
+ * A moment in the viewer's own time zone. The page is rendered ahead of time
+ * in UTC, so the text differs once it reaches a browser in Lisbon or New York;
+ * the mismatch is expected, and this tells React so rather than letting it
+ * throw away and rebuild the whole table.
+ */
+function LocalTime({ iso }: { iso: string }) {
+  return (
+    <time dateTime={iso} suppressHydrationWarning>
+      {dateTimeFormat.format(new Date(iso))}
+    </time>
+  );
+}
+
 const dateTimeFormat = new Intl.DateTimeFormat("en", {
   dateStyle: "medium",
   timeStyle: "medium",
@@ -3490,10 +3504,10 @@ function ReportList({
                     </span>
                   </TableCell>
                   <TableCell className="whitespace-nowrap tabular-nums">
-                    {dateTimeFormat.format(new Date(r.createdAt))}
+                    <LocalTime iso={r.createdAt} />
                   </TableCell>
                   <TableCell className="whitespace-nowrap tabular-nums">
-                    {dateTimeFormat.format(new Date(r.updatedAt))}
+                    <LocalTime iso={r.updatedAt} />
                   </TableCell>
                   <TableCell>
                     <span className="flex items-center gap-1">
