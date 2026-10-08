@@ -53,6 +53,9 @@ export function DataLayerCard({
   unavailableVisualizations,
   unavailableVisualizationReason,
   onVisibilityChange,
+  onColorize,
+  colorizeOpen = false,
+  colorizeTriggerId,
   children,
   className,
   ...props
@@ -96,10 +99,27 @@ export function DataLayerCard({
   /** Why those are greyed, shown on hover. */
   unavailableVisualizationReason?: string;
   onVisibilityChange?: (visible: boolean) => void;
+  /**
+   * Makes the legend open this layer's colour configuration.
+   *
+   * The legend is the natural target -- it is the picture of what you want to
+   * change -- but it cannot simply become the button. A legend inside a
+   * `<button>` is flattened into the button's accessible name, so a categorical
+   * legend would be announced as one run of category names, and
+   * LegendCategorical's list markup is not valid inside a button either. So the
+   * control is a sibling laid over the legend's box: the legend keeps its
+   * semantics and stays readable, and the button carries its own name.
+   */
+  onColorize?: () => void;
+  /** Whether the panel `onColorize` opens is showing. */
+  colorizeOpen?: boolean;
+  /** Ids the legend's control, so a docked stepper can return focus to it. */
+  colorizeTriggerId?: string;
   /** Extra controls for the active visualisation, e.g. its source file. */
   children?: React.ReactNode;
 }) {
   const VisibilityIcon = visible ? Eye : EyeOff;
+  const legendNode = legend === undefined ? <LegendRamp /> : legend;
   const showFilters = filters ?? filterCount !== undefined;
 
   // Tracked here even when uncontrolled, so the badge can name the selection
@@ -107,7 +127,8 @@ export function DataLayerCard({
   const [internalType, setInternalType] = React.useState(defaultVisualization);
   const activeType = visualizationType ?? internalType;
   const badge =
-    visualization ?? VISUALIZATION_TYPES.find((t) => t.value === activeType)?.label;
+    visualization ??
+    VISUALIZATION_TYPES.find((t) => t.value === activeType)?.label;
 
   if (!expanded) {
     return (
@@ -170,7 +191,26 @@ export function DataLayerCard({
         </p>
       ) : null}
 
-      {legend === undefined ? <LegendRamp /> : legend}
+      {legendNode === null ? null : onColorize ? (
+        // -inset-1 rather than inset-0: the ramp is 10px tall and its ticks
+        // sit outside the swatch, so a ring on the exact box reads as a line
+        // rather than a focused control, and the hit area is under the 24px
+        // minimum. The padding is the parent's own, so nothing shifts.
+        <div className="relative">
+          {legendNode}
+          <button
+            type="button"
+            id={colorizeTriggerId}
+            aria-label={`Colorize ${name}`}
+            aria-haspopup="dialog"
+            aria-expanded={colorizeOpen}
+            onClick={onColorize}
+            className="absolute -inset-1 rounded-md transition-colors hover:bg-accent/40 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          />
+        </div>
+      ) : (
+        legendNode
+      )}
 
       <Collapsible defaultOpen>
         <div className="flex items-center gap-2">
@@ -205,7 +245,11 @@ export function DataLayerCard({
             <div className="flex items-center justify-between gap-2">
               <CollapsibleTrigger
                 render={
-                  <Button variant="ghost" size="xs" className="group/filters gap-1 px-1">
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    className="group/filters gap-1 px-1"
+                  >
                     <ChevronRight className="size-3.5 transition-transform group-data-panel-open/filters:rotate-90" />
                     Filters
                     {filterCount !== undefined ? (
@@ -215,7 +259,11 @@ export function DataLayerCard({
                 }
               />
               {filtersAction === undefined ? (
-                <Button variant="ghost" size="icon-xs" aria-label={`Edit ${name} filters`}>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Edit ${name} filters`}
+                >
                   <ListFilter />
                 </Button>
               ) : (
@@ -223,7 +271,9 @@ export function DataLayerCard({
               )}
             </div>
             {filtersContent ? (
-              <CollapsibleContent className="pt-2">{filtersContent}</CollapsibleContent>
+              <CollapsibleContent className="pt-2">
+                {filtersContent}
+              </CollapsibleContent>
             ) : null}
           </Collapsible>
         </>

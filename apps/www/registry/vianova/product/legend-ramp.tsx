@@ -16,12 +16,22 @@ export const RAMP_STOPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100] as const;
 
 export function LegendRamp({
   stops = RAMP_STOPS,
+  colors,
   ticks,
   showTicks = true,
   className,
   ...props
 }: React.ComponentProps<"div"> & {
   stops?: readonly number[];
+  /**
+   * Explicit colours, one per band, instead of the --map-ramp-* lookup.
+   *
+   * For a ramp the user has edited: once stops are theirs to drag, the scheme
+   * no longer describes what the map is painted with, and a legend still
+   * reading the tokens would disagree with the layer beside it. `colors`
+   * governs the band count when given, so the caller decides the resolution.
+   */
+  colors?: readonly string[];
   /**
    * Labels under the ramp. Defaults to the stop positions, which describe the
    * ramp itself; pass the domain the ramp is bound to — "1", "1.1K" … "6.4K" —
@@ -31,16 +41,23 @@ export function LegendRamp({
   ticks?: readonly React.ReactNode[];
   showTicks?: boolean;
 }) {
+  const bands = colors?.length
+    ? colors.map((color, i) => ({ key: i, background: color }))
+    : stops.map((s) => ({ key: s, background: `var(--map-ramp-${s})` }));
   const labels = ticks ?? stops;
 
   return (
-    <div data-slot="legend-ramp" className={cn("space-y-1", className)} {...props}>
+    <div
+      data-slot="legend-ramp"
+      className={cn("space-y-1", className)}
+      {...props}
+    >
       <div className="flex overflow-hidden rounded-sm">
-        {stops.map((s) => (
+        {bands.map((band) => (
           <div
-            key={s}
+            key={band.key}
             className="h-2.5 flex-1"
-            style={{ background: `var(--map-ramp-${s})` }}
+            style={{ background: band.background }}
           />
         ))}
       </div>

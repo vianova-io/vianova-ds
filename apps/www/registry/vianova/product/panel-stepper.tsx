@@ -38,7 +38,10 @@ type StepperContextValue = {
    *  truth for the whole chain: holding it here rather than per-step is what
    *  lets the presentation change without the open state going with it. */
   openPath: string[];
-  setOpenPath: (path: string[]) => void;
+  /** The state setter itself, updater form included: a step that has to decide
+   *  what to do based on the CURRENT path -- see the controlled-open effect in
+   *  PanelStep -- cannot read it from a stale render. */
+  setOpenPath: React.Dispatch<React.SetStateAction<string[]>>;
   /** True below `lg`: panels dock instead of cascading. */
   docked: boolean;
   /** Where docked panels render. Null until the dock mounts. */
@@ -149,7 +152,9 @@ export function PanelStepper({
 
   return (
     <StepperContext.Provider value={value}>
-      <LevelContext.Provider value={rootLevel}>{children}</LevelContext.Provider>
+      <LevelContext.Provider value={rootLevel}>
+        {children}
+      </LevelContext.Provider>
       <div
         ref={setDock}
         data-slot="panel-stepper-dock"
@@ -172,6 +177,7 @@ export function PanelStep({
   id,
   title,
   trigger,
+  triggerId: triggerIdProp,
   width = 360,
   side = "inline-end",
   align = "start",
@@ -192,6 +198,11 @@ export function PanelStep({
    *  for a step opened by something outside the stepper, in which case `open`
    *  has to be supplied too. */
   trigger?: React.ReactElement;
+  /** Id of the control that opens this step, for a step driven by `open`
+   *  rather than by `trigger`. Docked, closing the chain returns focus there;
+   *  without it focus lands on the body, because an externally-triggered step
+   *  has no element of its own to go back to. */
+  triggerId?: string;
   width?: number;
   /** "parent" cascades beside the previous panel; "trigger" hangs off the
    *  control itself, which is what a colour swatch wants. */
@@ -212,8 +223,7 @@ export function PanelStep({
   );
 
   const { openPath, setOpenPath } = stepper;
-  const isOpen =
-    openProp ?? samePath(openPath.slice(0, depth), ownPath);
+  const isOpen = openProp ?? samePath(openPath.slice(0, depth), ownPath);
   /** Only the deepest open step is visible when docked. */
   const isDeepest = isOpen && openPath.length === depth;
 
@@ -227,11 +237,36 @@ export function PanelStep({
     [level.prefix, onOpenChange, openProp, ownPath, setOpenPath],
   );
 
+  /**
+   * Keeps a CONTROLLED step in the stepper's path.
+   *
+   * `setOpen` only runs when the step itself is the thing that changed -- a
+   * Popover dismissal, or the docked trigger. A step driven by `open` is opened
+   * by a control outside the stepper, which just flips the caller's own state,
+   * so nothing ever writes the path. Cascaded that goes unnoticed, because each
+   * Popover positions itself; docked it is fatal, since the path is how the
+   * chain knows which panel is deepest and every panel would render hidden.
+   *
+   * Written through the updater form so the result does not depend on which
+   * step's effect runs first: opening never shortens a path that already runs
+   * through this step -- a descendant may be open -- and closing only
+   * truncates a path that actually reaches here.
+   */
+  React.useEffect(() => {
+    if (openProp === undefined) return;
+    setOpenPath((prev) => {
+      const reachesHere = samePath(prev.slice(0, depth), ownPath);
+      if (openProp) return reachesHere ? prev : ownPath;
+      return reachesHere ? level.prefix : prev;
+    });
+  }, [depth, level.prefix, openProp, ownPath, setOpenPath]);
+
   // defaultOpen can't go to Popover.Root: the stepper owns the path, so the
   // initial value has to be written into it instead.
   const claimedDefault = React.useRef(false);
   React.useEffect(() => {
-    if (claimedDefault.current || !defaultOpen || openProp !== undefined) return;
+    if (claimedDefault.current || !defaultOpen || openProp !== undefined)
+      return;
     claimedDefault.current = true;
     setOpenPath(ownPath);
   }, [defaultOpen, openProp, ownPath, setOpenPath]);
@@ -256,9 +291,9 @@ export function PanelStep({
     // Docked there is no Popover to supply the trigger's state, so it is wired
     // by hand -- including calling through to any onClick the caller gave it.
     const triggerEl = trigger as
-      | React.ReactElement<React.HTMLAttributes<HTMLElement>>
-      | undefined;
-    const triggerId = triggerEl?.props.id ?? `${panelId}-trigger`;
+      React.ReactElement<React.HTMLAttributes<HTMLElement>> | undefined;
+    const triggerId =
+      triggerEl?.props.id ?? triggerIdProp ?? `${panelId}-trigger`;
     if (depth === 1) stepper.rootTriggerId.current = triggerId;
 
     const header = (

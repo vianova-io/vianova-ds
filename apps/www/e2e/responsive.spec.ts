@@ -43,8 +43,30 @@ type Shape = {
  *
  * Everything is returned as plain numbers rather than asserted in the browser,
  * so a failure reports the measurement rather than just "false".
+ *
+ * Waits for the block to be laid out first, which settle() cannot do for it.
+ * The blocks render inside a React.Suspense boundary, and while that boundary
+ * hydrates React keeps the server-rendered markup in the DOM but hides its
+ * container -- so every query here resolves, every element reports its own
+ * computed `display`, and every box measures 0. settle() returns inside that
+ * window because `main` is genuinely visible, and the window grows with the
+ * size of the block's chunk. Measuring there produced two different failures
+ * from one cause: a panel "0px instead of 340px", and a docked width of -2,
+ * which is `0 - 2 - 0`.
  */
 async function readShape(page: Page): Promise<Shape> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const canvasSlot = document.querySelector("[data-slot=map-canvas]");
+          const root = canvasSlot?.parentElement;
+          return root ? Math.round(root.getBoundingClientRect().width) : 0;
+        }),
+      { timeout: 15_000, message: "the block never laid out" },
+    )
+    .toBeGreaterThan(0);
+
   return page.evaluate(() => {
     const box = (el: Element) => {
       const b = el.getBoundingClientRect();

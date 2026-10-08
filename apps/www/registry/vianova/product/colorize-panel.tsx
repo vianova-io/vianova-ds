@@ -61,6 +61,10 @@ export type ColorizeField = {
 
 export type ColorizeCategory = {
   value: string;
+  /** Shown instead of `value`. Category values are raw cell contents --
+   *  `motorway_link`, `HGV_3` -- and the panel names fields by their label for
+   *  the same reason. The map still matches on `value`. */
+  label?: string;
   color: string;
 };
 
@@ -104,14 +108,18 @@ export function ColorizePanel({
   opacity: controlledOpacity,
   onOpacityChange,
   presetName = "Spectrum",
+  presetCustom = false,
   presetColors,
   onBrowsePresets,
+  browsePresetsId,
+  presetsOpen,
   stops: controlledStops,
   onStopsChange,
   onApply,
   onCancel,
   onBack,
   onClose,
+  showHeader = true,
   className,
   ...props
 }: Omit<React.ComponentProps<"div">, "onChange"> & {
@@ -138,16 +146,42 @@ export function ColorizePanel({
   opacity?: number;
   onOpacityChange?: (opacity: number) => void;
   presetName?: string;
+  /**
+   * Marks the ramp as edited away from the named preset.
+   *
+   * Only the caller can know: the panel is handed a list of stops and has no
+   * idea whether they still match the preset whose name it is showing. It used
+   * to hardcode both -- the name "Greys" and an unconditional Custom badge --
+   * which meant the row described the component's own defaults rather than the
+   * layer, and said so even when nothing had been touched.
+   */
+  presetCustom?: boolean;
   presetColors?: string[];
   onBrowsePresets?: () => void;
+  /** Names the Preset control, so a stepper step driven by `onBrowsePresets`
+   *  can return focus to it -- which it has to do docked, where closing the
+   *  step unmounts the panel the focus came from. */
+  browsePresetsId?: string;
+  /** Whether the preset browser this opens is showing. Makes the control a
+   *  disclosure rather than an unlabelled jump. */
+  presetsOpen?: boolean;
   stops?: ColorStop[];
   onStopsChange?: (stops: ColorStop[]) => void;
+  /** Supplying either one gives the numeric body a Cancel/Apply footer. Omit
+   *  both -- the default -- for a panel wired live to the map. */
   onApply?: (stops: ColorStop[]) => void;
   onCancel?: () => void;
   /** @deprecated Back is the stepper's job. Beside its parent there is nothing
    *  to go back to, and docked the stepper draws its own. */
   onBack?: () => void;
   onClose?: () => void;
+  /**
+   * Set false when something else already titles the panel -- a PanelStep,
+   * which draws a header with the step's name and its own Close, and docked
+   * draws the Back control too. Two headers with two Close buttons is what
+   * nesting this inside a step otherwise gives you.
+   */
+  showHeader?: boolean;
 }) {
   const [internalStops, setInternalStops] = React.useState(DEFAULT_STOPS);
   const stops = controlledStops ?? internalStops;
@@ -158,8 +192,7 @@ export function ColorizePanel({
     metric ?? firstField,
   );
   const field = controlledField ?? internalField;
-  const fieldType =
-    fields.find((f) => f.name === field)?.type ?? "number";
+  const fieldType = fields.find((f) => f.name === field)?.type ?? "number";
   const isCategorical = fieldType === "string";
 
   const [internalOpacity, setInternalOpacity] = React.useState(100);
@@ -238,7 +271,9 @@ export function ColorizePanel({
       // what the product ships, and it leaves a screen reader user unable to
       // tell which value they are about to recolour.
       aria-label={`Choose color for ${label}`}
-      onClick={value === undefined ? undefined : () => onCategorySelect?.(value)}
+      onClick={
+        value === undefined ? undefined : () => onCategorySelect?.(value)
+      }
       className="size-5 shrink-0 rounded-sm border border-border/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
       style={{ backgroundColor: color }}
     />
@@ -254,32 +289,36 @@ export function ColorizePanel({
       )}
       {...props}
     >
-      <header className="flex items-center gap-2 px-3 py-2.5">
-        {onBack ? (
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label="Back"
-            onClick={onBack}
-          >
-            <ChevronLeft />
-          </Button>
-        ) : null}
-        <span className="min-w-0 truncate text-sm">
-          <span className="font-semibold">Colorize</span>
-          <span className="text-muted-foreground"> · {layerName}</span>
-        </span>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label="Close"
-          className="ml-auto"
-          onClick={onClose}
-        >
-          <X />
-        </Button>
-      </header>
-      <Separator />
+      {showHeader ? (
+        <>
+          <header className="flex items-center gap-2 px-3 py-2.5">
+            {onBack ? (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Back"
+                onClick={onBack}
+              >
+                <ChevronLeft />
+              </Button>
+            ) : null}
+            <span className="min-w-0 truncate text-sm">
+              <span className="font-semibold">Colorize</span>
+              <span className="text-muted-foreground"> · {layerName}</span>
+            </span>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Close"
+              className="ml-auto"
+              onClick={onClose}
+            >
+              <X />
+            </Button>
+          </header>
+          <Separator />
+        </>
+      ) : null}
 
       <div className="space-y-3 p-3">
         <div className="space-y-1.5">
@@ -316,11 +355,16 @@ export function ColorizePanel({
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label>Preset</Label>
-            {isCategorical ? null : <Badge variant="secondary">Custom</Badge>}
+            {!isCategorical && presetCustom ? (
+              <Badge variant="secondary">Custom</Badge>
+            ) : null}
           </div>
           <button
             type="button"
+            id={browsePresetsId}
             aria-label="Preset"
+            aria-haspopup={onBrowsePresets ? "dialog" : undefined}
+            aria-expanded={onBrowsePresets ? Boolean(presetsOpen) : undefined}
             onClick={onBrowsePresets}
             className="flex h-9 w-full items-center gap-3 rounded-md border border-input px-2 text-sm transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
           >
@@ -333,7 +377,7 @@ export function ColorizePanel({
                 style={{ background: stopsToGradient(stops) }}
               />
             )}
-            <span className="truncate">{isCategorical ? presetName : "Greys"}</span>
+            <span className="truncate">{presetName}</span>
             <span className="ml-auto flex shrink-0 items-center gap-0.5 text-muted-foreground">
               Browse
               <ChevronRight className="size-3.5" />
@@ -387,8 +431,13 @@ export function ColorizePanel({
                 ) : null}
                 {shown.map((c) => (
                   <div key={c.value} className="flex h-9 items-center gap-3">
-                    {swatch(c.color, c.value, c.value)}
-                    <span className="truncate text-sm">{c.value}</span>
+                    {swatch(c.color, c.label ?? c.value, c.value)}
+                    <span
+                      className="truncate text-sm"
+                      title={c.label ?? c.value}
+                    >
+                      {c.label ?? c.value}
+                    </span>
                   </div>
                 ))}
                 {total > shown.length ? (
@@ -442,7 +491,12 @@ export function ColorizePanel({
           <div className="space-y-2 p-3">
             <div className="flex items-center justify-between">
               <Label>Stops</Label>
-              <Button variant="ghost" size="xs" className="gap-1" onClick={addStop}>
+              <Button
+                variant="ghost"
+                size="xs"
+                className="gap-1"
+                onClick={addStop}
+              >
                 <Plus className="size-3.5" />
                 Add stop
               </Button>
@@ -454,14 +508,22 @@ export function ColorizePanel({
               onChange={setStops}
             />
           </div>
-          <Separator />
-
-          <footer className="flex items-center justify-end gap-2 p-3">
-            <Button variant="outline" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Button onClick={() => onApply?.(stops)}>Apply</Button>
-          </footer>
+          {/* Only when the caller asked to gate the change. Wired live -- the
+              map restyling as you drag a stop -- Apply has nothing to apply
+              and Cancel nothing to revert, and the categorical branch has
+              never had a footer, so rendering one here made the two bodies
+              disagree about whether an edit was already in effect. */}
+          {onApply || onCancel ? (
+            <>
+              <Separator />
+              <footer className="flex items-center justify-end gap-2 p-3">
+                <Button variant="outline" onClick={onCancel}>
+                  Cancel
+                </Button>
+                <Button onClick={() => onApply?.(stops)}>Apply</Button>
+              </footer>
+            </>
+          ) : null}
         </>
       )}
     </div>
