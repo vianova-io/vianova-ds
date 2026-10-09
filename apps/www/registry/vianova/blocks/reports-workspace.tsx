@@ -2327,6 +2327,43 @@ const cellSpan = (r: Rect) => ({
   gridRow: `${r.y + 1} / span ${r.h}`,
 });
 
+/**
+ * The cells the landing outline can cover while the picker is open: the drawn
+ * area, or the union of where each library chart would land from that cell.
+ */
+function pickerReach(target: Target, layouts: Rect[]): Rect {
+  if (target.drawn) return target.rect;
+  let r = target.rect;
+  for (const t of LIBRARY) {
+    const room = roomAt(target.rect.x, target.rect.y, t.cells, layouts);
+    if (!room) continue;
+    const x = Math.min(r.x, room.x);
+    const y = Math.min(r.y, room.y);
+    r = {
+      x,
+      y,
+      w: Math.max(r.x + r.w, room.x + room.w) - x,
+      h: Math.max(r.y + r.h, room.y + room.h) - y,
+    };
+  }
+  return r;
+}
+
+/** The picker's width plus its offset, in pixels. */
+const PICKER_PX = 416 + 10;
+
+/**
+ * Beside the reach when the canvas has room for the picker there, and below
+ * it otherwise -- flipping above when the page runs out -- so the outline stays
+ * in sight whichever chart is pointed at.
+ */
+function sideFor(reach: Rect, width: number, colPx: number) {
+  const step = colPx + GAP_PX;
+  if (width - (reach.x + reach.w) * step >= PICKER_PX) return "right";
+  if (reach.x * step >= PICKER_PX) return "left";
+  return "bottom";
+}
+
 type Placement = { spec: WidgetSpec; cells: { w: number; h: number } };
 
 const sameRect = (a: Rect, b: Rect) =>
@@ -2368,7 +2405,7 @@ function ChartPicker({
     (t) => type === "all" || typeOf(t.spec) === type,
   );
   return (
-    <div className="flex max-h-[min(30rem,70svh)] flex-col gap-2">
+    <div className="flex max-h-[min(30rem,70svh,max(16rem,var(--picker-max,30rem)))] flex-col gap-2">
       <div
         role="radiogroup"
         aria-label="Chart type"
@@ -2751,6 +2788,11 @@ function ReportCanvas({
     hover && !target && !draw && !moving && !taken(hover.x, hover.y);
   const hoverRect = showHover ? footprint(hover, hoverKind) : null;
   const landing = previewRect ?? target?.rect ?? null;
+  // Every cell the outline could cover while charts are pointed at. The picker
+  // opens beside this, not beside the cell, so it never hides where a chart
+  // lands; and since it is fixed, the picker does not move under the pointer.
+  const reach = target ? pickerReach(target, layouts) : null;
+  const pickerSide = reach ? sideFor(reach, width, colPx) : "bottom";
 
   const rglLayout: Layout = widgets.map((w) => {
     const min = minCells(w);
@@ -2940,20 +2982,12 @@ function ReportCanvas({
               className="border-primary bg-primary/10 pointer-events-none z-10 rounded-xl border-2 border-dashed transition-all duration-200"
             />
           ) : null}
-          {/* The picker hangs off the cell it was opened from, not off the
-              outline: the outline grows as charts are pointed at, and a
-              popover that moved with it would slide out from under the
-              pointer and undo the preview it was showing. */}
-          {target ? (
+          {reach ? (
             <div
               ref={anchorRef}
               aria-hidden
-              style={cellSpan(
-                target.drawn
-                  ? target.rect
-                  : { x: target.rect.x, y: target.rect.y, w: 1, h: 1 },
-              )}
-              className="pointer-events-none"
+              style={cellSpan(reach)}
+              className="pointer-events-none scroll-my-4"
             />
           ) : null}
         </div>
@@ -3054,10 +3088,10 @@ function ReportCanvas({
       >
         <PopoverContent
           anchor={anchorRef}
-          side="right"
+          side={pickerSide}
           align="start"
           sideOffset={10}
-          className="w-[26rem] max-w-[calc(100vw-2rem)] p-3"
+          className="w-[26rem] max-w-[calc(100vw-2rem)] p-3 [--picker-max:calc(var(--available-height)-4rem)]"
         >
           {target?.mode === "choose" ? (
             <div className="space-y-2">
