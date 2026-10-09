@@ -14,7 +14,9 @@ import {
   Hash,
   ImageOff,
   ImagePlus,
+  LayoutGrid,
   Link2,
+  List as ListIcon,
   MapPin,
   Scale,
   Search,
@@ -77,6 +79,10 @@ import {
   TableRow,
 } from "@/registry/vianova/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/registry/vianova/ui/tabs";
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/registry/vianova/ui/toggle-group";
 import { Textarea } from "@/registry/vianova/ui/textarea";
 import { ConfirmDialog } from "@/registry/vianova/patterns/confirm-dialog";
 import { CategoryBadge } from "@/registry/vianova/product/category-badge";
@@ -115,6 +121,8 @@ import {
   ringOf,
   type SampleFeed,
 } from "@/registry/vianova/lib/sample-datasets";
+import { useColorScheme } from "@/registry/vianova/hooks/use-color-scheme";
+import { resolveCssColor } from "@/registry/vianova/lib/css-color";
 import { cn } from "@/registry/vianova/lib/utils";
 
 /* -------------------------------------------------------------------------- */
@@ -432,23 +440,30 @@ function DataPlot({
 /* Map thumbnails                                                              */
 /* -------------------------------------------------------------------------- */
 
-const THUMB_KEY = "vianova:dataset-thumb:v1:";
+type Scheme = "light" | "dark";
+/** v2: one picture per theme. v1 held a single picture of whichever theme was showing. */
+const THUMB_KEY = "vianova:dataset-thumb:v2:";
 const THUMB_WIDTH = 360;
 /** A card's picture is a wide, short strip; the map is taller, so its middle is kept. */
 const THUMB_HEIGHT = 120;
 
-/** The last picture of this dataset's map, as a data URL, if there is one. */
-function readThumb(dataset: Dataset): string | null {
+/** The last picture of this dataset's map in a theme, as a data URL, if there is one. */
+function readThumb(dataset: Dataset, scheme: Scheme): string | null {
   try {
-    return window.localStorage.getItem(THUMB_KEY + storageKeyOf(dataset));
+    return window.localStorage.getItem(
+      `${THUMB_KEY}${scheme}:${storageKeyOf(dataset)}`,
+    );
   } catch {
     return null;
   }
 }
 
-function writeThumb(dataset: Dataset, url: string) {
+function writeThumb(dataset: Dataset, scheme: Scheme, url: string) {
   try {
-    window.localStorage.setItem(THUMB_KEY + storageKeyOf(dataset), url);
+    window.localStorage.setItem(
+      `${THUMB_KEY}${scheme}:${storageKeyOf(dataset)}`,
+      url,
+    );
   } catch {
     /* storage is full or blocked: the card keeps its drawn stand-in */
   }
@@ -458,8 +473,10 @@ function writeThumb(dataset: Dataset, url: string) {
  * Keeps the dataset's card thumbnail up to date with what its map shows.
  *
  * Whenever the map has settled after the reader moved it, or changed a colour
- * or logo, it takes a small picture of itself. The list then shows the map as
- * it was last seen, not a drawing of one.
+ * or logo, it takes a small picture of itself, filed under the theme it is
+ * drawn in. The list then shows the map as it was last seen, not a drawing of
+ * one. The detail page runs a second, hidden map in the other theme to take
+ * that theme's picture, so the list has one for each.
  *
  * A WebGL canvas can only be read in the same task that drew it, so the picture
  * is taken from inside a render forced for the purpose rather than at an idle
@@ -468,12 +485,20 @@ function writeThumb(dataset: Dataset, url: string) {
 function useMapThumbnail(
   map: MapLibreMap | null,
   dataset: Dataset,
+  scheme: Scheme | null,
   layerId: string,
   stale: unknown,
 ) {
   const datasetRef = React.useRef(dataset);
   datasetRef.current = dataset;
+  const schemeRef = React.useRef(scheme);
+  schemeRef.current = scheme;
   const dirty = React.useRef(true);
+  // A map told to change theme swaps its style a moment later. Until the new
+  // style has loaded it is still painting the old theme, and a picture taken
+  // then would be filed under the wrong one.
+  const awaitingStyle = React.useRef(false);
+  const lastScheme = React.useRef(scheme);
 
   // A change of colours, logos or points means the picture is out of date.
   React.useEffect(() => {
@@ -481,13 +506,34 @@ function useMapThumbnail(
   }, [stale]);
 
   React.useEffect(() => {
+    if (lastScheme.current === scheme) return;
+    // null to a theme is the page finding out which one it is, not a change:
+    // the map was created in it, and no style swap is coming.
+    const changed = lastScheme.current !== null;
+    lastScheme.current = scheme;
+    if (!changed) return;
+    awaitingStyle.current = true;
+    dirty.current = true;
+  }, [scheme]);
+
+  React.useEffect(() => {
     if (!map) return;
     const markDirty = () => {
       dirty.current = true;
     };
+    const onStyle = () => {
+      awaitingStyle.current = false;
+      dirty.current = true;
+    };
     const onIdle = () => {
       // Idle can arrive before the layer has been built; wait for the next one.
-      if (!dirty.current || !map.getLayer(layerId)) return;
+      if (
+        !dirty.current ||
+        awaitingStyle.current ||
+        !schemeRef.current ||
+        !map.getLayer(layerId)
+      )
+        return;
       dirty.current = false;
       map.once("render", () => {
         try {
@@ -513,7 +559,11 @@ function useMapThumbnail(
               THUMB_WIDTH,
               THUMB_HEIGHT,
             );
-          writeThumb(datasetRef.current, out.toDataURL("image/jpeg", 0.72));
+          writeThumb(
+            datasetRef.current,
+            schemeRef.current!,
+            out.toDataURL("image/jpeg", 0.72),
+          );
         } catch {
           /* a canvas the browser will not let us read */
         }
@@ -521,11 +571,11 @@ function useMapThumbnail(
       map.triggerRepaint();
     };
     map.on("moveend", markDirty);
-    map.on("style.load", markDirty);
+    map.on("style.load", onStyle);
     map.on("idle", onIdle);
     return () => {
       map.off("moveend", markDirty);
-      map.off("style.load", markDirty);
+      map.off("style.load", onStyle);
       map.off("idle", onIdle);
     };
   }, [map, layerId]);
@@ -535,6 +585,54 @@ function useMapThumbnail(
 /* Dataset card                                                                */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * What a dataset looks like, at whatever size its card or row gives it: the last
+ * photograph of its map if there is one, else its own geometry drawn small, else
+ * a street-grid stand-in. A stream with no rows has nothing to draw, which is
+ * the one case the platform shows its broken-image placeholder for.
+ */
+function DatasetPicture({
+  dataset,
+  className,
+}: {
+  dataset: Dataset;
+  className?: string;
+}) {
+  // Read after mount: the server has no localStorage, so reading it while
+  // hydrating would put the two out of step.
+  const scheme = useColorScheme();
+  const [thumb, setThumb] = React.useState<string | null>(null);
+  React.useEffect(
+    () => setThumb(scheme ? readThumb(dataset, scheme) : null),
+    [dataset, scheme],
+  );
+
+  if (dataset.rows === 0)
+    return (
+      <div
+        className={cn(
+          "bg-muted text-muted-foreground flex items-center justify-center",
+          className,
+        )}
+      >
+        <ImageOff className="size-5" aria-hidden />
+        <span className="sr-only">No preview available</span>
+      </div>
+    );
+  if (thumb)
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={thumb}
+        alt=""
+        className={cn("bg-muted w-full object-cover", className)}
+      />
+    );
+  if (dataset.mapPoints || dataset.mapShapes)
+    return <DataPlot dataset={dataset} className={className} />;
+  return <Thumbnail seed={dataset.seed} className={className} />;
+}
+
 function DatasetCard({
   dataset,
   onOpen,
@@ -542,14 +640,6 @@ function DatasetCard({
   dataset: Dataset;
   onOpen: () => void;
 }) {
-  // A VIP stream with no rows yet has nothing to draw, which is the one case
-  // the platform shows its broken-image placeholder for.
-  const noPreview = dataset.rows === 0;
-  // Read after mount: the server has no localStorage, so reading it while
-  // hydrating would put the two out of step.
-  const [thumb, setThumb] = React.useState<string | null>(null);
-  React.useEffect(() => setThumb(readThumb(dataset)), [dataset]);
-
   return (
     <button
       type="button"
@@ -557,23 +647,7 @@ function DatasetCard({
       className="group bg-card text-card-foreground focus-visible:ring-ring flex w-full min-w-0 flex-col overflow-hidden rounded-xl border text-left transition-colors hover:border-foreground/25 focus-visible:ring-2 focus-visible:outline-none"
     >
       <div className="relative">
-        {noPreview ? (
-          <div className="bg-muted text-muted-foreground flex h-24 items-center justify-center">
-            <ImageOff className="size-5" aria-hidden />
-            <span className="sr-only">No preview available</span>
-          </div>
-        ) : thumb ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={thumb}
-            alt=""
-            className="bg-muted h-24 w-full object-cover"
-          />
-        ) : dataset.mapPoints || dataset.mapShapes ? (
-          <DataPlot dataset={dataset} className="h-24" />
-        ) : (
-          <Thumbnail seed={dataset.seed} className="h-24" />
-        )}
+        <DatasetPicture dataset={dataset} className="h-24" />
         {dataset.vip ? (
           <Badge variant="secondary" className="absolute top-2 left-2">
             VIP
@@ -606,6 +680,71 @@ function DatasetCard({
         </p>
       </div>
     </button>
+  );
+}
+
+/** The same dataset as one line: a small picture, its name and what it is, and when it was added. */
+function DatasetRow({
+  dataset,
+  onOpen,
+}: {
+  dataset: Dataset;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group bg-card text-card-foreground focus-visible:ring-ring flex w-full min-w-0 items-center gap-3 rounded-xl border p-2 text-left transition-colors hover:border-foreground/25 focus-visible:ring-2 focus-visible:outline-none"
+    >
+      <DatasetPicture
+        dataset={dataset}
+        className="h-12 w-20 shrink-0 rounded-md"
+      />
+      <div className="min-w-0 flex-1">
+        <h3 className="truncate text-sm font-medium">{dataset.title}</h3>
+        {dataset.description ? (
+          <p className="text-muted-foreground truncate text-xs">
+            {dataset.description}
+          </p>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {dataset.vip ? <Badge variant="secondary">VIP</Badge> : null}
+        {dataset.aiGenerated ? (
+          <Badge variant="outline" className="hidden sm:inline-flex">
+            <Sparkles data-icon="inline-start" />
+            AI-generated
+          </Badge>
+        ) : null}
+        {dataset.status ? (
+          <Badge
+            variant={dataset.status === "active" ? "default" : "secondary"}
+            className="capitalize"
+          >
+            {dataset.status}
+          </Badge>
+        ) : null}
+        <span className="text-muted-foreground hidden pr-2 text-xs whitespace-nowrap md:inline">
+          {dateTimeFormat.format(new Date(dataset.uploadedAt))}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function RowSkeleton() {
+  return (
+    <div
+      className="bg-card flex items-center gap-3 rounded-xl border p-2"
+      aria-hidden
+    >
+      <Skeleton className="h-12 w-20 shrink-0 rounded-md" />
+      <div className="flex-1 space-y-2">
+        <Skeleton className="h-4 w-1/3" />
+        <Skeleton className="h-3 w-2/3" />
+      </div>
+    </div>
   );
 }
 
@@ -709,7 +848,7 @@ function CategoryStylePicker({
             <div className="flex flex-col items-center gap-1.5">
               <span
                 aria-hidden
-                className="size-3.5 rounded-full border border-white"
+                className="border-border size-3.5 rounded-full border"
                 style={{ backgroundColor: style.color }}
               />
               <span className="text-muted-foreground text-[11px]">
@@ -1298,6 +1437,27 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
   const total = (points?.length ?? 0) + (shapes?.length ?? 0);
   const column = dataset.columns.find((c) => c.name === dataset.mapColumn);
   const [map, setMap] = React.useState<MapLibreMap | null>(null);
+  // The same map drawn in the other theme, out of sight, so both themes get a
+  // thumbnail without the reader having to switch.
+  const [ghost, setGhost] = React.useState<MapLibreMap | null>(null);
+  const scheme = useColorScheme();
+  const otherScheme: Scheme | null =
+    scheme === "dark" ? "light" : scheme === "light" ? "dark" : null;
+  const mapBox = React.useRef<HTMLDivElement>(null);
+  const [size, setSize] = React.useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  React.useEffect(() => {
+    const el = mapBox.current;
+    if (!el) return;
+    const measure = () =>
+      setSize({ width: el.clientWidth, height: el.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [total]);
   const fitted = React.useRef(false);
 
   const values = column?.values ?? [];
@@ -1330,6 +1490,48 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
     styles,
     id: "datahub-shapes",
   });
+  // The hidden map is in the other theme, so its dots take that theme's border.
+  const ghostStroke = React.useMemo(
+    () =>
+      otherScheme
+        ? (resolveCssColor("--border", otherScheme) ?? undefined)
+        : undefined,
+    [otherScheme],
+  );
+  useCategoryPointLayer({
+    map: ghost,
+    enabled: !!points?.length,
+    points: points ?? [],
+    styles,
+    logoZoom,
+    strokeColor: ghostStroke,
+    id: "datahub-points",
+  });
+  useCategoryShapeLayer({
+    map: ghost,
+    enabled: !!shapes?.length,
+    shapes: shapes ?? [],
+    styles,
+    id: "datahub-shapes",
+  });
+
+  // The hidden map looks wherever the visible one does, at the same size, so
+  // the two themes' pictures show the same view.
+  React.useEffect(() => {
+    if (!map || !ghost) return;
+    const follow = () =>
+      ghost.jumpTo({
+        center: map.getCenter(),
+        zoom: map.getZoom(),
+        bearing: map.getBearing(),
+        pitch: map.getPitch(),
+      });
+    follow();
+    map.on("move", follow);
+    return () => {
+      map.off("move", follow);
+    };
+  }, [map, ghost, size]);
 
   // Frame the data once. Re-framing on every style change would throw away
   // wherever the reader had panned to.
@@ -1358,12 +1560,11 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
     );
   }, [map, points, shapes, total]);
 
-  useMapThumbnail(
-    map,
-    dataset,
-    shapes?.length ? "datahub-shapes-fill" : "datahub-points-dots",
-    styles,
-  );
+  const thumbLayer = shapes?.length
+    ? "datahub-shapes-fill"
+    : "datahub-points-dots";
+  useMapThumbnail(map, dataset, scheme, thumbLayer, styles);
+  useMapThumbnail(ghost, dataset, otherScheme, thumbLayer, styles);
 
   const [logosShown, setLogosShown] = React.useState(false);
   React.useEffect(() => {
@@ -1384,7 +1585,24 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
       <h3 className="border-b px-4 py-3 text-sm font-medium">Map</h3>
       {total ? (
         <>
-          <div className="relative h-56 w-full">
+          <div ref={mapBox} className="relative h-56 w-full">
+            {/* Kept out of sight and out of reach: it only exists to be photographed. */}
+            {otherScheme && size ? (
+              <div
+                aria-hidden
+                inert
+                className="pointer-events-none fixed top-0 -left-[9999px]"
+                style={{ width: size.width, height: size.height }}
+              >
+                <MapCanvas
+                  className="absolute inset-0"
+                  workerUrl={WORKER_URL}
+                  colorScheme={otherScheme}
+                  interactive={false}
+                  onStyleReady={setGhost}
+                />
+              </div>
+            ) : null}
             <MapCanvas
               className="absolute inset-0"
               workerUrl={WORKER_URL}
@@ -1577,6 +1795,36 @@ function saveStyles(dataset: Dataset): boolean {
 /* Workspace                                                                   */
 /* -------------------------------------------------------------------------- */
 
+type ListView = "cards" | "list";
+const VIEW_KEY = "vianova:datahub-view:v1";
+
+/**
+ * Whether the list shows cards or rows, remembered in this browser.
+ *
+ * Read after mount, never in the initial state: the server has no localStorage,
+ * so reading it while hydrating would put the two out of step.
+ */
+function useListView() {
+  const [view, setView] = React.useState<ListView>("cards");
+  React.useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(VIEW_KEY);
+      if (saved === "cards" || saved === "list") setView(saved);
+    } catch {
+      /* storage is blocked: the choice lasts until the page is closed */
+    }
+  }, []);
+  const choose = React.useCallback((next: ListView) => {
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      /* as above */
+    }
+  }, []);
+  return [view, choose] as const;
+}
+
 type SortKey = "recent" | "oldest" | "name";
 const SORTS: Record<SortKey, string> = {
   recent: "Most recent",
@@ -1685,6 +1933,7 @@ export function DatahubWorkspace({
   const [section, setSection] = React.useState<Section>("data");
   const [query, setQuery] = React.useState("");
   const [sort, setSort] = React.useState<SortKey>("recent");
+  const [view, setView] = useListView();
   const [regStatus, setRegStatus] = React.useState<
     "active" | "inactive" | "all"
   >("active");
@@ -1886,17 +2135,39 @@ export function DatahubWorkspace({
                 ))}
               </SelectContent>
             </Select>
+            <ToggleGroup
+              variant="outline"
+              value={[view]}
+              // A group lets its last item be switched off; a list has to be one or the other.
+              onValueChange={(next) => next[0] && setView(next[0] as ListView)}
+              aria-label="View"
+            >
+              <ToggleGroupItem value="cards" aria-label="Cards">
+                <LayoutGrid />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="list" aria-label="List">
+                <ListIcon />
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
 
           {status === "loading" ? (
             <div
               role="status"
               aria-label="Loading data"
-              className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+              className={
+                view === "list"
+                  ? "grid gap-2"
+                  : "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+              }
             >
-              {Array.from({ length: 6 }, (_, i) => (
-                <CardSkeleton key={i} />
-              ))}
+              {Array.from({ length: 6 }, (_, i) =>
+                view === "list" ? (
+                  <RowSkeleton key={i} />
+                ) : (
+                  <CardSkeleton key={i} />
+                ),
+              )}
             </div>
           ) : status === "error" ? (
             <Empty className="border">
@@ -1945,10 +2216,20 @@ export function DatahubWorkspace({
               </EmptyContent>
             </Empty>
           ) : (
-            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <ul
+              className={
+                view === "list"
+                  ? "grid gap-2"
+                  : "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+              }
+            >
               {visible.map((d) => (
                 <li key={d.id} className="flex min-w-0">
-                  <DatasetCard dataset={d} onOpen={() => setOpenId(d.id)} />
+                  {view === "list" ? (
+                    <DatasetRow dataset={d} onOpen={() => setOpenId(d.id)} />
+                  ) : (
+                    <DatasetCard dataset={d} onOpen={() => setOpenId(d.id)} />
+                  )}
                 </li>
               ))}
             </ul>

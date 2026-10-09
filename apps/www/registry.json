@@ -175,6 +175,18 @@
       ]
     },
     {
+      "name": "css-color",
+      "type": "registry:lib",
+      "title": "Css Color",
+      "description": "Css Color helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/css-color.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
       "name": "csv",
       "type": "registry:lib",
       "title": "Csv",
@@ -384,6 +396,7 @@
         "@vianova/category-badge",
         "@vianova/category-style",
         "@vianova/confirm-dialog",
+        "@vianova/css-color",
         "@vianova/csv",
         "@vianova/empty",
         "@vianova/inline-edit",
@@ -397,8 +410,10 @@
         "@vianova/table",
         "@vianova/tabs",
         "@vianova/textarea",
+        "@vianova/toggle-group",
         "@vianova/use-category-point-layer",
         "@vianova/use-category-shape-layer",
+        "@vianova/use-color-scheme",
         "@vianova/utils"
       ],
       "files": [

@@ -460,7 +460,12 @@ export async function prepareLogo(file: File, size = LOGO_SIZE): Promise<
  * The badge a map symbol uses: the badge colour as a disc with a white ring, and
  * the logo on it. Drawn once per value, not per feature.
  */
-export async function composeBadge(style: CategoryStyle, size = 64): Promise<ImageData> {
+export async function composeBadge(
+  style: CategoryStyle,
+  size = 64,
+  /** The ring round the disc: the theme's border colour, as the map's dots are outlined. */
+  ringColor = "#ffffff",
+): Promise<ImageData> {
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
@@ -472,7 +477,7 @@ export async function composeBadge(style: CategoryStyle, size = 64): Promise<Ima
 
   ctx.beginPath();
   ctx.arc(r, r, r - 1, 0, Math.PI * 2);
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = ringColor;
   ctx.fill();
 
   ctx.beginPath();

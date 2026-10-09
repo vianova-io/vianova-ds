@@ -7,6 +7,7 @@ import {
   composeBadge,
   type CategoryStyle,
 } from "@/registry/vianova/lib/category-style";
+import { resolveCssColor } from "@/registry/vianova/lib/css-color";
 
 export type CategoryPoint = {
   /** [longitude, latitude] */
@@ -33,6 +34,7 @@ export function useCategoryPointLayer({
   points,
   styles,
   logoZoom,
+  strokeColor,
   id = "category-points",
 }: {
   map: MapLibreMap | null;
@@ -41,6 +43,12 @@ export function useCategoryPointLayer({
   /** Keyed by category value. Keep this referentially stable between renders. */
   styles: Record<string, CategoryStyle>;
   logoZoom: number;
+  /**
+   * The outline round each dot. Defaults to the theme's `--border`, read each
+   * time the layer is built, so it follows a light/dark switch. Pass a colour
+   * for a map that is drawn in a theme other than the one on screen.
+   */
+  strokeColor?: string;
   id?: string;
 }) {
   React.useEffect(() => {
@@ -78,8 +86,12 @@ export function useCategoryPointLayer({
 
     const build = async () => {
       if (!hasStyle()) return;
+      // The dots' outline and the badges' ring are one colour, so a category
+      // looks the same at either zoom. Read now, not once: a theme switch
+      // rebuilds this, and the border is a different colour in the new theme.
+      const stroke = strokeColor ?? resolveCssColor("--border") ?? "#ffffff";
       const badges = await Promise.all(
-        entries.map(async ([value, style]) => [value, await composeBadge(style, 64)] as const),
+        entries.map(async ([value, style]) => [value, await composeBadge(style, 64, stroke)] as const),
       );
       // Superseded while the logos were decoding: a newer build owns the map.
       if (cancelled || !hasStyle()) return;
@@ -117,7 +129,7 @@ export function useCategoryPointLayer({
           // Grows towards the hand-over so the dot and the badge that replaces
           // it are close in size and the switch does not read as a jump.
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3, Math.max(9, logoZoom), 9],
-          "circle-stroke-color": "#ffffff",
+          "circle-stroke-color": stroke,
           "circle-stroke-width": 1.25,
         },
       });
@@ -155,5 +167,5 @@ export function useCategoryPointLayer({
       map.off("style.load", rebuild);
       remove();
     };
-  }, [map, enabled, points, styles, logoZoom, id]);
+  }, [map, enabled, points, styles, logoZoom, strokeColor, id]);
 }

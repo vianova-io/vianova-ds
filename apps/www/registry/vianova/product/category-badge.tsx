@@ -3,8 +3,9 @@ import * as React from "react";
 import { cn } from "@/registry/vianova/lib/utils";
 
 /**
- * A category as a map draws it close up: its logo on a disc, inside a white ring
- * so it reads on any basemap.
+ * A category as a map draws it close up: its logo on a disc, inside a ring in the
+ * theme's border colour -- the same colour the map outlines its dots with, so a
+ * category is one thing at every zoom.
  *
  * One component so the places that show a category agree -- the picker that sets
  * its logo, the legend that explains it, and the map symbol it is drawn as all
@@ -41,7 +42,7 @@ export function CategoryBadge({
     <span
       aria-hidden
       data-slot="category-badge"
-      className={cn("inline-flex shrink-0 rounded-full bg-white shadow-sm", className)}
+      className={cn("bg-border inline-flex shrink-0 rounded-full", className)}
       // The ring is worked out from the badge's own size. A percentage padding
       // would not do: it is a share of the PARENT's width, so the same badge is
       // fine in a narrow box and swallowed whole by a wide row.
