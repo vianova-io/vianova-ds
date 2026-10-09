@@ -97,6 +97,7 @@ import {
   type CategoryStyle,
 } from "@/registry/vianova/lib/category-style";
 import { inferColumns, parseCsv, type ColumnType } from "@/registry/vianova/lib/csv";
+import { useColorScheme } from "@/registry/vianova/hooks/use-color-scheme";
 import { cn } from "@/registry/vianova/lib/utils";
 
 /* -------------------------------------------------------------------------- */
@@ -515,23 +516,25 @@ function DataPlot({ dataset, className }: { dataset: Dataset; className?: string
 /* Map thumbnails                                                              */
 /* -------------------------------------------------------------------------- */
 
-const THUMB_KEY = "vianova:dataset-thumb:v1:";
+type Scheme = "light" | "dark";
+/** v2: one picture per theme. v1 held a single picture of whichever theme was showing. */
+const THUMB_KEY = "vianova:dataset-thumb:v2:";
 const THUMB_WIDTH = 360;
 /** A card's picture is a wide, short strip; the map is taller, so its middle is kept. */
 const THUMB_HEIGHT = 120;
 
-/** The last picture of this dataset's map, as a data URL, if there is one. */
-function readThumb(dataset: Dataset): string | null {
+/** The last picture of this dataset's map in a theme, as a data URL, if there is one. */
+function readThumb(dataset: Dataset, scheme: Scheme): string | null {
   try {
-    return window.localStorage.getItem(THUMB_KEY + storageKeyOf(dataset));
+    return window.localStorage.getItem(`${THUMB_KEY}${scheme}:${storageKeyOf(dataset)}`);
   } catch {
     return null;
   }
 }
 
-function writeThumb(dataset: Dataset, url: string) {
+function writeThumb(dataset: Dataset, scheme: Scheme, url: string) {
   try {
-    window.localStorage.setItem(THUMB_KEY + storageKeyOf(dataset), url);
+    window.localStorage.setItem(`${THUMB_KEY}${scheme}:${storageKeyOf(dataset)}`, url);
   } catch {
     /* storage is full or blocked: the card keeps its drawn stand-in */
   }
@@ -541,17 +544,32 @@ function writeThumb(dataset: Dataset, url: string) {
  * Keeps the dataset's card thumbnail up to date with what its map shows.
  *
  * Whenever the map has settled after the reader moved it, or changed a colour
- * or logo, it takes a small picture of itself. The list then shows the map as
- * it was last seen, not a drawing of one.
+ * or logo, it takes a small picture of itself, filed under the theme it is
+ * drawn in. The list then shows the map as it was last seen, not a drawing of
+ * one. The detail page runs a second, hidden map in the other theme to take
+ * that theme's picture, so the list has one for each.
  *
  * A WebGL canvas can only be read in the same task that drew it, so the picture
  * is taken from inside a render forced for the purpose rather than at an idle
  * moment, when the buffer has already been cleared.
  */
-function useMapThumbnail(map: MapLibreMap | null, dataset: Dataset, layerId: string, stale: unknown) {
+function useMapThumbnail(
+  map: MapLibreMap | null,
+  dataset: Dataset,
+  scheme: Scheme | null,
+  layerId: string,
+  stale: unknown,
+) {
   const datasetRef = React.useRef(dataset);
   datasetRef.current = dataset;
+  const schemeRef = React.useRef(scheme);
+  schemeRef.current = scheme;
   const dirty = React.useRef(true);
+  // A map told to change theme swaps its style a moment later. Until the new
+  // style has loaded it is still painting the old theme, and a picture taken
+  // then would be filed under the wrong one.
+  const awaitingStyle = React.useRef(false);
+  const lastScheme = React.useRef(scheme);
 
   // A change of colours, logos or points means the picture is out of date.
   React.useEffect(() => {
@@ -559,13 +577,28 @@ function useMapThumbnail(map: MapLibreMap | null, dataset: Dataset, layerId: str
   }, [stale]);
 
   React.useEffect(() => {
+    if (lastScheme.current === scheme) return;
+    // null to a theme is the page finding out which one it is, not a change:
+    // the map was created in it, and no style swap is coming.
+    const changed = lastScheme.current !== null;
+    lastScheme.current = scheme;
+    if (!changed) return;
+    awaitingStyle.current = true;
+    dirty.current = true;
+  }, [scheme]);
+
+  React.useEffect(() => {
     if (!map) return;
     const markDirty = () => {
       dirty.current = true;
     };
+    const onStyle = () => {
+      awaitingStyle.current = false;
+      dirty.current = true;
+    };
     const onIdle = () => {
       // Idle can arrive before the layer has been built; wait for the next one.
-      if (!dirty.current || !map.getLayer(layerId)) return;
+      if (!dirty.current || awaitingStyle.current || !schemeRef.current || !map.getLayer(layerId)) return;
       dirty.current = false;
       map.once("render", () => {
         try {
@@ -588,7 +621,7 @@ function useMapThumbnail(map: MapLibreMap | null, dataset: Dataset, layerId: str
               THUMB_WIDTH,
               THUMB_HEIGHT,
             );
-          writeThumb(datasetRef.current, out.toDataURL("image/jpeg", 0.72));
+          writeThumb(datasetRef.current, schemeRef.current!, out.toDataURL("image/jpeg", 0.72));
         } catch {
           /* a canvas the browser will not let us read */
         }
@@ -596,11 +629,11 @@ function useMapThumbnail(map: MapLibreMap | null, dataset: Dataset, layerId: str
       map.triggerRepaint();
     };
     map.on("moveend", markDirty);
-    map.on("style.load", markDirty);
+    map.on("style.load", onStyle);
     map.on("idle", onIdle);
     return () => {
       map.off("moveend", markDirty);
-      map.off("style.load", markDirty);
+      map.off("style.load", onStyle);
       map.off("idle", onIdle);
     };
   }, [map, layerId]);
@@ -619,8 +652,9 @@ function useMapThumbnail(map: MapLibreMap | null, dataset: Dataset, layerId: str
 function DatasetPicture({ dataset, className }: { dataset: Dataset; className?: string }) {
   // Read after mount: the server has no localStorage, so reading it while
   // hydrating would put the two out of step.
+  const scheme = useColorScheme();
   const [thumb, setThumb] = React.useState<string | null>(null);
-  React.useEffect(() => setThumb(readThumb(dataset)), [dataset]);
+  React.useEffect(() => setThumb(scheme ? readThumb(dataset, scheme) : null), [dataset, scheme]);
 
   if (dataset.rows === 0)
     return (
@@ -1340,6 +1374,22 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
   const total = (points?.length ?? 0) + (shapes?.length ?? 0);
   const column = dataset.columns.find((c) => c.name === dataset.mapColumn);
   const [map, setMap] = React.useState<MapLibreMap | null>(null);
+  // The same map drawn in the other theme, out of sight, so both themes get a
+  // thumbnail without the reader having to switch.
+  const [ghost, setGhost] = React.useState<MapLibreMap | null>(null);
+  const scheme = useColorScheme();
+  const otherScheme: Scheme | null = scheme === "dark" ? "light" : scheme === "light" ? "dark" : null;
+  const mapBox = React.useRef<HTMLDivElement>(null);
+  const [size, setSize] = React.useState<{ width: number; height: number } | null>(null);
+  React.useEffect(() => {
+    const el = mapBox.current;
+    if (!el) return;
+    const measure = () => setSize({ width: el.clientWidth, height: el.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [total]);
   const fitted = React.useRef(false);
 
   const values = column?.values ?? [];
@@ -1368,6 +1418,39 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
     styles,
     id: "datahub-shapes",
   });
+  useCategoryPointLayer({
+    map: ghost,
+    enabled: !!points?.length,
+    points: points ?? [],
+    styles,
+    logoZoom,
+    id: "datahub-points",
+  });
+  useCategoryShapeLayer({
+    map: ghost,
+    enabled: !!shapes?.length,
+    shapes: shapes ?? [],
+    styles,
+    id: "datahub-shapes",
+  });
+
+  // The hidden map looks wherever the visible one does, at the same size, so
+  // the two themes' pictures show the same view.
+  React.useEffect(() => {
+    if (!map || !ghost) return;
+    const follow = () =>
+      ghost.jumpTo({
+        center: map.getCenter(),
+        zoom: map.getZoom(),
+        bearing: map.getBearing(),
+        pitch: map.getPitch(),
+      });
+    follow();
+    map.on("move", follow);
+    return () => {
+      map.off("move", follow);
+    };
+  }, [map, ghost, size]);
 
   // Frame the data once. Re-framing on every style change would throw away
   // wherever the reader had panned to.
@@ -1386,7 +1469,9 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
     map.fitBounds([[w, s], [e, n]], { padding: 24, duration: 0, maxZoom: 15 });
   }, [map, points, shapes, total]);
 
-  useMapThumbnail(map, dataset, shapes?.length ? "datahub-shapes-fill" : "datahub-points-dots", styles);
+  const thumbLayer = shapes?.length ? "datahub-shapes-fill" : "datahub-points-dots";
+  useMapThumbnail(map, dataset, scheme, thumbLayer, styles);
+  useMapThumbnail(ghost, dataset, otherScheme, thumbLayer, styles);
 
   const [logosShown, setLogosShown] = React.useState(false);
   React.useEffect(() => {
@@ -1404,7 +1489,24 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
       <h3 className="border-b px-4 py-3 text-sm font-medium">Map</h3>
       {total ? (
         <>
-          <div className="relative h-56 w-full">
+          <div ref={mapBox} className="relative h-56 w-full">
+            {/* Kept out of sight and out of reach: it only exists to be photographed. */}
+            {otherScheme && size ? (
+              <div
+                aria-hidden
+                inert
+                className="pointer-events-none fixed top-0 -left-[9999px]"
+                style={{ width: size.width, height: size.height }}
+              >
+                <MapCanvas
+                  className="absolute inset-0"
+                  workerUrl={WORKER_URL}
+                  colorScheme={otherScheme}
+                  interactive={false}
+                  onStyleReady={setGhost}
+                />
+              </div>
+            ) : null}
             <MapCanvas
               className="absolute inset-0"
               workerUrl={WORKER_URL}

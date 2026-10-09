@@ -354,6 +354,7 @@
         "@vianova/toggle-group",
         "@vianova/use-category-point-layer",
         "@vianova/use-category-shape-layer",
+        "@vianova/use-color-scheme",
         "@vianova/utils"
       ],
       "files": [
