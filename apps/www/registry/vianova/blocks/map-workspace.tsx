@@ -102,6 +102,7 @@ import { compileFilter } from "@/registry/vianova/lib/filter-eval";
 import {
   DEFAULT_LOGO_ZOOM,
   STYLE_STORAGE_KEY,
+  badgeColor,
   readStyleSet,
   resolveStyles,
   type CategoryStyleSet,
@@ -761,6 +762,21 @@ export function MapWorkspace({
     [trips, savedStyles],
   );
   const logoZoom = savedStyles?.logoZoom ?? DEFAULT_LOGO_ZOOM;
+
+  // Whether the map is drawing logos right now. The layer swaps dots for logos
+  // at logoZoom by minzoom/maxzoom, which MapLibre applies itself, so the legend
+  // has to be told the same fact. Only a boolean is kept: a zoom value would
+  // re-render the whole workspace on every frame of a pinch.
+  const [logosShown, setLogosShown] = React.useState(false);
+  React.useEffect(() => {
+    if (!map) return;
+    const update = () => setLogosShown(map.getZoom() >= logoZoom);
+    update();
+    map.on("zoom", update);
+    return () => {
+      map.off("zoom", update);
+    };
+  }, [map, logoZoom]);
 
   useCategoryPointLayer({
     map,
@@ -1705,10 +1721,21 @@ export function MapWorkspace({
                   trips ? (
                     <div className="space-y-1.5">
                       <LegendCategorical
-                        items={trips.providers.map((label) => ({
-                          label,
-                          color: tripStyles[label]?.color ?? "#888888",
-                        }))}
+                        showLogos={logosShown}
+                        items={trips.providers.map((label) => {
+                          const style = tripStyles[label];
+                          return {
+                            label,
+                            color: style?.color ?? "#888888",
+                            logo: style?.logo
+                              ? {
+                                  src: style.logo,
+                                  solid: style.logoKind === "solid",
+                                  background: badgeColor(style),
+                                }
+                              : undefined,
+                          };
+                        })}
                       />
                       <p className="text-muted-foreground text-[11px]">
                         Logos from zoom {logoZoom}

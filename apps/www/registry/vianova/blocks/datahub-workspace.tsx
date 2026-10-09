@@ -70,6 +70,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/registry/vianova/ui/tabs";
 import { Textarea } from "@/registry/vianova/ui/textarea";
 import { ConfirmDialog } from "@/registry/vianova/patterns/confirm-dialog";
+import { CategoryBadge } from "@/registry/vianova/product/category-badge";
 import { InlineEdit } from "@/registry/vianova/patterns/inline-edit";
 import {
   CATEGORY_PALETTE,
@@ -576,46 +577,6 @@ const BADGE_CHOICES = [
 ] as const;
 
 /**
- * A category value as a map draws it close up: its logo on its colour, inside a
- * white ring so it reads on any basemap.
- *
- * The same shape `composeBadge` paints into a map symbol. A solid logo fills the
- * disc and a transparent one sits on the colour at a smaller size, which is the
- * difference the picker's preview exists to show.
- */
-function CategoryBadge({
-  style,
-  size = 24,
-  className,
-}: {
-  style: CategoryStyle;
-  size?: number;
-  className?: string;
-}) {
-  return (
-    <span
-      aria-hidden
-      className={cn("inline-flex shrink-0 rounded-full bg-white p-[8%] shadow-sm", className)}
-      style={{ width: size, height: size }}
-    >
-      <span
-        className="flex size-full items-center justify-center overflow-hidden rounded-full"
-        style={{ backgroundColor: badgeColor(style) }}
-      >
-        {style.logo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={style.logo}
-            alt=""
-            className={style.logoKind === "solid" ? "size-full object-cover" : "size-[64%] object-contain"}
-          />
-        ) : null}
-      </span>
-    </span>
-  );
-}
-
-/**
  * One category value's colour and logo, and how they will look on a map.
  *
  * The colour is the dot a map draws zoomed out. The badge -- the logo on a disc
@@ -664,7 +625,7 @@ function CategoryStylePicker({
           />
         }
       >
-        <CategoryBadge style={style} size={22} />
+        <CategoryBadge color={badgeColor(style)} logo={style.logo} logoKind={style.logoKind} size={22} />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 space-y-4">
         <div className="space-y-1.5">
@@ -679,7 +640,7 @@ function CategoryStylePicker({
               <span className="text-muted-foreground text-[11px]">Below zoom {logoZoom}</span>
             </div>
             <div className="flex flex-col items-center gap-1.5">
-              <CategoryBadge style={style} size={44} />
+              <CategoryBadge color={badgeColor(style)} logo={style.logo} logoKind={style.logoKind} size={44} />
               <span className="text-muted-foreground text-[11px]">From zoom {logoZoom}</span>
             </div>
           </div>

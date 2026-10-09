@@ -305,6 +305,7 @@
         "@vianova/avatar",
         "@vianova/badge",
         "@vianova/button",
+        "@vianova/category-badge",
         "@vianova/category-style",
         "@vianova/confirm-dialog",
         "@vianova/csv",
@@ -2014,6 +2015,27 @@
       }
     },
     {
+      "name": "category-badge",
+      "type": "registry:ui",
+      "title": "Category Badge",
+      "description": "Category Badge — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "registryDependencies": [
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/category-badge.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "cell-renderers",
       "type": "registry:ui",
       "title": "Cell Renderers",
@@ -2375,6 +2397,7 @@
         "Product"
       ],
       "registryDependencies": [
+        "@vianova/category-badge",
         "@vianova/utils"
       ],
       "files": [
