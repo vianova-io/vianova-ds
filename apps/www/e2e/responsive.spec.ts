@@ -392,16 +392,26 @@ test.describe("map-workspace filter popover on a phone", () => {
  * fit 327px and took `scrollWidth` to 487 instead of truncating. The hex is
  * now hidden below `sm` and this is what holds that.
  *
- * `/showcase` is deliberately absent, and it is worth saying why rather than
- * leaving a reader to assume the list is arbitrary: it still overflows from
- * its own content, independently of the header, at 375px (scrollWidth 411)
- * AND at 768px (779), from somewhere inside the wall of live component
- * previews. Every candidate sits inside its own scroller, so it needs a dig
- * rather than a guess. Adding it would mean this guard failed on arrival and
- * taught the next person to skip it.
+ * `/showcase` was held out of this list for two days as "overflows from
+ * somewhere inside the wall of live previews, needs a dig". It did not need a
+ * dig; it needed the dig to be done properly. The wall renders every component
+ * live, `pagination-bar` among them, so it was carrying the SAME unbreakable
+ * 461px controls row that Foundations was -- one bug, two pages, and the
+ * second looked unrelated only because the first had already been explained.
+ * Reverting that component's `flex-wrap` reproduces 411 at 375px and 779 at
+ * 768px on the live page, to the pixel, which is what finally identified it.
+ *
+ * The lesson is in the detector, not the component. Three sweeps reported
+ * "0 offenders" on this page while `html.scrollWidth` was 411 and
+ * `body.scrollWidth` was 375, because the sweep skipped any element under an
+ * `overflow-x` ancestor -- which is right for a normal box and wrong for an
+ * absolutely positioned one, since only an ancestor in its containing-block
+ * chain clips it. A detector that cannot see a whole class of element reports
+ * absence of evidence as evidence of absence.
  */
 const SHELL_ROUTES = [
   "/",
+  "/showcase",
   "/blocks",
   "/blocks/map-workspace",
   "/components/button",
@@ -493,11 +503,17 @@ for (const width of SHELL_WIDTHS) {
             offenders: offenders.slice(0, 5),
             headerLeft: Math.min(...kids.map((k) => k.left)),
             headerRight: Math.max(...kids.map((k) => k.right)),
+            // In DOCUMENT space, not viewport space. getBoundingClientRect is
+            // viewport-relative, and /showcase scrolls itself on load while
+            // its live previews mount -- which made the ribbon read top
+            // -5524 and failed this for a reason that had nothing to do with
+            // where the ribbon is. The six routes that do not self-scroll hid
+            // it.
             ribbon: ribbonBox
               ? {
-                  left: Math.round(ribbonBox.left),
+                  left: Math.round(ribbonBox.left + window.scrollX),
                   width: Math.round(ribbonBox.width),
-                  top: Math.round(ribbonBox.top),
+                  top: Math.round(ribbonBox.top + window.scrollY),
                 }
               : null,
           };
