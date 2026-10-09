@@ -65,6 +65,7 @@ import {
   AlertTitle,
 } from "@/registry/vianova/ui/alert";
 import { Avatar, AvatarFallback } from "@/registry/vianova/ui/avatar";
+import { Badge } from "@/registry/vianova/ui/badge";
 import { Button } from "@/registry/vianova/ui/button";
 import {
   ChartContainer,
@@ -74,7 +75,14 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/registry/vianova/ui/chart";
-import { Checkbox } from "@/registry/vianova/ui/checkbox";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/registry/vianova/ui/command";
 import {
   Dialog,
   DialogClose,
@@ -99,15 +107,18 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/registry/vianova/ui/empty";
-import { Field, FieldGroup, FieldLabel } from "@/registry/vianova/ui/field";
+import { Field, FieldLabel } from "@/registry/vianova/ui/field";
 import { Input } from "@/registry/vianova/ui/input";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupInput,
 } from "@/registry/vianova/ui/input-group";
-import { Label } from "@/registry/vianova/ui/label";
-import { Popover, PopoverContent } from "@/registry/vianova/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/registry/vianova/ui/popover";
 import {
   Select,
   SelectContent,
@@ -1304,6 +1315,15 @@ function SeriesBody({
       axisLine={false}
       width={yWidth}
       tickCount={short || preview ? 3 : 5}
+      // Shares get round ticks: asked for three, Recharts lands on 55% and a
+      // long float just past 100%.
+      ticks={
+        percent
+          ? short || preview
+            ? [0, 50, 100]
+            : [0, 25, 50, 75, 100]
+          : undefined
+      }
       // A fleet barely moves day to day; from zero its line would be flat.
       domain={
         percent
@@ -1439,7 +1459,7 @@ function SeriesBody({
       ref={boxRef}
       className={cn(
         "flex min-h-0 w-full flex-col",
-        preview ? "h-36" : "h-full min-h-28",
+        preview ? "h-full min-h-36" : "h-full min-h-28",
       )}
     >
       <ChartContainer
@@ -1677,7 +1697,7 @@ function DonutBody({ data, preview }: { data: ReportData; preview?: boolean }) {
     <div
       className={cn(
         "flex min-h-0 w-full flex-col",
-        preview ? "h-36" : "h-full min-h-28",
+        preview ? "h-full min-h-36" : "h-full min-h-28",
       )}
     >
       <div className="relative min-h-0 w-full flex-1">
@@ -1776,7 +1796,10 @@ function WidgetBody({
   if (data.status === "loading")
     return (
       <Skeleton
-        className={cn(preview ? "h-36" : "h-full min-h-28", "w-full")}
+        className={cn(
+          preview ? "h-full min-h-36" : "h-full min-h-28",
+          "w-full",
+        )}
       />
     );
   if (data.status === "error") {
@@ -2313,8 +2336,6 @@ const ROW_PX = 132;
 const GAP_PX = 16;
 /** Below this the grid would make cells too small to use, so it stacks. */
 const STACK_BELOW_PX = 560;
-/** What a chart asks for when it is added from a cell, as in the product. */
-const DEFAULT_CHART = { w: 4, h: 2 };
 
 /**
  * Free placement, as in the product: no gravity pulling widgets to the top,
@@ -2326,43 +2347,6 @@ const cellSpan = (r: Rect) => ({
   gridColumn: `${r.x + 1} / span ${r.w}`,
   gridRow: `${r.y + 1} / span ${r.h}`,
 });
-
-/**
- * The cells the landing outline can cover while the picker is open: the drawn
- * area, or the union of where each library chart would land from that cell.
- */
-function pickerReach(target: Target, layouts: Rect[]): Rect {
-  if (target.drawn) return target.rect;
-  let r = target.rect;
-  for (const t of LIBRARY) {
-    const room = roomAt(target.rect.x, target.rect.y, t.cells, layouts);
-    if (!room) continue;
-    const x = Math.min(r.x, room.x);
-    const y = Math.min(r.y, room.y);
-    r = {
-      x,
-      y,
-      w: Math.max(r.x + r.w, room.x + room.w) - x,
-      h: Math.max(r.y + r.h, room.y + room.h) - y,
-    };
-  }
-  return r;
-}
-
-/** The picker's width plus its offset, in pixels. */
-const PICKER_PX = 416 + 10;
-
-/**
- * Beside the reach when the canvas has room for the picker there, and below
- * it otherwise -- flipping above when the page runs out -- so the outline stays
- * in sight whichever chart is pointed at.
- */
-function sideFor(reach: Rect, width: number, colPx: number) {
-  const step = colPx + GAP_PX;
-  if (width - (reach.x + reach.w) * step >= PICKER_PX) return "right";
-  if (reach.x * step >= PICKER_PX) return "left";
-  return "bottom";
-}
 
 type Placement = { spec: WidgetSpec; cells: { w: number; h: number } };
 
@@ -2379,122 +2363,6 @@ const spanning = (
   w: Math.abs(a.x - b.x) + 1,
   h: Math.abs(a.y - b.y) + 1,
 });
-
-const PICKER_TYPES: Array<"all" | Exclude<ChartType, "text">> = [
-  "all",
-  ...CHART_TYPES,
-];
-
-/**
- * The chart library, in one step: type chips over a list of previews. One
- * click places a chart, and pointing at one moves the landing outline to the
- * cells that chart would take, so the choice is made seeing where it goes.
- */
-function ChartPicker({
-  data,
-  onPreview,
-  onPick,
-}: {
-  data: ReportData;
-  onPreview: (t: Template | null) => void;
-  onPick: (t: Template) => void;
-}) {
-  const [type, setType] = React.useState<(typeof PICKER_TYPES)[number]>("all");
-  const hoveredRef = React.useRef<string | null>(null);
-  const items = LIBRARY.filter(
-    (t) => type === "all" || typeOf(t.spec) === type,
-  );
-  return (
-    <div className="flex max-h-[min(30rem,70svh,max(16rem,var(--picker-max,30rem)))] flex-col gap-2">
-      <div
-        role="radiogroup"
-        aria-label="Chart type"
-        className="flex shrink-0 flex-wrap gap-1"
-      >
-        {PICKER_TYPES.map((t) => {
-          const Icon = t === "all" ? null : TYPE_ICON[t];
-          const n =
-            t === "all"
-              ? LIBRARY.length
-              : LIBRARY.filter((l) => typeOf(l.spec) === t).length;
-          return (
-            <button
-              key={t}
-              type="button"
-              role="radio"
-              aria-checked={type === t}
-              disabled={n === 0}
-              onClick={() => setType(t)}
-              className="aria-checked:bg-primary aria-checked:text-primary-foreground aria-checked:border-primary hover:bg-muted focus-visible:ring-ring inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-40"
-            >
-              {Icon ? <Icon className="size-3.5" aria-hidden /> : null}
-              {t === "all" ? "All" : TYPE_LABELS[t]}
-              <span
-                // Faded only when unselected: on the teal chip it would drop
-                // below 4.5:1.
-                className={cn("tabular-nums", type !== t && "opacity-60")}
-              >
-                {n}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      <ul
-        className="-mx-1 grid min-h-0 grid-cols-2 gap-2 overflow-auto px-1 pb-1"
-        onPointerLeave={() => {
-          hoveredRef.current = null;
-          onPreview(null);
-        }}
-      >
-        {items.map((t) => {
-          const Icon = TYPE_ICON[typeOf(t.spec)];
-          return (
-            <li key={t.id} className="min-w-0">
-              <button
-                type="button"
-                data-pick
-                // Pointer move rather than enter: the preview inside the card is
-                // what the pointer lands on, and an enter is not reliably seen
-                // through it. The id check keeps it from re-rendering per pixel.
-                onPointerMove={() => {
-                  if (hoveredRef.current === t.id) return;
-                  hoveredRef.current = t.id;
-                  onPreview(t);
-                }}
-                onFocus={() => {
-                  hoveredRef.current = t.id;
-                  onPreview(t);
-                }}
-                onClick={() => onPick(t)}
-                className="hover:border-primary/60 focus-visible:ring-ring bg-card flex w-full flex-col gap-1.5 rounded-lg border p-2 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
-              >
-                <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
-                  <Icon
-                    className="text-muted-foreground size-3.5 shrink-0"
-                    aria-hidden
-                  />
-                  <span className="truncate">{nameOf(t.spec)}</span>
-                </span>
-                <span
-                  inert
-                  className="pointer-events-none block h-24 overflow-hidden"
-                >
-                  <span className="block origin-top-left scale-[0.66] [width:151%]">
-                    <WidgetBody widget={t.spec} data={data} preview />
-                  </span>
-                </span>
-                <span className="text-muted-foreground text-[10px] tabular-nums">
-                  {t.cells.w} × {t.cells.h} cells
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
 
 /** Where one free cell is, for the arrow keys: the next free cell that way. */
 function nextFree(
@@ -2564,14 +2432,17 @@ function ReportCanvas({
     to: { x: number; y: number };
   } | null>(null);
   const [target, setTarget] = React.useState<Target | null>(null);
-  const [previewRect, setPreviewRect] = React.useState<Rect | null>(null);
   const [moving, setMoving] = React.useState<Rect | null>(null);
   // Fixed while a widget is dragged or resized. Growing the canvas under the
   // pointer makes the browser scroll, which reads as more drag, which grows the
   // canvas again: a card dragged past the bottom edge would never stop growing.
   const [frozenRows, setFrozenRows] = React.useState<number | null>(null);
   const [flash, setFlash] = React.useState<string | null>(null);
-  const [stackPicking, setStackPicking] = React.useState(false);
+  // Where the Add charts dialog was opened from: a cell or a drawn area, or
+  // null for "anywhere" (the stacked layout). Undefined while it is closed.
+  const [adding, setAdding] = React.useState<Target | null | undefined>(
+    undefined,
+  );
   const [said, setSaid] = React.useState("");
 
   const stacked = mounted && width < STACK_BELOW_PX;
@@ -2585,7 +2456,6 @@ function ReportCanvas({
     rowCount([
       ...layouts,
       ...(target ? [target.rect] : []),
-      ...(previewRect ? [previewRect] : []),
       ...(drawRect ? [drawRect] : []),
     ]);
   const colPx = (width - GAP_PX * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
@@ -2621,7 +2491,6 @@ function ReportCanvas({
     );
   };
 
-
   const place = (t: Target | null, p: Placement) => {
     const min = minCells(p.spec);
     let rect: Rect;
@@ -2636,8 +2505,6 @@ function ReportCanvas({
     const widget = { ...p.spec, id: newId("w"), layout: rect } as Widget;
     onChange([...widgets, widget]);
     setTarget(null);
-    setPreviewRect(null);
-    setStackPicking(false);
     setFlash(widget.id);
     setSaid(
       `Added ${nameOf(p.spec)} at row ${rect.y + 1}, column ${rect.x + 1}, ${rect.w} by ${rect.h} cells.`,
@@ -2650,6 +2517,52 @@ function ReportCanvas({
       spec: { kind: "text", markdown: TEXT_SEED },
       cells: { w: t ? GRID_COLUMNS - t.rect.x : GRID_COLUMNS, h: 1 },
     });
+
+  /**
+   * Charts picked together: the first goes where the dialog was opened from,
+   * at its own size, and the rest take the next free spots in reading order.
+   */
+  const placeMany = (t: Target | null, items: Placement[]) => {
+    if (items.length === 0) return;
+    const taken = [...layouts];
+    const added: Widget[] = [];
+    items.forEach((p, i) => {
+      const min = minCells(p.spec);
+      let rect: Rect | null = null;
+      if (i === 0 && t) {
+        if (t.drawn) rect = t.rect;
+        else {
+          const room = roomAt(t.rect.x, t.rect.y, p.cells, taken);
+          if (room && room.w >= min.w && room.h >= min.h) rect = room;
+        }
+      }
+      rect ??= firstFit(Math.max(p.cells.w, min.w), p.cells.h, taken);
+      taken.push(rect);
+      added.push({ ...p.spec, id: newId("w"), layout: rect } as Widget);
+    });
+    onChange([...widgets, ...added]);
+    setFlash(added[0]!.id);
+    const first = added[0]!.layout;
+    setSaid(
+      added.length === 1
+        ? `Added ${nameOf(added[0]!)} at row ${first.y + 1}, column ${first.x + 1}, ${first.w} by ${first.h} cells.`
+        : `Added ${added.length} charts, the first at row ${first.y + 1}, column ${first.x + 1}.`,
+    );
+  };
+
+  const dialog = (
+    <AddChartsDialog
+      open={adding !== undefined}
+      onOpenChange={(open) => {
+        if (open) return;
+        const at = adding?.rect;
+        setAdding(undefined);
+        if (at && !stacked) focusCell({ x: at.x, y: at.y });
+      }}
+      data={data}
+      onAdd={(items) => placeMany(adding ?? null, items)}
+    />
+  );
 
   /** Commits what react-grid-layout settled on, for every widget it moved. */
   const commitLayout = (next: Layout) => {
@@ -2742,29 +2655,22 @@ function ReportCanvas({
           className="rounded-xl border border-dashed p-3"
           style={{ minHeight: ROW_PX }}
         >
-          {stackPicking ? (
-            <ChartPicker
-              data={data}
-              onPreview={() => {}}
-              onPick={(t) => place(null, t)}
-            />
-          ) : (
-            <div
-              className="flex flex-wrap items-center justify-center gap-2"
-              style={{ minHeight: ROW_PX - 26 }}
-            >
-              <Button variant="outline" onClick={() => setStackPicking(true)}>
-                <ChartColumn data-icon="inline-start" />
-                Create a chart
-              </Button>
-              <Button variant="outline" onClick={() => placeText(null)}>
-                <Type data-icon="inline-start" />
-                Create text
-              </Button>
-            </div>
-          )}
+          <div
+            className="flex flex-wrap items-center justify-center gap-2"
+            style={{ minHeight: ROW_PX - 26 }}
+          >
+            <Button variant="outline" onClick={() => setAdding(null)}>
+              <ChartColumn data-icon="inline-start" />
+              Create a chart
+            </Button>
+            <Button variant="outline" onClick={() => placeText(null)}>
+              <Type data-icon="inline-start" />
+              Create text
+            </Button>
+          </div>
         </div>
         {live}
+        {dialog}
       </div>
     );
   }
@@ -2777,12 +2683,7 @@ function ReportCanvas({
   const current = active && !taken(active.x, active.y) ? active : free[0];
   const showHover =
     hover && !target && !draw && !moving && !taken(hover.x, hover.y);
-  const landing = previewRect ?? target?.rect ?? null;
-  // Every cell the outline could cover while charts are pointed at. The picker
-  // opens beside this, not beside the cell, so it never hides where a chart
-  // lands; and since it is fixed, the picker does not move under the pointer.
-  const reach = target ? pickerReach(target, layouts) : null;
-  const pickerSide = reach ? sideFor(reach, width, colPx) : "bottom";
+  const landing = target?.rect ?? null;
 
   const rglLayout: Layout = widgets.map((w) => {
     const min = minCells(w);
@@ -2902,12 +2803,8 @@ function ReportCanvas({
                       title="Create a chart"
                       className="bg-background hover:border-primary hover:text-primary w-full min-w-0 shadow-xs"
                       onClick={() =>
-                        setTarget({
-                          rect: roomAt(c.x, c.y, DEFAULT_CHART, layouts) ?? {
-                            ...c,
-                            w: 1,
-                            h: 1,
-                          },
+                        setAdding({
+                          rect: { ...c, w: 1, h: 1 },
                           drawn: false,
                           mode: "chart",
                         })
@@ -2966,12 +2863,12 @@ function ReportCanvas({
               className="border-primary bg-primary/10 pointer-events-none z-10 rounded-xl border-2 border-dashed transition-all duration-200"
             />
           ) : null}
-          {reach ? (
+          {target ? (
             <div
               ref={anchorRef}
               aria-hidden
-              style={cellSpan(reach)}
-              className="pointer-events-none scroll-my-4"
+              style={cellSpan(target.rect)}
+              className="pointer-events-none"
             />
           ) : null}
         </div>
@@ -3060,24 +2957,24 @@ function ReportCanvas({
         ) : null}
       </div>
 
+      {/* After drawing an area: a chart or a text for it. */}
       <Popover
         open={!!target}
         onOpenChange={(open) => {
           if (open) return;
           const at = target?.rect;
           setTarget(null);
-          setPreviewRect(null);
           if (at) focusCell({ x: at.x, y: at.y });
         }}
       >
         <PopoverContent
           anchor={anchorRef}
-          side={pickerSide}
+          side="right"
           align="start"
           sideOffset={10}
-          className="w-[26rem] max-w-[calc(100vw-2rem)] p-3 [--picker-max:calc(var(--available-height)-4rem)]"
+          className="w-[26rem] max-w-[calc(100vw-2rem)] p-3"
         >
-          {target?.mode === "choose" ? (
+          {target ? (
             <div className="space-y-2">
               <p className="text-sm font-medium">
                 Add to this {target.rect.w} × {target.rect.h} area
@@ -3085,15 +2982,17 @@ function ReportCanvas({
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  data-pick
                   autoFocus
-                  onClick={() => setTarget({ ...target, mode: "chart" })}
+                  onClick={() => {
+                    setAdding(target);
+                    setTarget(null);
+                  }}
                   className="hover:border-primary/60 focus-visible:ring-ring flex flex-col items-start gap-1 rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:outline-none"
                 >
                   <ChartColumn className="text-primary size-5" aria-hidden />
                   <span className="text-sm font-medium">Chart</span>
                   <span className="text-muted-foreground text-xs">
-                    Pick one from your chart library
+                    Pick from your chart library
                   </span>
                 </button>
                 <button
@@ -3109,27 +3008,10 @@ function ReportCanvas({
                 </button>
               </div>
             </div>
-          ) : target ? (
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Add a chart</p>
-              <ChartPicker
-                data={data}
-                onPreview={(t) => {
-                  if (!t || target.drawn) return setPreviewRect(null);
-                  const room = roomAt(
-                    target.rect.x,
-                    target.rect.y,
-                    t.cells,
-                    layouts,
-                  );
-                  setPreviewRect(room);
-                }}
-                onPick={(t) => place(target, t)}
-              />
-            </div>
           ) : null}
         </PopoverContent>
       </Popover>
+      {dialog}
       {live}
     </div>
   );
@@ -3139,290 +3021,282 @@ function ReportCanvas({
 /* Add charts                                                                  */
 /* -------------------------------------------------------------------------- */
 
-const TYPE_FILTERS = [
-  "all",
-  "line",
-  "bar",
-  "table",
-  "kpi",
-  "barlist",
-  "donut",
-  "matrix",
-] as const;
-type TypeFilter = (typeof TYPE_FILTERS)[number];
-
-function NewChartForm({
-  onAdd,
-  onBack,
+/**
+ * A dashed toolbar button that narrows the library by one facet, as in the
+ * product: a searchable list where several values can be ticked, and the
+ * ticked ones shown in the button.
+ */
+function FacetFilter<T extends string>({
+  icon: Icon,
+  label,
+  searchLabel,
+  options,
+  value,
+  onChange,
 }: {
-  onAdd: (t: Placement) => void;
-  onBack: () => void;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  label: string;
+  searchLabel: string;
+  options: Array<{ value: T; label: string }>;
+  value: T[];
+  onChange: (next: T[]) => void;
 }) {
-  const [title, setTitle] = React.useState("");
-  const [metric, setMetric] = React.useState<Metric>("trips");
-  const [byOperator, setByOperator] = React.useState(true);
-  const [style, setStyle] = React.useState<SeriesStyle>("line");
-  const fallback = `${METRICS[metric].label}${byOperator ? " per operator" : ""} over time`;
-
+  const chosen = options.filter((o) => value.includes(o.value));
   return (
-    <form
-      className="space-y-4"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onAdd({
-          spec: {
-            kind: "series",
-            title: title.trim() || fallback,
-            metric,
-            byOperator,
-            style,
-            display: "value",
-          },
-          cells: { w: 12, h: 2 },
-        });
-      }}
-    >
-      <FieldGroup>
-        <Field>
-          <FieldLabel htmlFor="new-chart-title">Title</FieldLabel>
-          <Input
-            id="new-chart-title"
-            value={title}
-            placeholder={fallback}
-            onChange={(e) => setTitle(e.target.value)}
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-dashed shadow-none"
           />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="new-chart-data">Data</FieldLabel>
-          {/* One dataset in the sample; a select so the shape is already right. */}
-          <Select value={TRIPS_DATASET} disabled>
-            <SelectTrigger id="new-chart-data" className="w-full">
-              <SelectValue>{() => SOURCE}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TRIPS_DATASET}>{SOURCE}</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="new-chart-metric">Measure</FieldLabel>
-          <Select
-            value={metric}
-            onValueChange={(v) => v && setMetric(v as Metric)}
-          >
-            <SelectTrigger id="new-chart-metric" className="w-full">
-              <SelectValue>
-                {(v: string) => METRICS[v as Metric]?.label}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(METRICS) as Metric[]).map((m) => (
-                <SelectItem key={m} value={m}>
-                  {METRICS[m].label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Label className="font-normal">
-          <Checkbox
-            // Named outright: the wrapping label names Base UI's hidden input,
-            // not the span that carries role="checkbox".
-            aria-label="Split by operator"
-            checked={byOperator}
-            onCheckedChange={(on) => setByOperator(!!on)}
-          />
-          Split by operator
-        </Label>
-        <SingleToggle
-          label="Style"
-          value={style}
-          onChange={setStyle}
-          options={STYLE_OPTIONS}
-        />
-      </FieldGroup>
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="ghost" onClick={onBack}>
-          Back to library
-        </Button>
-        <Button type="submit">Add chart</Button>
-      </div>
-    </form>
+        }
+      >
+        <Icon data-icon="inline-start" aria-hidden />
+        {label}
+        {chosen.length > 2 ? (
+          <Badge variant="secondary" className="rounded-sm px-1 font-normal">
+            {chosen.length} selected
+          </Badge>
+        ) : (
+          chosen.map((c) => (
+            <Badge
+              key={c.value}
+              variant="secondary"
+              className="max-w-40 truncate rounded-sm px-1 font-normal"
+            >
+              {c.label}
+            </Badge>
+          ))
+        )}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-60 p-0">
+        <Command>
+          <CommandInput placeholder={searchLabel} aria-label={searchLabel} />
+          <CommandList>
+            <CommandEmpty>Nothing matches.</CommandEmpty>
+            <CommandGroup>
+              {options.map((o) => {
+                const on = value.includes(o.value);
+                return (
+                  <CommandItem
+                    key={o.value}
+                    value={o.label}
+                    data-checked={on}
+                    onSelect={() =>
+                      onChange(
+                        on
+                          ? value.filter((v) => v !== o.value)
+                          : [...value, o.value],
+                      )
+                    }
+                  >
+                    {o.label}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
+const DATASETS = [{ value: TRIPS_DATASET, label: SOURCE }];
+const TYPE_OPTIONS = CHART_TYPES.map((t) => ({
+  value: t,
+  label: TYPE_LABELS[t],
+}));
+
+/**
+ * The chart library, laid out as the product's "Add charts": a toolbar of
+ * search and facet filters over a grid of chart cards. Cards are ticked, not
+ * placed one by one, and the ticks survive filtering; the footer adds them all.
+ */
 function AddChartsDialog({
   open,
   onOpenChange,
   data,
   onAdd,
+  onCreateChart,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   data: ReportData;
+  /** The picked charts, in the order they were picked. */
   onAdd: (items: Placement[]) => void;
+  /**
+   * Starts the flow that makes a chart that is not in the library yet. Until
+   * there is one, the tile is shown but does nothing.
+   */
+  onCreateChart?: () => void;
 }) {
   const [query, setQuery] = React.useState("");
-  const [type, setType] = React.useState<TypeFilter>("all");
+  const [types, setTypes] = React.useState<Array<Exclude<ChartType, "text">>>(
+    [],
+  );
+  const [sources, setSources] = React.useState<string[]>([]);
   const [picked, setPicked] = React.useState<string[]>([]);
-  const [creating, setCreating] = React.useState(false);
 
   React.useEffect(() => {
     if (open) return;
     setPicked([]);
-    setCreating(false);
     setQuery("");
-    setType("all");
+    setTypes([]);
+    setSources([]);
   }, [open]);
 
   const q = query.trim().toLowerCase();
   const items = LIBRARY.filter(
     (w) =>
-      (type === "all" || typeOf(w.spec) === type) &&
+      (types.length === 0 || types.some((t) => t === typeOf(w.spec))) &&
+      // Every library chart reads the one sample dataset.
+      (sources.length === 0 || sources.includes(TRIPS_DATASET)) &&
       (!q || nameOf(w.spec).toLowerCase().includes(q)),
   );
+  const filtering = !!q || types.length > 0 || sources.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85svh] flex-col gap-0 p-0 sm:max-w-4xl">
-        <DialogHeader className="border-b p-4">
-          <DialogTitle>
-            {creating ? "Create a new chart" : "Add charts"}
-          </DialogTitle>
-          <DialogDescription>
-            {creating
-              ? `A chart over ${SOURCE}, by day.`
-              : "Pick one or more from your chart library."}
+      <DialogContent className="flex h-[min(52rem,calc(100svh-4rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(80rem,calc(100vw-4rem))]">
+        <DialogHeader className="border-b px-4 py-3">
+          <DialogTitle className="text-base">Add charts</DialogTitle>
+          <DialogDescription className="sr-only">
+            Pick one or more charts from your library, then add them.
           </DialogDescription>
         </DialogHeader>
-        {creating ? (
-          <div className="overflow-auto p-4">
-            <NewChartForm
-              onBack={() => setCreating(false)}
-              onAdd={(w) => {
-                onAdd([w]);
-                onOpenChange(false);
-              }}
+        <div className="bg-muted/30 flex flex-wrap items-center gap-2 border-b px-4 py-3">
+          <InputGroup className="h-8 w-full sm:w-60">
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+            <InputGroupInput
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search charts…"
+              aria-label="Search charts"
             />
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-wrap gap-2 border-b p-4">
-              <InputGroup className="min-w-48 flex-1">
-                <InputGroupAddon>
-                  <Search />
-                </InputGroupAddon>
-                <InputGroupInput
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search charts…"
-                  aria-label="Search charts"
-                />
-              </InputGroup>
-              <Select
-                value={type}
-                onValueChange={(v) => setType((v ?? "all") as TypeFilter)}
+          </InputGroup>
+          <FacetFilter
+            icon={Database}
+            label="Data"
+            searchLabel="Look for data"
+            options={DATASETS}
+            value={sources}
+            onChange={setSources}
+          />
+          <FacetFilter
+            icon={ChartLine}
+            label="Chart type"
+            searchLabel="Look for chart type"
+            options={TYPE_OPTIONS}
+            value={types}
+            onChange={setTypes}
+          />
+          {filtering ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setQuery("");
+                setTypes([]);
+                setSources([]);
+              }}
+            >
+              Clear all
+            </Button>
+          ) : null}
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto p-4">
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {/* Kept while filtering, as in the product: it is the way out
+                when the library has nothing that fits. */}
+            <li className="flex">
+              <button
+                type="button"
+                aria-disabled={!onCreateChart || undefined}
+                title={onCreateChart ? undefined : "Coming soon"}
+                onClick={onCreateChart}
+                className={cn(
+                  "text-muted-foreground focus-visible:ring-ring flex h-72 w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none",
+                  onCreateChart
+                    ? "hover:text-foreground hover:border-foreground/30"
+                    : "cursor-default",
+                )}
               >
-                <SelectTrigger className="w-40" aria-label="Chart type">
-                  <SelectValue>
-                    {(v: string) =>
-                      v === "all"
-                        ? "Chart type"
-                        : TYPE_LABELS[v as Exclude<TypeFilter, "all">]
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {TYPE_FILTERS.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t === "all" ? "All types" : TYPE_LABELS[t]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <ul className="grid min-h-0 flex-1 gap-3 overflow-auto p-4 sm:grid-cols-2 lg:grid-cols-3">
-              <li className="flex">
-                <button
-                  type="button"
-                  onClick={() => setCreating(true)}
-                  className="text-muted-foreground hover:text-foreground focus-visible:ring-ring flex min-h-52 w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                >
+                <span className="bg-muted flex size-16 items-center justify-center rounded-full">
                   <Plus
-                    className="size-8 rounded-full border p-1.5"
+                    className="size-10 rounded-full border-2 p-1.5"
                     aria-hidden
                   />
-                  Create a new chart
-                </button>
-              </li>
-              {items.map((w) => {
-                const on = picked.includes(w.id);
-                const Icon = TYPE_ICON[typeOf(w.spec)];
-                return (
-                  <li key={w.id} className="flex min-w-0">
-                    <button
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() =>
-                        setPicked((p) =>
-                          on ? p.filter((x) => x !== w.id) : [...p, w.id],
-                        )
-                      }
-                      className={cn(
-                        "bg-card focus-visible:ring-ring relative flex w-full min-w-0 flex-col gap-2 rounded-xl border p-3 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none",
-                        on
-                          ? "border-primary ring-primary ring-1"
-                          : "hover:border-foreground/25",
-                      )}
+                </span>
+                Create a new chart
+              </button>
+            </li>
+            {items.map((w) => {
+              const on = picked.includes(w.id);
+              return (
+                <li key={w.id} className="flex min-w-0">
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
+                      setPicked((p) =>
+                        on ? p.filter((x) => x !== w.id) : [...p, w.id],
+                      )
+                    }
+                    className={cn(
+                      "bg-card focus-visible:ring-ring relative flex h-72 w-full min-w-0 flex-col gap-3 overflow-hidden rounded-xl border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none",
+                      on
+                        ? "border-primary ring-primary bg-muted/40 ring-1"
+                        : "hover:border-foreground/25",
+                    )}
+                  >
+                    <span className="truncate text-sm font-semibold">
+                      {nameOf(w.spec)}
+                    </span>
+                    {/* A picture of the chart, not a second chart to use: no
+                        tooltips, sorting or focus stops inside the button. */}
+                    <div
+                      inert
+                      className="pointer-events-none flex min-h-0 flex-1 flex-col justify-center"
                     >
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
-                          <Icon
-                            className="text-muted-foreground size-4 shrink-0"
-                            aria-hidden
-                          />
-                          <span className="truncate">{nameOf(w.spec)}</span>
-                        </span>
-                        <span
-                          aria-hidden
-                          className={cn(
-                            "flex size-4 shrink-0 items-center justify-center rounded-[4px] border",
-                            on &&
-                              "bg-primary border-primary text-primary-foreground",
-                          )}
-                        >
-                          {on ? <Check className="size-3" /> : null}
+                      <WidgetBody widget={w.spec} data={data} preview />
+                    </div>
+                    {on ? (
+                      <span
+                        aria-hidden
+                        className="absolute inset-0 flex items-center justify-center"
+                      >
+                        <span className="bg-primary text-primary-foreground flex size-14 items-center justify-center rounded-full shadow-md">
+                          <Check className="size-7" strokeWidth={3} />
                         </span>
                       </span>
-                      {/* A picture of the chart, not a second chart to use: no
-                          tooltips, sorting or focus stops inside the button. */}
-                      <div inert className="pointer-events-none">
-                        <WidgetBody widget={w.spec} data={data} preview />
-                      </div>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-            {items.length === 0 ? (
-              <p className="text-muted-foreground px-4 pb-4 text-center text-sm">
-                No chart in the library matches these filters.
-              </p>
-            ) : null}
-            <DialogFooter className="m-0 border-t p-4">
-              <DialogClose render={<Button variant="ghost">Cancel</Button>} />
-              <Button
-                disabled={picked.length === 0}
-                onClick={() => {
-                  onAdd(picked.map(templateOf));
-                  onOpenChange(false);
-                }}
-              >
-                Add charts ({picked.length})
-              </Button>
-            </DialogFooter>
-          </>
-        )}
+                    ) : null}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {items.length === 0 ? (
+            <p className="text-muted-foreground py-12 text-center text-sm">
+              No chart in the library matches these filters.
+            </p>
+          ) : null}
+        </div>
+        <DialogFooter className="m-0 border-t px-4 py-3">
+          <Button
+            disabled={picked.length === 0}
+            onClick={() => {
+              onAdd(picked.map(templateOf));
+              onOpenChange(false);
+            }}
+          >
+            Add charts ({picked.length})
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -3665,7 +3539,6 @@ function ReportView({
   // Closed to start: open beside the canvas it takes 18rem, and on an ordinary
   // laptop window that pushes the grid down to its stacked, phone layout.
   const [filtersOpen, setFiltersOpen] = React.useState(false);
-  const [adding, setAdding] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
   const [exported, setExported] = React.useState<string | null>(null);
   // Committed on blur, so every keystroke is not a save.
@@ -3676,30 +3549,6 @@ function ReportView({
   const [autoSelectId, setAutoSelectId] = React.useState<string | null>(null);
 
   const setWidgets = (widgets: Widget[]) => onChange({ ...report, widgets });
-  /** From the header's "+": each item goes in the first spot it fits. */
-  const append = (items: Placement[]) => {
-    const placed = [...report.widgets];
-    for (const it of items) {
-      const rect = firstFit(
-        it.cells.w,
-        it.cells.h,
-        placed.map((w) => w.layout),
-      );
-      placed.push({ ...it.spec, id: newId("w"), layout: rect } as Widget);
-    }
-    setWidgets(placed);
-    return placed.slice(report.widgets.length);
-  };
-  const addText = () => {
-    const [w] = append([
-      {
-        spec: { kind: "text", markdown: TEXT_SEED },
-        cells: { w: GRID_COLUMNS, h: 1 },
-      },
-    ]);
-    if (w) setAutoSelectId(w.id);
-  };
-
   return (
     <div className="space-y-4 p-4 md:p-6">
       <header className="flex flex-wrap items-center gap-2">
@@ -3743,42 +3592,6 @@ function ReportView({
             <ListFilter data-icon="inline-start" />
             Filters
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="icon"
-                  aria-label="Add to report"
-                >
-                  <Plus />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem
-                onClick={() => setAdding(true)}
-                className="items-start"
-              >
-                <ChartColumn className="mt-0.5" />
-                <span>
-                  <span className="block font-medium">Chart</span>
-                  <span className="text-muted-foreground block text-xs">
-                    Pick one from your chart library
-                  </span>
-                </span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={addText} className="items-start">
-                <Type className="mt-0.5" />
-                <span>
-                  <span className="block font-medium">Text</span>
-                  <span className="text-muted-foreground block text-xs">
-                    Introduce a section with a heading or a note
-                  </span>
-                </span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </header>
 
@@ -3836,12 +3649,6 @@ function ReportView({
         </div>
       </div>
 
-      <AddChartsDialog
-        open={adding}
-        onOpenChange={setAdding}
-        data={data}
-        onAdd={(items) => append(items)}
-      />
       <ExportReportDialog
         open={exporting}
         onOpenChange={setExporting}
