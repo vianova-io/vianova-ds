@@ -12,6 +12,7 @@ import {
   ChartLine,
   ChartPie,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -119,13 +120,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/registry/vianova/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/registry/vianova/ui/select";
 import { Skeleton } from "@/registry/vianova/ui/skeleton";
 import {
   Table,
@@ -157,20 +151,26 @@ import {
 import { inferColumns, parseCsv } from "@/registry/vianova/lib/csv";
 import {
   WEEKDAY_LABELS,
-  byProvider,
   change,
+  countBy,
   dailySeries,
   daysBetween,
-  filterTrips,
+  filterEvents,
   measure,
   previousPeriod,
   readTrips,
   weekHourGrid,
-  type Metric,
+  type EventFilter,
+  type Metric as TripMetric,
   type Trip,
-  type TripFilter,
   type Zone,
 } from "@/registry/vianova/lib/trip-report";
+import {
+  measureInfringements,
+  readInfringements,
+  type Infringement,
+  type InfringementMetric,
+} from "@/registry/vianova/lib/infringement-report";
 import {
   GRID_COLUMNS,
   firstFit,
@@ -198,17 +198,99 @@ declare const process: { env: Record<string, string | undefined> };
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
-/**
- * The same Lisbon trips the data hub ships as a sample. Operator colours and
- * logos are read from the styles saved there, under this dataset id and column,
- * so an operator is the same colour in the hub, on the map and in a report.
- */
-const DEFAULT_TRIPS_URL = `${BASE_PATH}/data/mds-trips-lisbon.csv`;
-const TRIPS_DATASET = "sample-mds-lisbon";
-const TRIPS_COLUMN = "provider_name";
-const SOURCE = "Lisbon MDS trips";
+type DatasetId = "trips" | "infringements";
+type AnyEvent = Trip | Infringement;
 
-/** The sample feed holds September 2026 only, so every period sits inside it. */
+/** A column a dataset can be filtered by: its values come from the feed. */
+type DatasetField = {
+  key: string;
+  label: string;
+  /** The CSV column, whose values (in the feed's own order) are offered. */
+  column: string;
+  of: (e: AnyEvent) => string;
+};
+
+type DatasetDef = {
+  id: DatasetId;
+  /** What the data hub stores this dataset's styles under. */
+  storageId: string;
+  label: string;
+  /** For filter chips, where the full name would crowd the bar. */
+  short: string;
+  /** What one row is, plural: "No trips match these filters." */
+  noun: string;
+  url: string;
+  read: (parsed: { header: string[]; rows: string[][] }) => AnyEvent[];
+  fields: DatasetField[];
+};
+
+const OPERATOR_FIELD: DatasetField = {
+  key: "operator",
+  label: "Operator",
+  column: "provider_name",
+  of: (e) => e.provider,
+};
+const VEHICLE_FIELD: DatasetField = {
+  key: "vehicle",
+  label: "Vehicle type",
+  column: "vehicle_type",
+  of: (e) => e.vehicle,
+};
+
+/**
+ * The report's two sample feeds, both fetched from the site rather than put in
+ * the JavaScript payload. The trips are the ones the data hub ships; the
+ * infringements share their operators, zones and month, so one report can set
+ * them side by side and filter both by the same date, time and zone.
+ */
+const DATASETS: Record<DatasetId, DatasetDef> = {
+  trips: {
+    id: "trips",
+    storageId: "sample-mds-lisbon",
+    label: "Lisbon MDS trips",
+    short: "Trips",
+    noun: "trips",
+    url: `${BASE_PATH}/data/mds-trips-lisbon.csv`,
+    read: readTrips,
+    fields: [OPERATOR_FIELD, VEHICLE_FIELD],
+  },
+  infringements: {
+    id: "infringements",
+    storageId: "sample-infringements-lisbon",
+    label: "Lisbon parking infringements",
+    short: "Infringements",
+    noun: "infringements",
+    url: `${BASE_PATH}/data/infringements-lisbon.csv`,
+    read: readInfringements,
+    fields: [
+      OPERATOR_FIELD,
+      VEHICLE_FIELD,
+      {
+        key: "type",
+        label: "Infringement type",
+        column: "infringement_type",
+        of: (e) => ("type" in e ? e.type : ""),
+      },
+      {
+        key: "status",
+        label: "Status",
+        column: "status",
+        of: (e) => ("status" in e ? e.status : ""),
+      },
+    ],
+  },
+};
+const DATASET_IDS = Object.keys(DATASETS) as DatasetId[];
+
+/**
+ * Operator colours and logos are read from the styles saved in the data hub
+ * for the trips feed, and used for both datasets: an operator is the same
+ * colour in the hub, on the map, and on every chart of a report.
+ */
+const STYLE_DATASET = DATASETS.trips.storageId;
+const STYLE_COLUMN = "provider_name";
+
+/** The sample feeds hold September 2026 only, so every period sits inside them. */
 const PERIODS = {
   sep: { label: "September 2026", from: "2026-09-01", to: "2026-09-30" },
   w39: { label: "Week of 21 Sep", from: "2026-09-21", to: "2026-09-27" },
@@ -222,7 +304,6 @@ const SLICES: Record<
   string,
   { label: string; days?: "work" | "weekend"; hours?: [number, number] }
 > = {
-  all: { label: "All days and hours" },
   work: { label: "Work days", days: "work" },
   weekend: { label: "Weekend", days: "weekend" },
   morning: { label: "Morning, 06–12h", hours: [6, 12] },
@@ -232,8 +313,7 @@ const SLICES: Record<
 type SliceKey = keyof typeof SLICES;
 
 /** Circles over central Lisbon, each holding a hundred or more of the sample's trips. */
-const ZONES: Record<string, { label: string; zone?: Zone }> = {
-  all: { label: "All zones" },
+const ZONES: Record<string, { label: string; zone: Zone }> = {
   baixa: {
     label: "Baixa-Chiado",
     zone: { center: [-9.139, 38.711], radiusM: 1200 },
@@ -261,38 +341,136 @@ const ZONES: Record<string, { label: string; zone?: Zone }> = {
 };
 type ZoneKey = keyof typeof ZONES;
 
+/**
+ * A report's filters. The date is always set; everything else is added one
+ * at a time. Time and zone narrow every dataset; a dataset's own filters
+ * narrow only the charts made from it.
+ */
 type Filters = {
   period: PeriodKey;
-  slice: SliceKey;
-  zone: ZoneKey;
   /** Also show the same filters over the period just before. */
   compare: boolean;
+  slice?: SliceKey;
+  zone?: ZoneKey;
+  /** Per dataset, per field key: the values kept. */
+  datasets: Partial<Record<DatasetId, Record<string, string[]>>>;
 };
 
 const DEFAULT_FILTERS: Filters = {
   period: "sep",
-  slice: "all",
-  zone: "all",
   compare: false,
+  datasets: {},
 };
 
-const tripFilter = (f: Filters): TripFilter => ({
+const eventFilter = (f: Filters): EventFilter => ({
   from: PERIODS[f.period].from,
   to: PERIODS[f.period].to,
-  days: SLICES[f.slice]?.days,
-  hours: SLICES[f.slice]?.hours,
-  zone: ZONES[f.zone]?.zone,
+  days: f.slice ? SLICES[f.slice]?.days : undefined,
+  hours: f.slice ? SLICES[f.slice]?.hours : undefined,
+  zone: f.zone ? ZONES[f.zone]?.zone : undefined,
 });
+
+/** A dataset's own filters, as one condition on its rows. */
+function datasetMatch(f: Filters, id: DatasetId) {
+  const own = f.datasets[id];
+  const active = DATASETS[id].fields.filter((d) => own?.[d.key]?.length);
+  if (!active.length) return undefined;
+  return (e: AnyEvent) => active.every((d) => own![d.key]!.includes(d.of(e)));
+}
+
+/** A value as a chip or list shows it: "scooter" reads "Scooters". */
+const valueLabel = (fieldKey: string, v: string) =>
+  fieldKey === "vehicle" ? (VEHICLE_LABELS[v] ?? v) : v;
+
+/** "Lime, Bolt", or "3 selected" once a list would crowd a chip. */
+const valuesLabel = (fieldKey: string, values: string[]) =>
+  values.length > 2
+    ? `${values.length} selected`
+    : values.map((v) => valueLabel(fieldKey, v)).join(", ");
+
+type AppliedFilter = {
+  /** Unique within a report: "slice", "zone", "trips.operator". */
+  id: string;
+  label: string;
+  value: string;
+  /** Null for filters on every dataset. */
+  dataset: DatasetId | null;
+};
+
+/**
+ * The optional filters in force, in the order the bar shows them: overall
+ * first, then each dataset's own. Narrowed to one dataset, it is what a chart
+ * made from that dataset is filtered by.
+ */
+function appliedFilters(f: Filters, only?: DatasetId | null): AppliedFilter[] {
+  const out: AppliedFilter[] = [];
+  if (f.slice && SLICES[f.slice])
+    out.push({
+      id: "slice",
+      label: "Time",
+      value: SLICES[f.slice]!.label,
+      dataset: null,
+    });
+  if (f.zone && ZONES[f.zone])
+    out.push({
+      id: "zone",
+      label: "Zone",
+      value: ZONES[f.zone]!.label,
+      dataset: null,
+    });
+  for (const id of DATASET_IDS) {
+    if (only !== undefined && only !== id) continue;
+    for (const field of DATASETS[id].fields) {
+      const values = f.datasets[id]?.[field.key];
+      if (!values?.length) continue;
+      out.push({
+        id: `${id}.${field.key}`,
+        label: field.label,
+        value: valuesLabel(field.key, values),
+        dataset: id,
+      });
+    }
+  }
+  return out;
+}
+
+type Metric = TripMetric | InfringementMetric;
 
 const METRICS: Record<
   Metric,
-  { label: string; unit?: string; digits: number }
+  {
+    label: string;
+    unit?: string;
+    digits: number;
+    /** A count: it can be shown as shares, and a rise is a rise in activity. */
+    count?: boolean;
+  }
 > = {
-  trips: { label: "Number of trips", digits: 0 },
-  vehicles: { label: "Fleet size", digits: 0 },
+  trips: { label: "Number of trips", digits: 0, count: true },
+  vehicles: { label: "Fleet size", digits: 0, count: true },
   distance: { label: "Average trip distance", unit: "km", digits: 2 },
   duration: { label: "Median trip duration", unit: "min", digits: 1 },
+  infringements: { label: "Number of infringements", digits: 0, count: true },
+  fines: { label: "Fines issued", unit: "€", digits: 0, count: true },
+  resolution: { label: "Median time to resolve", unit: "min", digits: 0 },
+  devices: { label: "Vehicles cited", digits: 0, count: true },
 };
+
+const TRIP_METRICS = new Set<Metric>([
+  "trips",
+  "vehicles",
+  "distance",
+  "duration",
+]);
+
+/** One number for a set of rows, whichever dataset they came from. */
+const measureEvents = (events: AnyEvent[], metric: Metric) =>
+  TRIP_METRICS.has(metric)
+    ? measure(events as Trip[], metric as TripMetric)
+    : measureInfringements(
+        events as Infringement[],
+        metric as InfringementMetric,
+      );
 
 /* -------------------------------------------------------------------------- */
 /* Widgets                                                                     */
@@ -303,21 +481,27 @@ type SeriesStyle = "line" | "bar" | "table";
 type Display = "value" | "percent" | "both";
 
 /** What a widget draws, before it has a place on the canvas. */
+/** What a barlist or donut counts its rows by: a key of its dataset's fields. */
+type Breakdown = "operator" | "vehicle" | "type" | "status";
+
 type WidgetSpec =
   | {
       kind: "series";
       title: string;
+      /** The dataset it reads; trips when absent. */
+      dataset?: DatasetId;
       metric: Metric;
       /** One line or stack per operator, rather than one total. */
       byOperator: boolean;
       style: SeriesStyle;
       display: Display;
     }
-  | { kind: "kpi"; title: string; metric: Metric }
-  | { kind: "barlist"; title: string }
-  | { kind: "donut"; title: string }
-  | { kind: "matrix"; title: string }
-  | { kind: "summary"; title: string }
+  | { kind: "kpi"; title: string; dataset?: DatasetId; metric: Metric }
+  | { kind: "barlist"; title: string; dataset?: DatasetId; by?: Breakdown }
+  | { kind: "donut"; title: string; dataset?: DatasetId; by?: Breakdown }
+  | { kind: "matrix"; title: string; dataset?: DatasetId }
+  /** The trips' daily numbers, side by side. */
+  | { kind: "summary"; title: string; dataset?: DatasetId }
   /** Its heading is the first line of the Markdown, so it has no title of its own. */
   | { kind: "text"; markdown: string };
 
@@ -338,6 +522,10 @@ const textName = (markdown: string) =>
     .find((l) => l.trim())
     ?.replace(/^#+\s*/, "")
     .trim() || "Text";
+
+/** The dataset a chart reads; text reads none. */
+const datasetOf = (w: WidgetSpec): DatasetId | null =>
+  w.kind === "text" ? null : (w.dataset ?? "trips");
 
 const nameOf = (w: WidgetSpec) =>
   w.kind === "text" ? textName(w.markdown) : w.title || "Untitled";
@@ -521,6 +709,104 @@ const LIBRARY: Template[] = [
     cells: { w: 12, h: 2 },
     spec: { kind: "matrix", title: "Trips by weekday and hour" },
   },
+  {
+    id: "lib-inf-operator",
+    cells: { w: 12, h: 2 },
+    spec: {
+      kind: "series",
+      title: "Infringements over time per operator",
+      dataset: "infringements",
+      metric: "infringements",
+      byOperator: true,
+      style: "line",
+      display: "value",
+    },
+  },
+  {
+    id: "lib-inf-day",
+    cells: { w: 12, h: 2 },
+    spec: {
+      kind: "series",
+      title: "Infringements by day by operator",
+      dataset: "infringements",
+      metric: "infringements",
+      byOperator: true,
+      style: "bar",
+      display: "value",
+    },
+  },
+  {
+    id: "lib-inf-resolution",
+    cells: { w: 4, h: 2 },
+    spec: {
+      kind: "series",
+      title: "Time to resolve over time",
+      dataset: "infringements",
+      metric: "resolution",
+      byOperator: false,
+      style: "line",
+      display: "value",
+    },
+  },
+  {
+    id: "lib-kpi-infringements",
+    cells: { w: 4, h: 2 },
+    spec: {
+      kind: "kpi",
+      title: "Total infringements",
+      dataset: "infringements",
+      metric: "infringements",
+    },
+  },
+  {
+    id: "lib-kpi-fines",
+    cells: { w: 4, h: 2 },
+    spec: {
+      kind: "kpi",
+      title: "Fines issued",
+      dataset: "infringements",
+      metric: "fines",
+    },
+  },
+  {
+    id: "lib-inf-type",
+    cells: { w: 6, h: 2 },
+    spec: {
+      kind: "barlist",
+      title: "Infringements by type",
+      dataset: "infringements",
+      by: "type",
+    },
+  },
+  {
+    id: "lib-inf-by-operator",
+    cells: { w: 6, h: 2 },
+    spec: {
+      kind: "barlist",
+      title: "Infringements by operator",
+      dataset: "infringements",
+      by: "operator",
+    },
+  },
+  {
+    id: "lib-inf-status",
+    cells: { w: 6, h: 2 },
+    spec: {
+      kind: "donut",
+      title: "Infringements by status",
+      dataset: "infringements",
+      by: "status",
+    },
+  },
+  {
+    id: "lib-inf-matrix",
+    cells: { w: 12, h: 2 },
+    spec: {
+      kind: "matrix",
+      title: "Infringements by weekday and hour",
+      dataset: "infringements",
+    },
+  },
 ];
 
 const templateOf = (id: string) => LIBRARY.find((t) => t.id === id)!;
@@ -633,6 +919,39 @@ const SAMPLE_REPORTS: Report[] = [
     filters: { ...DEFAULT_FILTERS, zone: "baixa" },
     widgets: place("lib-trips-day", "lib-fleet", "lib-donut"),
   },
+  {
+    id: "parking-compliance",
+    title: "Parking compliance",
+    creator: TOMAS,
+    createdAt: "2026-10-05T09:20:14Z",
+    updatedAt: "2026-10-07T15:48:02Z",
+    filters: {
+      ...DEFAULT_FILTERS,
+      datasets: {
+        infringements: { type: ["Sidewalk parking", "Blocking access"] },
+      },
+    },
+    widgets: layOut([
+      {
+        spec: {
+          kind: "text",
+          markdown:
+            "## Where shared vehicles are left badly\n\nInfringements logged by the city's patrols, next to the trips that led to them.",
+        },
+        cells: { w: 12, h: 1 },
+      },
+      ...[
+        "lib-kpi-infringements",
+        "lib-kpi-fines",
+        "lib-kpi-trips",
+        "lib-inf-day",
+        "lib-inf-type",
+        "lib-inf-by-operator",
+        "lib-trips-operator",
+        "lib-inf-matrix",
+      ].map(templateOf),
+    ]),
+  },
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -733,20 +1052,27 @@ function formatMetric(value: number, metric: Metric) {
 const formatPercent = (v: number) => `${v.toFixed(1)}%`;
 
 /* -------------------------------------------------------------------------- */
-/* Trips                                                                       */
+/* Datasets                                                                    */
 /* -------------------------------------------------------------------------- */
 
-type TripsState =
+type DatasetState =
   | { status: "loading" }
   | { status: "error" }
-  | { status: "ready"; trips: Trip[]; providers: string[] };
+  | {
+      status: "ready";
+      events: AnyEvent[];
+      /** Per field key, the values the feed holds, in its own order. */
+      values: Record<string, string[]>;
+    };
 
 /**
- * Fetched once for every report: they all read the same feed, and 700KB of CSV
- * has no business in the JavaScript payload.
+ * Fetched once for every report: they all read the same feeds, and hundreds of
+ * KB of CSV have no business in the JavaScript payload.
  */
-function useTrips(url: string) {
-  const [state, setState] = React.useState<TripsState>({ status: "loading" });
+function useDataset(def: DatasetDef, url: string) {
+  const [state, setState] = React.useState<DatasetState>({
+    status: "loading",
+  });
   const [attempt, setAttempt] = React.useState(0);
 
   React.useEffect(() => {
@@ -758,19 +1084,24 @@ function useTrips(url: string) {
       )
       .then((text) => {
         const parsed = parseCsv(text);
-        const trips = readTrips(parsed);
-        if (trips.length === 0) throw new Error("No trips in the feed");
+        const events = def.read(parsed);
+        if (events.length === 0) throw new Error(`No ${def.noun} in the feed`);
         // Same inference the data hub runs, so operators come out in the same
         // order and an unstyled one gets the same palette colour there and here.
-        const by = parsed.header.indexOf(TRIPS_COLUMN);
-        const providers = inferColumns(parsed)[by]?.values ?? [];
-        setState({ status: "ready", trips, providers });
+        const columns = inferColumns(parsed);
+        const values = Object.fromEntries(
+          def.fields.map((f) => [
+            f.key,
+            columns[parsed.header.indexOf(f.column)]?.values ?? [],
+          ]),
+        );
+        setState({ status: "ready", events, values });
       })
       .catch(() => {
         if (!controller.signal.aborted) setState({ status: "error" });
       });
     return () => controller.abort();
-  }, [url, attempt]);
+  }, [def, url, attempt]);
 
   return { state, retry: () => setAttempt((n) => n + 1) };
 }
@@ -780,7 +1111,7 @@ function useOperatorStyles() {
   const [saved, setSaved] = React.useState<CategoryStyleSet | undefined>();
   // Read after mount, never in the initial state: the server has no storage.
   React.useEffect(() => {
-    const read = () => setSaved(readStyleSet(TRIPS_DATASET, TRIPS_COLUMN));
+    const read = () => setSaved(readStyleSet(STYLE_DATASET, STYLE_COLUMN));
     read();
     const onStorage = (e: StorageEvent) => {
       if (e.key === null || e.key === STYLE_STORAGE_KEY) read();
@@ -791,50 +1122,60 @@ function useOperatorStyles() {
   return saved;
 }
 
-/** Everything a widget draws from, filtered once per report rather than per widget. */
+/** Everything a dataset's widgets draw from, filtered once per report. */
 type ReportData = {
-  status: TripsState["status"];
-  trips: Trip[];
+  status: DatasetState["status"];
+  dataset: DatasetDef;
+  events: AnyEvent[];
   days: string[];
   /** The period before, under the same filters. Null when not comparing. */
-  previous: { trips: Trip[]; days: string[] } | null;
+  previous: { events: AnyEvent[]; days: string[] } | null;
   providers: string[];
+  /** Per field key, the values the feed holds. */
+  values: Record<string, string[]>;
   styles: Record<string, CategoryStyle>;
 };
 
+type DatasetStates = Record<DatasetId, DatasetState>;
+
 function useReportData(
-  state: TripsState,
+  states: DatasetStates,
   filters: Filters,
   styles: Record<string, CategoryStyle>,
-): ReportData {
+): Record<DatasetId, ReportData> {
   return React.useMemo(() => {
-    const f = tripFilter(filters);
+    const f = eventFilter(filters);
     const days = daysBetween(f.from, f.to);
-    if (state.status !== "ready") {
-      return {
-        status: state.status,
-        trips: [],
-        days,
-        previous: null,
-        providers: [],
-        styles,
-      };
-    }
     const prev = previousPeriod(f);
-    return {
-      status: "ready",
-      trips: filterTrips(state.trips, f),
-      days,
-      previous: filters.compare
-        ? {
-            trips: filterTrips(state.trips, prev),
-            days: daysBetween(prev.from, prev.to),
-          }
-        : null,
-      providers: state.providers,
-      styles,
+    const of = (id: DatasetId): ReportData => {
+      const state = states[id];
+      const base = { dataset: DATASETS[id], days, styles };
+      if (state.status !== "ready")
+        return {
+          ...base,
+          status: state.status,
+          events: [],
+          previous: null,
+          providers: [],
+          values: {},
+        };
+      const own = datasetMatch(filters, id);
+      return {
+        ...base,
+        status: "ready",
+        events: filterEvents(state.events, f, own),
+        previous: filters.compare
+          ? {
+              events: filterEvents(state.events, prev, own),
+              days: daysBetween(prev.from, prev.to),
+            }
+          : null,
+        providers: state.values.operator ?? [],
+        values: state.values,
+      };
     };
-  }, [state, filters, styles]);
+    return { trips: of("trips"), infringements: of("infringements") };
+  }, [states, filters, styles]);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -993,15 +1334,16 @@ type SeriesWidget = Extract<WidgetSpec, { kind: "series" }>;
 function seriesRows(w: SeriesWidget, data: ReportData) {
   const groups = w.byOperator ? data.providers : null;
   const names = groups ?? [METRICS[w.metric].label];
-  const series = dailySeries(data.trips, data.days, w.metric, groups);
+  const m = (own: AnyEvent[]) => measureEvents(own, w.metric);
+  const series = dailySeries(data.events, data.days, m, groups);
   const prev =
-    // No line at all beats a flat one at zero for a period with no trips.
-    data.previous?.trips.length && !w.byOperator
-      ? dailySeries(data.previous.trips, data.previous.days, w.metric, null)
+    // No line at all beats a flat one at zero for a period with no data.
+    data.previous?.events.length && !w.byOperator
+      ? dailySeries(data.previous.events, data.previous.days, m, null)
       : null;
   // A share only means something for counts. A share of a median is nonsense,
   // so averages keep showing their values whatever Display says.
-  const shareable = w.metric === "trips" || w.metric === "vehicles";
+  const shareable = !!METRICS[w.metric].count;
   const periodTotal = series.reduce(
     (s, d) => s + d.values.reduce((a, b) => a + b, 0),
     0,
@@ -1474,7 +1816,8 @@ function SeriesBody({
 }
 
 function summaryRows(data: ReportData) {
-  const of = (m: Metric) => dailySeries(data.trips, data.days, m, null);
+  const of = (m: TripMetric) =>
+    dailySeries(data.events as Trip[], data.days, m, null);
   const fleet = of("vehicles");
   const trips = of("trips");
   const distance = of("distance");
@@ -1520,9 +1863,9 @@ function KpiBody({
   data: ReportData;
   preview?: boolean;
 }) {
-  const now = measure(data.trips, widget.metric);
-  const before = data.previous?.trips.length
-    ? measure(data.previous.trips, widget.metric)
+  const now = measureEvents(data.events, widget.metric);
+  const before = data.previous?.events.length
+    ? measureEvents(data.previous.events, widget.metric)
     : null;
   const delta = before === null ? null : change(now, before);
   const Arrow =
@@ -1533,7 +1876,12 @@ function KpiBody({
         : ArrowDown;
   const trend = React.useMemo(
     () =>
-      dailySeries(data.trips, data.days, widget.metric, null).map((d) => ({
+      dailySeries(
+        data.events,
+        data.days,
+        (own) => measureEvents(own, widget.metric),
+        null,
+      ).map((d) => ({
         day: d.day,
         v: d.values[0] ?? 0,
       })),
@@ -1543,7 +1891,7 @@ function KpiBody({
   return (
     <div className="flex h-full min-h-28 flex-col items-center justify-center gap-1 text-center">
       <p className="text-primary text-4xl font-semibold tracking-tight tabular-nums">
-        {widget.metric === "trips" || widget.metric === "vehicles"
+        {METRICS[widget.metric].count && !METRICS[widget.metric].unit
           ? compact.format(now)
           : formatMetric(now, widget.metric)}
       </p>
@@ -1554,13 +1902,13 @@ function KpiBody({
         <p
           className={cn(
             "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums",
-            // A rise in trips or fleet reads as good; distance and duration are
-            // neither, so they stay neutral.
-            widget.metric === "trips" || widget.metric === "vehicles"
-              ? delta > 0
+            // A rise in trips or fleet reads as good, a rise in infringements
+            // as bad; averages are neither, so they stay neutral.
+            !METRICS[widget.metric].count
+              ? "bg-muted text-muted-foreground"
+              : delta > 0 === (data.dataset.id === "trips")
                 ? "bg-success/10 text-success"
-                : "bg-destructive/10 text-destructive"
-              : "bg-muted text-muted-foreground",
+                : "bg-destructive/10 text-destructive",
           )}
         >
           {Arrow ? <Arrow className="size-3" aria-hidden /> : null}
@@ -1569,7 +1917,7 @@ function KpiBody({
         </p>
       ) : data.previous ? (
         <p className="text-muted-foreground text-xs">
-          No earlier trips to compare with
+          No earlier {data.dataset.noun} to compare with
         </p>
       ) : null}
       {/* The period's shape under the number: is it steady, or did one day make it? */}
@@ -1622,26 +1970,59 @@ function KpiBody({
   );
 }
 
-function BarlistBody({ data }: { data: ReportData }) {
-  const rows = byProvider(data.trips, data.providers).sort(
-    (a, b) => b.trips - a.trips,
+const VEHICLE_LABELS: Record<string, string> = {
+  scooter: "Scooters",
+  bicycle: "Bikes",
+};
+
+/** For categories with no saved style. Steps apart, so neighbours do not read as one. */
+const BREAKDOWN_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-4)",
+  "var(--chart-2)",
+  "var(--chart-5)",
+  "var(--chart-3)",
+];
+
+/**
+ * A barlist's or donut's rows: how many of the dataset's rows have each value
+ * of a field, in the feed's own order, coloured by operator style when it is
+ * operators and by the palette otherwise.
+ */
+function breakdownRows(data: ReportData, by: Breakdown) {
+  const field = data.dataset.fields.find((f) => f.key === by) ?? OPERATOR_FIELD;
+  return countBy(data.events, field.of, data.values[field.key] ?? []).map(
+    (r, i) => ({
+      key: `v${i}`,
+      value: r.value,
+      label: by === "vehicle" ? (VEHICLE_LABELS[r.value] ?? r.value) : r.value,
+      count: r.count,
+      share: r.share,
+      color:
+        (by === "operator" ? data.styles[r.value]?.color : undefined) ??
+        BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length]!,
+    }),
   );
-  const max = Math.max(1, ...rows.map((r) => r.trips));
+}
+
+function BarlistBody({ data, by }: { data: ReportData; by: Breakdown }) {
+  const rows = breakdownRows(data, by).sort((a, b) => b.count - a.count);
+  const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <ul className="space-y-2.5">
       {rows.map((r) => (
-        <li key={r.provider} className="space-y-1">
+        <li key={r.value} className="space-y-1">
           <div className="flex items-baseline justify-between gap-2 text-xs">
             <span className="flex min-w-0 items-center gap-1.5">
               <span
                 aria-hidden
                 className="size-2 shrink-0 rounded-full"
-                style={{ background: data.styles[r.provider]?.color }}
+                style={{ background: r.color }}
               />
-              <span className="truncate">{r.provider}</span>
+              <span className="truncate">{r.label}</span>
             </span>
             <span className="tabular-nums">
-              {r.trips.toLocaleString("en")}
+              {r.count.toLocaleString("en")}
               <span className="text-muted-foreground ml-1.5">
                 {formatPercent(r.share * 100)}
               </span>
@@ -1654,8 +2035,8 @@ function BarlistBody({ data }: { data: ReportData }) {
             <div
               className="h-full rounded-full transition-[width] duration-500"
               style={{
-                width: `${(r.trips / max) * 100}%`,
-                background: data.styles[r.provider]?.color ?? "var(--primary)",
+                width: `${(r.count / max) * 100}%`,
+                background: r.color,
               }}
             />
           </div>
@@ -1665,34 +2046,23 @@ function BarlistBody({ data }: { data: ReportData }) {
   );
 }
 
-const VEHICLE_LABELS: Record<string, string> = {
-  scooter: "Scooters",
-  bicycle: "Bikes",
-};
-
-function donutRows(data: ReportData) {
-  const counts = new Map<string, number>();
-  for (const t of data.trips)
-    counts.set(t.vehicle, (counts.get(t.vehicle) ?? 0) + 1);
-  return [...counts].map(([vehicle, trips], i) => ({
-    key: `v${i}`,
-    vehicle: VEHICLE_LABELS[vehicle] ?? vehicle,
-    trips,
-  }));
-}
-
-// Two steps apart, so the two vehicle types do not read as one teal.
-const DONUT_COLORS = ["var(--chart-1)", "var(--chart-4)", "var(--chart-2)"];
-
-function DonutBody({ data, preview }: { data: ReportData; preview?: boolean }) {
-  const rows = React.useMemo(() => donutRows(data), [data]);
-  const config: ChartConfig = Object.fromEntries(
-    rows.map((r, i) => [
-      r.key,
-      { label: r.vehicle, color: DONUT_COLORS[i % DONUT_COLORS.length] },
-    ]),
+function DonutBody({
+  data,
+  by,
+  preview,
+}: {
+  data: ReportData;
+  by: Breakdown;
+  preview?: boolean;
+}) {
+  const rows = React.useMemo(
+    () => breakdownRows(data, by).filter((r) => r.count > 0),
+    [data, by],
   );
-  const total = rows.reduce((s, r) => s + r.trips, 0);
+  const config: ChartConfig = Object.fromEntries(
+    rows.map((r) => [r.key, { label: r.label, color: r.color }]),
+  );
+  const total = rows.reduce((s, r) => s + r.count, 0);
   return (
     <div
       className={cn(
@@ -1711,7 +2081,9 @@ function DonutBody({ data, preview }: { data: ReportData; preview?: boolean }) {
           <span className="text-lg leading-none font-semibold tabular-nums">
             {compact.format(total)}
           </span>
-          <span className="text-muted-foreground mt-1 text-[10px]">trips</span>
+          <span className="text-muted-foreground mt-1 text-[10px]">
+            {data.dataset.noun}
+          </span>
         </div>
         <ChartContainer config={config} className="aspect-auto size-full">
           <PieChart>
@@ -1720,7 +2092,7 @@ function DonutBody({ data, preview }: { data: ReportData; preview?: boolean }) {
             />
             <Pie
               data={rows}
-              dataKey="trips"
+              dataKey="count"
               nameKey="key"
               innerRadius="62%"
               outerRadius="88%"
@@ -1746,11 +2118,11 @@ function DonutBody({ data, preview }: { data: ReportData; preview?: boolean }) {
               <span
                 aria-hidden
                 className="size-2.5 rounded-[3px]"
-                style={{ background: config[r.key]?.color }}
+                style={{ background: r.color }}
               />
-              {r.vehicle}
+              {r.label}
               <span className="text-foreground font-medium tabular-nums">
-                {total ? Math.round((r.trips / total) * 100) : 0}%
+                {total ? Math.round((r.count / total) * 100) : 0}%
               </span>
             </li>
           ))}
@@ -1771,7 +2143,7 @@ function MatrixBody({ data }: { data: ReportData }) {
       <ActivityHeatmap
         rows={WEEKDAY_LABELS}
         columns={HOUR_LABELS}
-        values={weekHourGrid(data.trips)}
+        values={weekHourGrid(data.events)}
       />
       <div className="text-muted-foreground flex justify-between pl-16 text-[10px] tabular-nums">
         <span>00:00</span>
@@ -1809,10 +2181,10 @@ function WidgetBody({
       </p>
     );
   }
-  if (data.trips.length === 0) {
+  if (data.events.length === 0) {
     return (
       <p className="text-muted-foreground py-10 text-center text-sm">
-        No trips match these filters.
+        No {data.dataset.noun} match these filters.
       </p>
     );
   }
@@ -1830,9 +2202,11 @@ function WidgetBody({
     case "kpi":
       return <KpiBody widget={widget} data={data} preview={preview} />;
     case "barlist":
-      return <BarlistBody data={data} />;
+      return <BarlistBody data={data} by={widget.by ?? "operator"} />;
     case "donut":
-      return <DonutBody data={data} preview={preview} />;
+      return (
+        <DonutBody data={data} by={widget.by ?? "vehicle"} preview={preview} />
+      );
     case "matrix":
       return <MatrixBody data={data} />;
   }
@@ -1866,7 +2240,7 @@ function widgetCsv(widget: WidgetSpec, data: ReportData): Csv | null {
         rows: [
           {
             metric: METRICS[widget.metric].label,
-            value: measure(data.trips, widget.metric),
+            value: measureEvents(data.events, widget.metric),
           },
         ],
         columns: [
@@ -1875,24 +2249,21 @@ function widgetCsv(widget: WidgetSpec, data: ReportData): Csv | null {
         ],
       };
     case "barlist":
+    case "donut": {
+      const by =
+        widget.by ?? (widget.kind === "barlist" ? "operator" : "vehicle");
+      const field = data.dataset.fields.find((f) => f.key === by);
       return {
-        rows: byProvider(data.trips, data.providers),
+        rows: breakdownRows(data, by),
         columns: [
-          { id: "provider", label: "operator" },
-          { id: "trips", label: "trips" },
+          { id: "value", label: field?.label.toLowerCase() ?? by },
+          { id: "count", label: data.dataset.noun },
         ],
       };
-    case "donut":
-      return {
-        rows: donutRows(data),
-        columns: [
-          { id: "vehicle", label: "vehicle type" },
-          { id: "trips", label: "trips" },
-        ],
-      };
+    }
     case "matrix": {
       const grid = WEEKDAY_LABELS.map(() => HOUR_LABELS.map(() => 0));
-      for (const t of data.trips)
+      for (const t of data.events)
         if (t.weekday >= 0) grid[t.weekday]![t.hour]!++;
       return {
         rows: grid.map((row, d) => ({
@@ -2080,7 +2451,7 @@ function WidgetSettings({
               { value: "both", label: "#%", name: "Values and share" },
             ]}
           />
-          {widget.metric === "distance" || widget.metric === "duration" ? (
+          {!METRICS[widget.metric].count ? (
             <p className="text-muted-foreground text-xs">
               A share of an average means nothing, so this chart always shows
               values.
@@ -2092,14 +2463,79 @@ function WidgetSettings({
   );
 }
 
+/**
+ * Which filters a chart is under, from its header: a count, and the list on
+ * click. The date leads, since it always applies; then the overall filters,
+ * then the dataset's own.
+ */
+function CardFilters({
+  filters,
+  dataset,
+}: {
+  filters: Filters;
+  dataset: DatasetId;
+}) {
+  const applied = appliedFilters(filters, dataset);
+  const period = PERIODS[filters.period];
+  const prev = previousPeriod({ from: period.from, to: period.to });
+  const rows = [
+    { id: "date", label: "Date", value: period.label },
+    ...(filters.compare
+      ? [
+          {
+            id: "compare",
+            label: "Compared with",
+            value: rangeLabel(prev.from, prev.to),
+          },
+        ]
+      : []),
+    ...applied,
+  ];
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex shrink-0 items-center gap-1 rounded-sm text-xs focus-visible:ring-2 focus-visible:outline-none"
+          />
+        }
+      >
+        <ListFilter className="size-3.5" aria-hidden />
+        {applied.length === 0
+          ? "No filters"
+          : `${applied.length} ${applied.length === 1 ? "filter" : "filters"}`}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 gap-2 p-3">
+        <p className="text-sm font-medium">Filters on this chart</p>
+        <dl className="space-y-1.5 text-xs">
+          {rows.map((r) => (
+            <div key={r.id} className="flex justify-between gap-3">
+              <dt className="text-muted-foreground shrink-0">{r.label}</dt>
+              <dd className="min-w-0 text-right font-medium">{r.value}</dd>
+            </div>
+          ))}
+        </dl>
+        {applied.length === 0 ? (
+          <p className="text-muted-foreground text-xs">
+            Only the date applies. Add filters from the bar above the report.
+          </p>
+        ) : null}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function WidgetCard({
   widget,
   data,
+  filters,
   onChange,
   onDelete,
 }: {
   widget: ChartWidget;
   data: ReportData;
+  filters: Filters;
   onChange: (w: ChartWidget) => void;
   onDelete: () => void;
 }) {
@@ -2148,10 +2584,15 @@ function WidgetCard({
             />
             <span className="truncate">{name}</span>
           </h3>
-          <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-            <Database className="size-3.5 shrink-0" aria-hidden />
-            <span className="truncate">{SOURCE}</span>
-          </p>
+          <div className="text-muted-foreground flex min-w-0 items-center gap-3 text-xs">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <Database className="size-3.5 shrink-0" aria-hidden />
+              <span className="truncate">{data.dataset.label}</span>
+            </span>
+            <span className="draggable-cancel">
+              <CardFilters filters={filters} dataset={data.dataset.id} />
+            </span>
+          </div>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -2405,12 +2846,15 @@ type Target = { rect: Rect; drawn: boolean; mode: "choose" | "chart" };
 function ReportCanvas({
   widgets,
   data,
+  filters,
   autoSelectId,
   onChange,
   onPlacedText,
 }: {
   widgets: Widget[];
-  data: ReportData;
+  /** Per dataset: each chart draws from its own. */
+  data: Record<DatasetId, ReportData>;
+  filters: Filters;
   /** A text widget to focus as soon as it mounts. */
   autoSelectId: string | null;
   onChange: (widgets: Widget[]) => void;
@@ -2623,7 +3067,8 @@ function ReportCanvas({
     ) : (
       <WidgetCard
         widget={w}
-        data={data}
+        data={data[datasetOf(w) ?? "trips"]}
+        filters={filters}
         onChange={(next) => update(w.id, next)}
         onDelete={() => remove(w.id)}
       />
@@ -3104,7 +3549,10 @@ function FacetFilter<T extends string>({
   );
 }
 
-const DATASETS = [{ value: TRIPS_DATASET, label: SOURCE }];
+const DATASET_OPTIONS = DATASET_IDS.map((id) => ({
+  value: id,
+  label: DATASETS[id].label,
+}));
 const TYPE_OPTIONS = CHART_TYPES.map((t) => ({
   value: t,
   label: TYPE_LABELS[t],
@@ -3124,7 +3572,8 @@ function AddChartsDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  data: ReportData;
+  /** Per dataset, so each preview draws from the data it was made from. */
+  data: Record<DatasetId, ReportData>;
   /** The picked charts, in the order they were picked. */
   onAdd: (items: Placement[]) => void;
   /**
@@ -3137,7 +3586,7 @@ function AddChartsDialog({
   const [types, setTypes] = React.useState<Array<Exclude<ChartType, "text">>>(
     [],
   );
-  const [sources, setSources] = React.useState<string[]>([]);
+  const [sources, setSources] = React.useState<DatasetId[]>([]);
   const [picked, setPicked] = React.useState<string[]>([]);
 
   React.useEffect(() => {
@@ -3152,8 +3601,7 @@ function AddChartsDialog({
   const items = LIBRARY.filter(
     (w) =>
       (types.length === 0 || types.some((t) => t === typeOf(w.spec))) &&
-      // Every library chart reads the one sample dataset.
-      (sources.length === 0 || sources.includes(TRIPS_DATASET)) &&
+      (sources.length === 0 || sources.includes(datasetOf(w.spec)!)) &&
       (!q || nameOf(w.spec).toLowerCase().includes(q)),
   );
   const filtering = !!q || types.length > 0 || sources.length > 0;
@@ -3183,7 +3631,7 @@ function AddChartsDialog({
             icon={Database}
             label="Data"
             searchLabel="Look for data"
-            options={DATASETS}
+            options={DATASET_OPTIONS}
             value={sources}
             onChange={setSources}
           />
@@ -3254,8 +3702,16 @@ function AddChartsDialog({
                         : "hover:border-foreground/25",
                     )}
                   >
-                    <span className="truncate text-sm font-semibold">
-                      {nameOf(w.spec)}
+                    <span className="min-w-0 space-y-0.5">
+                      <span className="block truncate text-sm font-semibold">
+                        {nameOf(w.spec)}
+                      </span>
+                      <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                        <Database className="size-3.5 shrink-0" aria-hidden />
+                        <span className="truncate">
+                          {DATASETS[datasetOf(w.spec)!].label}
+                        </span>
+                      </span>
                     </span>
                     {/* A picture of the chart, not a second chart to use: no
                         tooltips, sorting or focus stops inside the button. */}
@@ -3263,7 +3719,11 @@ function AddChartsDialog({
                       inert
                       className="pointer-events-none flex min-h-0 flex-1 flex-col justify-center"
                     >
-                      <WidgetBody widget={w.spec} data={data} preview />
+                      <WidgetBody
+                        widget={w.spec}
+                        data={data[datasetOf(w.spec)!]}
+                        preview
+                      />
                     </div>
                     {on ? (
                       <span
@@ -3306,147 +3766,365 @@ function AddChartsDialog({
 /* Filters                                                                     */
 /* -------------------------------------------------------------------------- */
 
-function FilterRow({
-  icon: Icon,
-  label,
-  hint,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
+/** Every filter that can be added, overall first, then each dataset's own. */
+type FilterFieldDef = {
+  /** As in `AppliedFilter.id`: "slice", "zone", "trips.operator". */
+  id: string;
   label: string;
-  hint?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3 px-3 py-2.5">
-      <div className="min-w-0 pt-1.5">
-        <p className="flex items-center gap-2 text-sm font-medium">
-          <Icon className="text-muted-foreground size-4 shrink-0" aria-hidden />
-          {label}
-        </p>
-        {hint ? <div className="pl-6 text-xs">{hint}</div> : null}
-      </div>
-      {children}
-    </div>
-  );
+  dataset: DatasetId | null;
+  /** Several values at once; time and zone take one. */
+  multi: boolean;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+};
+
+const FILTER_FIELDS: FilterFieldDef[] = [
+  { id: "slice", label: "Time", dataset: null, multi: false, icon: Clock },
+  { id: "zone", label: "Zone", dataset: null, multi: false, icon: Pentagon },
+  ...DATASET_IDS.flatMap((ds) =>
+    DATASETS[ds].fields.map((f) => ({
+      id: `${ds}.${f.key}`,
+      label: f.label,
+      dataset: ds,
+      multi: true,
+      icon: Database,
+    })),
+  ),
+];
+
+const fieldKeyOf = (id: string) => id.split(".")[1] ?? id;
+
+function filterValues(f: Filters, field: FilterFieldDef): string[] {
+  if (field.id === "slice") return f.slice ? [f.slice] : [];
+  if (field.id === "zone") return f.zone ? [f.zone] : [];
+  return f.datasets[field.dataset!]?.[fieldKeyOf(field.id)] ?? [];
 }
 
-function FilterSelect<K extends string>({
+function withFilterValues(
+  f: Filters,
+  field: FilterFieldDef,
+  values: string[],
+): Filters {
+  if (field.id === "slice") return { ...f, slice: values[0] };
+  if (field.id === "zone") return { ...f, zone: values[0] };
+  const ds = field.dataset!;
+  const own = { ...f.datasets[ds] };
+  if (values.length) own[fieldKeyOf(field.id)] = values;
+  else delete own[fieldKeyOf(field.id)];
+  return { ...f, datasets: { ...f.datasets, [ds]: own } };
+}
+
+/** A searchable list to pick a filter's values from, ticked when chosen. */
+function ValuePicker({
   label,
-  value,
   options,
+  selected,
+  multi,
   onChange,
 }: {
   label: string;
-  value: K;
-  options: Record<K, { label: string }>;
-  onChange: (v: K) => void;
+  options: Array<{ value: string; label: string }>;
+  selected: string[];
+  multi: boolean;
+  onChange: (values: string[]) => void;
 }) {
   return (
-    <Select value={value} onValueChange={(v) => v && onChange(v as K)}>
-      <SelectTrigger
-        aria-label={label}
-        className="text-muted-foreground w-auto max-w-44 border-transparent bg-transparent shadow-none dark:bg-transparent"
-      >
-        <SelectValue>{(v: string) => options[v as K]?.label}</SelectValue>
-      </SelectTrigger>
-      <SelectContent align="end">
-        {(Object.keys(options) as K[]).map((k) => (
-          <SelectItem key={k} value={k}>
-            {options[k].label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <Command>
+      <CommandInput
+        placeholder={`Look for ${label.toLowerCase()}`}
+        aria-label={`Look for ${label.toLowerCase()}`}
+      />
+      <CommandList>
+        <CommandEmpty>Nothing matches.</CommandEmpty>
+        <CommandGroup>
+          {options.map((o) => {
+            const on = selected.includes(o.value);
+            return (
+              <CommandItem
+                key={o.value}
+                value={o.label}
+                data-checked={on}
+                onSelect={() =>
+                  onChange(
+                    !multi
+                      ? [o.value]
+                      : on
+                        ? selected.filter((v) => v !== o.value)
+                        : [...selected, o.value],
+                  )
+                }
+              >
+                {o.label}
+              </CommandItem>
+            );
+          })}
+        </CommandGroup>
+      </CommandList>
+    </Command>
   );
 }
 
-const linkClass =
-  "text-muted-foreground hover:text-foreground whitespace-nowrap underline-offset-2 hover:underline";
+const chipClass =
+  "bg-card inline-flex h-8 max-w-full items-stretch overflow-hidden rounded-md border text-sm shadow-xs";
+const chipPartClass =
+  "hover:bg-muted focus-visible:ring-ring inline-flex min-w-0 items-center gap-1.5 px-2.5 transition-colors focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset";
 
-/** The product's "Overall filters": they apply to every widget in the report. */
-function FiltersPanel({
+/**
+ * The report's filters, in one row above the canvas. The date is always there;
+ * every other filter is added with "Add filter" and stays as a chip, which
+ * reopens its values on click and goes with its ×. A dataset's own filters are
+ * marked with the dataset's name, so it is plain which charts they touch.
+ */
+function ReportFilterBar({
   filters,
+  values,
   onChange,
 }: {
   filters: Filters;
+  /** Per dataset and field key, the values its feed holds. */
+  values: Partial<Record<DatasetId, Record<string, string[]>>>;
   onChange: (f: Filters) => void;
 }) {
+  const [open, setOpen] = React.useState<string | null>(null);
+  // A field just picked in "Add filter", shown as a chip before it has values.
+  const [draft, setDraft] = React.useState<string | null>(null);
   const period = PERIODS[filters.period];
   const prev = previousPeriod({ from: period.from, to: period.to });
   const prevHasData = prev.from >= PERIODS.sep.from;
-  const set = <K extends keyof Filters>(k: K, v: Filters[K]) =>
-    onChange({ ...filters, [k]: v });
+  const applied = appliedFilters(filters);
+  const shown = FILTER_FIELDS.filter(
+    (f) => applied.some((a) => a.id === f.id) || f.id === draft,
+  );
+  const addable = FILTER_FIELDS.filter((f) => !shown.includes(f));
+
+  const optionsOf = (field: FilterFieldDef) =>
+    field.id === "slice"
+      ? Object.entries(SLICES).map(([value, s]) => ({ value, label: s.label }))
+      : field.id === "zone"
+        ? Object.entries(ZONES).map(([value, z]) => ({ value, label: z.label }))
+        : (values[field.dataset!]?.[fieldKeyOf(field.id)] ?? []).map((v) => ({
+            value: v,
+            label: valueLabel(fieldKeyOf(field.id), v),
+          }));
+
+  const openChange = (id: string) => (next: boolean) => {
+    setOpen(next ? id : null);
+    if (!next && id === draft) setDraft(null);
+  };
 
   return (
-    <aside
-      aria-label="Overall filters"
-      className="bg-card h-fit rounded-xl border"
+    <div
+      role="group"
+      aria-label="Report filters"
+      data-slot="report-filters"
+      className="flex flex-wrap items-center gap-2"
     >
-      <h3 className="px-3 pt-3 pb-1 text-sm font-medium">Overall filters</h3>
-      <div className="divide-y">
-        <FilterRow
-          icon={Calendar}
-          label="Date"
-          hint={
-            filters.compare ? null : (
-              <button
-                type="button"
-                className={linkClass}
-                onClick={() => set("compare", true)}
-              >
-                Add compare
-              </button>
-            )
+      <Popover open={open === "date"} onOpenChange={openChange("date")}>
+        <PopoverTrigger
+          render={
+            <button type="button" className={cn(chipClass, chipPartClass)} />
           }
         >
-          <FilterSelect
-            label="Date"
-            value={filters.period}
-            options={PERIODS}
-            onChange={(v) => set("period", v)}
+          <Calendar
+            className="text-muted-foreground size-4 shrink-0"
+            aria-hidden
           />
-        </FilterRow>
-        {filters.compare ? (
-          <FilterRow
-            icon={Calendar}
-            label="Compare date"
-            hint={
-              <button
-                type="button"
-                className={linkClass}
-                onClick={() => set("compare", false)}
+          <span className="text-muted-foreground">Date:</span>
+          <span className="truncate font-medium">{period.label}</span>
+          <ChevronDown
+            className="text-muted-foreground size-3.5 shrink-0"
+            aria-hidden
+          />
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-60 p-0">
+          <ValuePicker
+            label="Date"
+            multi={false}
+            options={Object.entries(PERIODS).map(([value, p]) => ({
+              value,
+              label: p.label,
+            }))}
+            selected={[filters.period]}
+            onChange={([v]) => {
+              if (v) onChange({ ...filters, period: v as PeriodKey });
+              setOpen(null);
+            }}
+          />
+        </PopoverContent>
+      </Popover>
+
+      {filters.compare ? (
+        <span className={chipClass}>
+          <span className="inline-flex min-w-0 items-center gap-1.5 px-2.5">
+            <span className="text-muted-foreground">Compared with:</span>
+            <span className="truncate font-medium">
+              {rangeLabel(prev.from, prev.to)}
+            </span>
+            {prevHasData ? null : (
+              <span className="text-muted-foreground truncate text-xs">
+                · no data before Sep 1
+              </span>
+            )}
+          </span>
+          <button
+            type="button"
+            aria-label="Remove compare"
+            onClick={() => onChange({ ...filters, compare: false })}
+            className={cn(chipPartClass, "shrink-0 border-l px-1.5")}
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        </span>
+      ) : (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onChange({ ...filters, compare: true })}
+        >
+          <Plus data-icon="inline-start" />
+          Compare
+        </Button>
+      )}
+
+      {shown.map((field) => {
+        const selected = filterValues(filters, field);
+        const ds = field.dataset ? DATASETS[field.dataset] : null;
+        const Icon = field.icon;
+        const value = selected.length
+          ? field.dataset
+            ? valuesLabel(fieldKeyOf(field.id), selected)
+            : (applied.find((a) => a.id === field.id)?.value ?? "")
+          : "Choose…";
+        return (
+          <span key={field.id} className={chipClass}>
+            <Popover
+              open={open === field.id}
+              onOpenChange={openChange(field.id)}
+            >
+              <PopoverTrigger
+                render={<button type="button" className={chipPartClass} />}
+                aria-label={`${ds ? `${ds.short} ` : ""}${field.label}: ${value}. Change`}
               >
-                Remove compare
-              </button>
+                <Icon
+                  className="text-muted-foreground size-4 shrink-0"
+                  aria-hidden
+                />
+                {/* One line that truncates as a whole, so on a phone the parts do
+                    not squeeze the value to a letter; there the field's name
+                    gives way first, and the values say what it is. */}
+                <span className="min-w-0 truncate">
+                  <span className="text-muted-foreground">
+                    {ds ? `${ds.short} · ` : ""}
+                    <span className={ds ? "hidden sm:inline" : undefined}>
+                      {field.label}:{" "}
+                    </span>
+                  </span>
+                  <span className="font-medium">{value}</span>
+                </span>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-64 p-0">
+                {ds ? (
+                  <p className="text-muted-foreground border-b px-3 py-2 text-xs">
+                    Only charts from {ds.label}
+                  </p>
+                ) : null}
+                <ValuePicker
+                  label={field.label}
+                  multi={field.multi}
+                  options={optionsOf(field)}
+                  selected={selected}
+                  onChange={(next) => {
+                    onChange(withFilterValues(filters, field, next));
+                    if (!field.multi) setOpen(null);
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+            <button
+              type="button"
+              aria-label={`Remove ${ds ? `${ds.short} ` : ""}${field.label} filter`}
+              onClick={() => {
+                if (field.id === draft) setDraft(null);
+                onChange(withFilterValues(filters, field, []));
+              }}
+              className={cn(chipPartClass, "shrink-0 border-l px-1.5")}
+            >
+              <X className="size-3.5" aria-hidden />
+            </button>
+          </span>
+        );
+      })}
+
+      {addable.length ? (
+        <Popover open={open === "add"} onOpenChange={openChange("add")}>
+          <PopoverTrigger
+            render={
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-dashed shadow-none"
+              />
             }
           >
-            <p className="text-muted-foreground pt-1.5 text-right text-sm">
-              {rangeLabel(prev.from, prev.to)}
-              {prevHasData ? null : (
-                <span className="block text-xs">No trips before Sep 1</span>
-              )}
-            </p>
-          </FilterRow>
-        ) : null}
-        <FilterRow icon={Clock} label="Time">
-          <FilterSelect
-            label="Time"
-            value={filters.slice}
-            options={SLICES}
-            onChange={(v) => set("slice", v)}
-          />
-        </FilterRow>
-        <FilterRow icon={Pentagon} label="Zone">
-          <FilterSelect
-            label="Zone"
-            value={filters.zone}
-            options={ZONES}
-            onChange={(v) => set("zone", v)}
-          />
-        </FilterRow>
-      </div>
-    </aside>
+            <ListFilter data-icon="inline-start" />
+            Add filter
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-64 p-0">
+            <Command>
+              <CommandInput
+                placeholder="Look for a filter"
+                aria-label="Look for a filter"
+              />
+              <CommandList>
+                <CommandEmpty>Nothing matches.</CommandEmpty>
+                {[null, ...DATASET_IDS].map((ds) => {
+                  const items = addable.filter((f) => f.dataset === ds);
+                  if (!items.length) return null;
+                  return (
+                    <CommandGroup
+                      key={ds ?? "overall"}
+                      heading={ds ? DATASETS[ds].label : "All datasets"}
+                    >
+                      {items.map((f) => {
+                        const Icon = f.icon;
+                        return (
+                          <CommandItem
+                            key={f.id}
+                            value={`${ds ? DATASETS[ds].label : "All"} ${f.label}`}
+                            onSelect={() => {
+                              setDraft(f.id);
+                              // After this popover has closed, so the two do
+                              // not fight over focus.
+                              requestAnimationFrame(() => setOpen(f.id));
+                              setOpen(null);
+                            }}
+                          >
+                            <Icon aria-hidden />
+                            {f.label}
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandGroup>
+                  );
+                })}
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      ) : null}
+
+      {applied.length || filters.compare ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setDraft(null);
+            onChange({ ...DEFAULT_FILTERS, period: filters.period });
+          }}
+        >
+          Clear all
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -3518,7 +4196,7 @@ function ExportReportDialog({
 
 function ReportView({
   report,
-  state,
+  states,
   styles,
   aiAnalysis,
   onBack,
@@ -3527,18 +4205,30 @@ function ReportView({
   onExport,
 }: {
   report: Report;
-  state: TripsState;
+  states: DatasetStates;
   styles: Record<string, CategoryStyle>;
   aiAnalysis: boolean;
   onBack: () => void;
   onChange: (r: Report) => void;
-  onRetry: () => void;
+  onRetry: (id: DatasetId) => void;
   onExport: (name: string) => void;
 }) {
-  const data = useReportData(state, report.filters, styles);
-  // Closed to start: open beside the canvas it takes 18rem, and on an ordinary
-  // laptop window that pushes the grid down to its stacked, phone layout.
-  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const data = useReportData(states, report.filters, styles);
+  const values = React.useMemo(
+    () =>
+      Object.fromEntries(
+        DATASET_IDS.map((id) => {
+          const st = states[id];
+          return [id, st.status === "ready" ? st.values : {}];
+        }),
+      ),
+    [states],
+  );
+  // Only datasets this report reads: a broken feed no chart uses is no news.
+  const used = new Set(report.widgets.map(datasetOf));
+  const failed = DATASET_IDS.filter(
+    (id) => states[id].status === "error" && used.has(id),
+  );
   const [exporting, setExporting] = React.useState(false);
   const [exported, setExported] = React.useState<string | null>(null);
   // Committed on blur, so every keystroke is not a save.
@@ -3584,32 +4274,30 @@ function ReportView({
             <WandSparkles data-icon="inline-start" />
             Export report
           </Button>
-          <Button
-            variant="outline"
-            aria-pressed={filtersOpen}
-            onClick={() => setFiltersOpen((o) => !o)}
-          >
-            <ListFilter data-icon="inline-start" />
-            Filters
-          </Button>
         </div>
       </header>
 
-      {state.status === "error" ? (
-        <Alert variant="destructive">
+      <ReportFilterBar
+        filters={report.filters}
+        values={values}
+        onChange={(filters) => onChange({ ...report, filters })}
+      />
+
+      {failed.map((id) => (
+        <Alert key={id} variant="destructive">
           <TriangleAlert />
-          <AlertTitle>Couldn&apos;t load the trips</AlertTitle>
+          <AlertTitle>Couldn&apos;t load the {DATASETS[id].noun}</AlertTitle>
           <AlertDescription>
-            {SOURCE} didn&apos;t load, so these charts are empty. Nothing was
-            changed.
+            {DATASETS[id].label} didn&apos;t load, so its charts are empty.
+            Nothing was changed.
           </AlertDescription>
           <AlertAction>
-            <Button variant="outline" size="xs" onClick={onRetry}>
+            <Button variant="outline" size="xs" onClick={() => onRetry(id)}>
               Try again
             </Button>
           </AlertAction>
         </Alert>
-      ) : null}
+      ))}
 
       {exported ? (
         <Alert>
@@ -3626,27 +4314,15 @@ function ReportView({
         </Alert>
       ) : null}
 
-      <div
-        className={cn(
-          "@container grid gap-4",
-          filtersOpen && "lg:grid-cols-[18rem_minmax(0,1fr)]",
-        )}
-      >
-        {filtersOpen ? (
-          <FiltersPanel
-            filters={report.filters}
-            onChange={(filters) => onChange({ ...report, filters })}
-          />
-        ) : null}
-        <div className="min-w-0">
-          <ReportCanvas
-            widgets={report.widgets}
-            data={data}
-            autoSelectId={autoSelectId}
-            onPlacedText={setAutoSelectId}
-            onChange={setWidgets}
-          />
-        </div>
+      <div className="@container min-w-0">
+        <ReportCanvas
+          widgets={report.widgets}
+          data={data}
+          filters={report.filters}
+          autoSelectId={autoSelectId}
+          onPlacedText={setAutoSelectId}
+          onChange={setWidgets}
+        />
       </div>
 
       <ExportReportDialog
@@ -3928,18 +4604,21 @@ const REPORT_CSS = `
  * feed with filters that apply to all of them.
  *
  * Laid out after the product's dashboards. In a report: an editable name,
- * Export report, an Overall filters panel (date, compare, time, zone) and "+"
- * to add charts from a library or a text section. Each chart's menu edits how
- * it is drawn, refreshes it, exports it as CSV or PNG, or deletes it.
+ * Export report, and a filter bar -- the date, and filters added one at a time,
+ * either on every dataset (time, zone) or on one dataset's charts only. Empty
+ * cells add a chart from the library or a text section. Each chart names its
+ * dataset and the filters it is under; its menu edits how it is drawn,
+ * refreshes it, exports it as CSV or PNG, or deletes it.
  *
  * `status` is how the report catalogue itself is doing; the host owns that
- * fetch. The trips every chart draws from are fetched here, once. Export report
+ * fetch. The datasets the charts draw from are fetched here, once each. Export report
  * hands the chosen name to `onExportReport`: producing the file is the host's job.
  */
 export function ReportsWorkspace({
   className,
   reports: initial = SAMPLE_REPORTS,
-  tripsUrl = DEFAULT_TRIPS_URL,
+  tripsUrl = DATASETS.trips.url,
+  infringementsUrl = DATASETS.infringements.url,
   status = "ready",
   currentUser = { name: "You", email: "" },
   aiAnalysis = true,
@@ -3949,8 +4628,10 @@ export function ReportsWorkspace({
 }: {
   className?: string;
   reports?: Report[];
-  /** The MDS trips CSV every chart reads. */
+  /** The MDS trips CSV the trips charts read. */
   tripsUrl?: string;
+  /** The parking infringements CSV the infringement charts read. */
+  infringementsUrl?: string;
   status?: "ready" | "loading" | "error";
   /** Credited as the creator of reports made or duplicated here. */
   currentUser?: Person;
@@ -3965,11 +4646,30 @@ export function ReportsWorkspace({
   const [openId, setOpenId] = React.useState<string | null>(null);
   const rootRef = React.useRef<HTMLDivElement>(null);
 
-  const { state, retry } = useTrips(tripsUrl);
+  const trips = useDataset(DATASETS.trips, tripsUrl);
+  const infringements = useDataset(DATASETS.infringements, infringementsUrl);
+  const states: DatasetStates = React.useMemo(
+    () => ({ trips: trips.state, infringements: infringements.state }),
+    [trips.state, infringements.state],
+  );
+  const retry = (id: DatasetId) =>
+    (id === "trips" ? trips : infringements).retry();
   const saved = useOperatorStyles();
+  // Operators in the trips feed's order, then any only the other feed has.
+  const operators = React.useMemo(
+    () => [
+      ...new Set(
+        DATASET_IDS.flatMap((id) => {
+          const st = states[id];
+          return st.status === "ready" ? (st.values.operator ?? []) : [];
+        }),
+      ),
+    ],
+    [states],
+  );
   const styles = React.useMemo(
-    () => resolveStyles(state.status === "ready" ? state.providers : [], saved),
-    [state, saved],
+    () => resolveStyles(operators, saved),
+    [operators, saved],
   );
 
   const open = (id: string | null) => {
@@ -4009,7 +4709,7 @@ export function ReportsWorkspace({
       {current ? (
         <ReportView
           report={current}
-          state={state}
+          states={states}
           styles={styles}
           aiAnalysis={aiAnalysis}
           onBack={() => open(null)}

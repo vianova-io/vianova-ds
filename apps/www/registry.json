@@ -199,6 +199,21 @@
       ]
     },
     {
+      "name": "infringement-report",
+      "type": "registry:lib",
+      "title": "Infringement Report",
+      "description": "Infringement Report helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/infringement-report.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "registryDependencies": [
+        "@vianova/trip-report"
+      ]
+    },
+    {
       "name": "report-grid",
       "type": "registry:lib",
       "title": "Report Grid",
@@ -447,12 +462,12 @@
         "@vianova/empty",
         "@vianova/export-menu",
         "@vianova/field",
+        "@vianova/infringement-report",
         "@vianova/input",
         "@vianova/input-group",
         "@vianova/markdown-editor",
         "@vianova/popover",
         "@vianova/report-grid",
-        "@vianova/select",
         "@vianova/skeleton",
         "@vianova/table",
         "@vianova/textarea",
