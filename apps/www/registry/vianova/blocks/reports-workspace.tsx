@@ -180,6 +180,7 @@ import {
   readingOrder,
   resizeTo,
   roomAt,
+  compactUp,
   resolveMove,
   rowCount,
   type Rect,
@@ -2893,10 +2894,11 @@ function ReportCanvas({
     swap: boolean;
   } | null>(null);
   /**
-   * Free placement, as in the product -- no gravity pulling widgets up -- with
-   * collisions settled by resolveMove: a swap, or a chain of pushes down. The
-   * grid's own free mode pushed only the widget it hit, which could land on
-   * the next one and stay hidden under it.
+   * Collisions settled by resolveMove -- a swap, or a chain of pushes down --
+   * and then every other widget rising into the space left free, so a drag
+   * reflows the report rather than leaving holes. The grid's own free mode
+   * pushed only the widget it hit, which could land on the next one and stay
+   * hidden under it.
    */
   const compactor = React.useMemo<Compactor>(
     () => ({
@@ -2907,7 +2909,10 @@ function ReportCanvas({
         const g = gesture.current;
         const live = g && layout.find((l) => l.i === g.id);
         if (!g || !live) return layout.map((l) => ({ ...l }));
-        const resolved = resolveMove(g.origin, g.id, live, { swap: g.swap });
+        const resolved = resolveMove(g.origin, g.id, live, {
+          swap: g.swap,
+          compact: true,
+        });
         const by = new Map(resolved.map((r) => [r.i, r]));
         return layout.map((l) => {
           const r = by.get(l.i);
@@ -3236,7 +3241,10 @@ function ReportCanvas({
     if (!item || !g) return;
     setMoving({ x: item.x, y: item.y, w: item.w, h: item.h });
     setPushedRows(
-      rowCount(resolveMove(g.origin, g.id, item, { swap: g.swap }), 1),
+      rowCount(
+        resolveMove(g.origin, g.id, item, { swap: g.swap, compact: true }),
+        1,
+      ),
     );
   };
   const endGesture = (next: Layout) => {
@@ -3245,7 +3253,8 @@ function ReportCanvas({
     setMoving(null);
     setFrozenRows(null);
     setPushedRows(0);
-    commitLayout(next);
+    // Dropped, the dragged widget rises too, into the place it was held over.
+    commitLayout(compactUp(next));
   };
 
   const rglLayout: Layout = widgets.map((w) => {

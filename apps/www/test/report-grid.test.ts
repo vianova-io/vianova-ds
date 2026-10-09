@@ -9,6 +9,7 @@ import {
   pack,
   readingOrder,
   resizeTo,
+  compactUp,
   resolveMove,
   roomAt,
   rowCount,
@@ -201,5 +202,62 @@ test("growing a chart pushes what is below it down", () => {
   assert.deepEqual(
     out.map((r) => r.y),
     [0, 3, 5],
+  );
+});
+
+test("charts rise into the space a dragged chart leaves", () => {
+  // a is held two rows down; b, beside it, and c, below, fill in above.
+  const origin = [
+    at("a", 0, 0, 12, 2),
+    at("b", 0, 2, 4, 2),
+    at("c", 0, 4, 12, 2),
+  ];
+  const out = resolveMove(
+    origin,
+    "a",
+    { x: 0, y: 6, w: 12, h: 2 },
+    { compact: true },
+  );
+  assert.deepEqual(
+    out.map((r) => [r.i, r.y]),
+    [
+      ["a", 6],
+      ["b", 0],
+      ["c", 2],
+    ],
+  );
+});
+
+test("the held chart stays put while the rest compact around it", () => {
+  const origin = [
+    at("a", 0, 0, 4, 2),
+    at("b", 4, 0, 4, 2),
+    at("c", 0, 2, 12, 2),
+  ];
+  const out = resolveMove(
+    origin,
+    "a",
+    { x: 8, y: 3, w: 4, h: 2 },
+    { compact: true },
+  );
+  assert.deepEqual(
+    out.find((r) => r.i === "a"),
+    at("a", 8, 3, 4, 2),
+  );
+  assert.ok(noOverlaps(out));
+  // b rises to the top; c is full width and cannot rise past the held chart.
+  assert.equal(out.find((r) => r.i === "b")!.y, 0);
+  assert.equal(out.find((r) => r.i === "c")!.y, 5);
+});
+
+test("compacting closes gaps and keeps order", () => {
+  const out = compactUp([
+    at("a", 0, 3, 4, 2),
+    at("b", 0, 7, 4, 1),
+    at("c", 4, 9, 8, 2),
+  ]);
+  assert.deepEqual(
+    out.map((r) => r.y),
+    [0, 2, 0],
   );
 });
