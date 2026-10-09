@@ -126,15 +126,20 @@ export function resizeTo(
  *   old place, if it fits there.
  * - Otherwise everything in the way moves down, and whatever that lands on
  *   moves down in turn, so no widget can end up under another.
- *
- * Widgets keep their order and their gaps; nothing is pulled up.
+ * - With `compact`, the others then rise into any space left above them --
+ *   the gap the dragged widget left, say -- while it stays where it is held.
  */
 export function resolveMove<T extends Rect & { i: string }>(
   origin: readonly T[],
   id: string,
   target: Rect,
-  { swap = true, cols = GRID_COLUMNS }: { swap?: boolean; cols?: number } = {},
+  {
+    swap = true,
+    compact = false,
+    cols = GRID_COLUMNS,
+  }: { swap?: boolean; compact?: boolean; cols?: number } = {},
 ): T[] {
+  const settle = (out: T[]) => (compact ? compactUp(out, [id]) : out);
   const from = origin.find((r) => r.i === id);
   if (!from) return origin.map((r) => ({ ...r }));
   const moved = {
@@ -157,8 +162,10 @@ export function resolveMove<T extends Rect & { i: string }>(
       };
       const rest = others.filter((r) => r !== only);
       if (fits(back, [...rest, moved], cols))
-        return origin.map((r) =>
-          r.i === id ? moved : r.i === only.i ? back : { ...r },
+        return settle(
+          origin.map((r) =>
+            r.i === id ? moved : r.i === only.i ? back : { ...r },
+          ),
         );
     }
   }
@@ -177,7 +184,42 @@ export function resolveMove<T extends Rect & { i: string }>(
     settled.push(next);
     placed.set(r.i, next);
   }
-  return origin.map((r) => placed.get(r.i)!);
+  return settle(origin.map((r) => placed.get(r.i)!));
+}
+
+/**
+ * Every widget moved up as far as it goes without covering another, top to
+ * bottom, so the grid has no gaps that something below could fill. Widgets in
+ * `fixed` stay put -- the one being dragged, which belongs under the pointer.
+ */
+export function compactUp<T extends Rect & { i: string }>(
+  rects: readonly T[],
+  fixed: readonly string[] = [],
+): T[] {
+  const placed: Rect[] = rects.filter((r) => fixed.includes(r.i));
+  const out = new Map<string, T>(
+    rects.filter((r) => fixed.includes(r.i)).map((r) => [r.i, { ...r }]),
+  );
+  const queue = rects
+    .filter((r) => !fixed.includes(r.i))
+    .sort((a, b) => a.y - b.y || a.x - b.x);
+  for (const r of queue) {
+    const next = { ...r };
+    while (
+      next.y > 0 &&
+      !placed.some((p) => overlaps(p, { ...next, y: next.y - 1 }))
+    )
+      next.y--;
+    // Still covering something only if it did before; push it clear.
+    for (;;) {
+      const hit = placed.filter((p) => overlaps(p, next));
+      if (!hit.length) break;
+      next.y = Math.max(...hit.map((p) => p.y + p.h));
+    }
+    placed.push(next);
+    out.set(r.i, next);
+  }
+  return rects.map((r) => out.get(r.i)!);
 }
 
 /** Reading order, for narrow screens where the grid collapses to one column. */
