@@ -351,6 +351,7 @@
         "@vianova/table",
         "@vianova/tabs",
         "@vianova/textarea",
+        "@vianova/toggle-group",
         "@vianova/use-category-point-layer",
         "@vianova/use-category-shape-layer",
         "@vianova/utils"

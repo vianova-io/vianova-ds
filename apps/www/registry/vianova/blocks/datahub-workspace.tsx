@@ -14,7 +14,9 @@ import {
   Hash,
   ImageOff,
   ImagePlus,
+  LayoutGrid,
   Link2,
+  List as ListIcon,
   MapPin,
   Scale,
   Search,
@@ -68,6 +70,7 @@ import {
   TableRow,
 } from "@/registry/vianova/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/registry/vianova/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/registry/vianova/ui/toggle-group";
 import { Textarea } from "@/registry/vianova/ui/textarea";
 import { ConfirmDialog } from "@/registry/vianova/patterns/confirm-dialog";
 import { CategoryBadge } from "@/registry/vianova/product/category-badge";
@@ -607,6 +610,34 @@ function useMapThumbnail(map: MapLibreMap | null, dataset: Dataset, layerId: str
 /* Dataset card                                                                */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * What a dataset looks like, at whatever size its card or row gives it: the last
+ * photograph of its map if there is one, else its own geometry drawn small, else
+ * a street-grid stand-in. A stream with no rows has nothing to draw, which is
+ * the one case the platform shows its broken-image placeholder for.
+ */
+function DatasetPicture({ dataset, className }: { dataset: Dataset; className?: string }) {
+  // Read after mount: the server has no localStorage, so reading it while
+  // hydrating would put the two out of step.
+  const [thumb, setThumb] = React.useState<string | null>(null);
+  React.useEffect(() => setThumb(readThumb(dataset)), [dataset]);
+
+  if (dataset.rows === 0)
+    return (
+      <div className={cn("bg-muted text-muted-foreground flex items-center justify-center", className)}>
+        <ImageOff className="size-5" aria-hidden />
+        <span className="sr-only">No preview available</span>
+      </div>
+    );
+  if (thumb)
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={thumb} alt="" className={cn("bg-muted w-full object-cover", className)} />
+    );
+  if (dataset.mapPoints || dataset.mapShapes) return <DataPlot dataset={dataset} className={className} />;
+  return <Thumbnail seed={dataset.seed} className={className} />;
+}
+
 function DatasetCard({
   dataset,
   onOpen,
@@ -614,14 +645,6 @@ function DatasetCard({
   dataset: Dataset;
   onOpen: () => void;
 }) {
-  // A VIP stream with no rows yet has nothing to draw, which is the one case
-  // the platform shows its broken-image placeholder for.
-  const noPreview = dataset.rows === 0;
-  // Read after mount: the server has no localStorage, so reading it while
-  // hydrating would put the two out of step.
-  const [thumb, setThumb] = React.useState<string | null>(null);
-  React.useEffect(() => setThumb(readThumb(dataset)), [dataset]);
-
   return (
     <button
       type="button"
@@ -629,19 +652,7 @@ function DatasetCard({
       className="group bg-card text-card-foreground focus-visible:ring-ring flex w-full min-w-0 flex-col overflow-hidden rounded-xl border text-left transition-colors hover:border-foreground/25 focus-visible:ring-2 focus-visible:outline-none"
     >
       <div className="relative">
-        {noPreview ? (
-          <div className="bg-muted text-muted-foreground flex h-24 items-center justify-center">
-            <ImageOff className="size-5" aria-hidden />
-            <span className="sr-only">No preview available</span>
-          </div>
-        ) : thumb ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={thumb} alt="" className="bg-muted h-24 w-full object-cover" />
-        ) : dataset.mapPoints || dataset.mapShapes ? (
-          <DataPlot dataset={dataset} className="h-24" />
-        ) : (
-          <Thumbnail seed={dataset.seed} className="h-24" />
-        )}
+        <DatasetPicture dataset={dataset} className="h-24" />
         {dataset.vip ? (
           <Badge variant="secondary" className="absolute top-2 left-2">
             VIP
@@ -674,6 +685,54 @@ function DatasetCard({
         </p>
       </div>
     </button>
+  );
+}
+
+/** The same dataset as one line: a small picture, its name and what it is, and when it was added. */
+function DatasetRow({ dataset, onOpen }: { dataset: Dataset; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group bg-card text-card-foreground focus-visible:ring-ring flex w-full min-w-0 items-center gap-3 rounded-xl border p-2 text-left transition-colors hover:border-foreground/25 focus-visible:ring-2 focus-visible:outline-none"
+    >
+      <DatasetPicture dataset={dataset} className="h-12 w-20 shrink-0 rounded-md" />
+      <div className="min-w-0 flex-1">
+        <h3 className="truncate text-sm font-medium">{dataset.title}</h3>
+        {dataset.description ? (
+          <p className="text-muted-foreground truncate text-xs">{dataset.description}</p>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {dataset.vip ? <Badge variant="secondary">VIP</Badge> : null}
+        {dataset.aiGenerated ? (
+          <Badge variant="outline" className="hidden sm:inline-flex">
+            <Sparkles data-icon="inline-start" />
+            AI-generated
+          </Badge>
+        ) : null}
+        {dataset.status ? (
+          <Badge variant={dataset.status === "active" ? "default" : "secondary"} className="capitalize">
+            {dataset.status}
+          </Badge>
+        ) : null}
+        <span className="text-muted-foreground hidden pr-2 text-xs whitespace-nowrap md:inline">
+          {dateTimeFormat.format(new Date(dataset.uploadedAt))}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function RowSkeleton() {
+  return (
+    <div className="bg-card flex items-center gap-3 rounded-xl border p-2" aria-hidden>
+      <Skeleton className="h-12 w-20 shrink-0 rounded-md" />
+      <div className="flex-1 space-y-2">
+        <Skeleton className="h-4 w-1/3" />
+        <Skeleton className="h-3 w-2/3" />
+      </div>
+    </div>
   );
 }
 
@@ -1520,6 +1579,36 @@ function saveStyles(dataset: Dataset): boolean {
 /* Workspace                                                                   */
 /* -------------------------------------------------------------------------- */
 
+type ListView = "cards" | "list";
+const VIEW_KEY = "vianova:datahub-view:v1";
+
+/**
+ * Whether the list shows cards or rows, remembered in this browser.
+ *
+ * Read after mount, never in the initial state: the server has no localStorage,
+ * so reading it while hydrating would put the two out of step.
+ */
+function useListView() {
+  const [view, setView] = React.useState<ListView>("cards");
+  React.useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(VIEW_KEY);
+      if (saved === "cards" || saved === "list") setView(saved);
+    } catch {
+      /* storage is blocked: the choice lasts until the page is closed */
+    }
+  }, []);
+  const choose = React.useCallback((next: ListView) => {
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      /* as above */
+    }
+  }, []);
+  return [view, choose] as const;
+}
+
 type SortKey = "recent" | "oldest" | "name";
 const SORTS: Record<SortKey, string> = {
   recent: "Most recent",
@@ -1611,6 +1700,7 @@ export function DatahubWorkspace({
   const [section, setSection] = React.useState<Section>("data");
   const [query, setQuery] = React.useState("");
   const [sort, setSort] = React.useState<SortKey>("recent");
+  const [view, setView] = useListView();
   const [regStatus, setRegStatus] = React.useState<"active" | "inactive" | "all">("active");
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [importing, setImporting] = React.useState(false);
@@ -1784,17 +1874,31 @@ export function DatahubWorkspace({
                 ))}
               </SelectContent>
             </Select>
+            <ToggleGroup
+              variant="outline"
+              value={[view]}
+              // A group lets its last item be switched off; a list has to be one or the other.
+              onValueChange={(next) => next[0] && setView(next[0] as ListView)}
+              aria-label="View"
+            >
+              <ToggleGroupItem value="cards" aria-label="Cards">
+                <LayoutGrid />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="list" aria-label="List">
+                <ListIcon />
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
 
           {status === "loading" ? (
             <div
               role="status"
               aria-label="Loading data"
-              className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+              className={view === "list" ? "grid gap-2" : "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"}
             >
-              {Array.from({ length: 6 }, (_, i) => (
-                <CardSkeleton key={i} />
-              ))}
+              {Array.from({ length: 6 }, (_, i) =>
+                view === "list" ? <RowSkeleton key={i} /> : <CardSkeleton key={i} />,
+              )}
             </div>
           ) : status === "error" ? (
             <Empty className="border">
@@ -1842,10 +1946,14 @@ export function DatahubWorkspace({
               </EmptyContent>
             </Empty>
           ) : (
-            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <ul className={view === "list" ? "grid gap-2" : "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"}>
               {visible.map((d) => (
                 <li key={d.id} className="flex min-w-0">
-                  <DatasetCard dataset={d} onOpen={() => setOpenId(d.id)} />
+                  {view === "list" ? (
+                    <DatasetRow dataset={d} onOpen={() => setOpenId(d.id)} />
+                  ) : (
+                    <DatasetCard dataset={d} onOpen={() => setOpenId(d.id)} />
+                  )}
                 </li>
               ))}
             </ul>
