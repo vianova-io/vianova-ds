@@ -1133,6 +1133,8 @@ type ReportData = {
   providers: string[];
   /** Per field key, the values the feed holds. */
   values: Record<string, string[]>;
+  /** Per field key, the values this dataset's own filters keep. */
+  kept: Record<string, string[]>;
   styles: Record<string, CategoryStyle>;
 };
 
@@ -1149,7 +1151,12 @@ function useReportData(
     const prev = previousPeriod(f);
     const of = (id: DatasetId): ReportData => {
       const state = states[id];
-      const base = { dataset: DATASETS[id], days, styles };
+      const base = {
+        dataset: DATASETS[id],
+        days,
+        styles,
+        kept: filters.datasets[id] ?? {},
+      };
       if (state.status !== "ready")
         return {
           ...base,
@@ -1991,8 +1998,11 @@ const BREAKDOWN_COLORS = [
  */
 function breakdownRows(data: ReportData, by: Breakdown) {
   const field = data.dataset.fields.find((f) => f.key === by) ?? OPERATOR_FIELD;
-  return countBy(data.events, field.of, data.values[field.key] ?? []).map(
-    (r, i) => ({
+  // Values the report filters out are not zeros worth a row. Dropped after
+  // colouring, so a value keeps its colour whatever else is filtered.
+  const kept = data.kept[field.key];
+  return countBy(data.events, field.of, data.values[field.key] ?? [])
+    .map((r, i) => ({
       key: `v${i}`,
       value: r.value,
       label: by === "vehicle" ? (VEHICLE_LABELS[r.value] ?? r.value) : r.value,
@@ -2001,8 +2011,8 @@ function breakdownRows(data: ReportData, by: Breakdown) {
       color:
         (by === "operator" ? data.styles[r.value]?.color : undefined) ??
         BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length]!,
-    }),
-  );
+    }))
+    .filter((r) => !kept?.length || kept.includes(r.value));
 }
 
 function BarlistBody({ data, by }: { data: ReportData; by: Breakdown }) {
@@ -2497,14 +2507,19 @@ function CardFilters({
         render={
           <button
             type="button"
+            aria-label={
+              applied.length === 0
+                ? "No filters on this chart"
+                : `${applied.length} ${applied.length === 1 ? "filter" : "filters"} on this chart`
+            }
+            title="Filters on this chart"
             className="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex shrink-0 items-center gap-1 rounded-sm text-xs focus-visible:ring-2 focus-visible:outline-none"
           />
         }
       >
+        {/* Icon and count only: a small card has no room for the word. */}
         <ListFilter className="size-3.5" aria-hidden />
-        {applied.length === 0
-          ? "No filters"
-          : `${applied.length} ${applied.length === 1 ? "filter" : "filters"}`}
+        <span className="tabular-nums">{applied.length}</span>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 gap-2 p-3">
         <p className="text-sm font-medium">Filters on this chart</p>
