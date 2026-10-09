@@ -4,12 +4,14 @@ import assert from "node:assert/strict";
 import {
   CATEGORY_PALETTE,
   adviseLogo,
+  badgeColor,
   contrastBetween,
   kindFromEdge,
   SOLID_EDGE_SHARE,
   luminance,
   parseHex,
   readStyleSet,
+  visibleBounds,
   resolveStyles,
   writeStyleSet,
   type CategoryStyleSet,
@@ -104,7 +106,7 @@ test("a dark transparent logo on a dark colour is warned, and offered white", ()
   const warning = advice.find((a) => a.kind === "warning");
   assert.ok(warning, "expected a warning");
   assert.equal(warning!.suggestion, "#ffffff");
-  assert.match(warning!.message, /dark/);
+  assert.match(warning!.message, /too close in tone/);
 });
 
 test("a light transparent logo on a light colour is offered the dark badge", () => {
@@ -112,7 +114,7 @@ test("a light transparent logo on a light colour is offered the dark badge", () 
   const warning = advice.find((a) => a.kind === "warning");
   assert.ok(warning);
   assert.equal(warning!.suggestion, "#111827");
-  assert.match(warning!.message, /light/);
+  assert.match(warning!.message, /too close in tone/);
 });
 
 test("a colour that is not a hex cannot be compared, so it is not warned about", () => {
@@ -134,4 +136,51 @@ test("a few see-through seams on the edge do not make a logo transparent", () =>
 test("a mark that only touches its box at a few points is transparent", () => {
   // Lime: a circle in a square, touching each side once.
   assert.equal(kindFromEdge(0.05), "transparent");
+});
+
+test("the badge is the dot's colour unless it has its own", () => {
+  assert.equal(badgeColor({ color: "#0f766e" }), "#0f766e");
+  assert.equal(badgeColor({ color: "#0f766e", badge: "#ffffff" }), "#ffffff");
+});
+
+test("advice looks at the badge behind the logo, not the dot", () => {
+  // A green logo is lost on a green dot colour, but sits fine on a white badge.
+  const lost = adviseLogo({ color: "#0f766e", logo: "x", logoKind: "transparent", logoLuminance: 0.15 });
+  assert.ok(lost.some((a) => a.kind === "warning"), "same-tone dot colour as badge should warn");
+
+  const fixed = adviseLogo({ color: "#0f766e", badge: "#ffffff", logo: "x", logoKind: "transparent", logoLuminance: 0.15 });
+  assert.deepEqual(fixed.map((a) => a.kind), ["info"]);
+});
+
+test("a bad badge is warned about even when the dot colour would have been fine", () => {
+  const advice = adviseLogo({ color: "#ffffff", badge: "#0f766e", logo: "x", logoKind: "transparent", logoLuminance: 0.15 });
+  assert.ok(advice.some((a) => a.kind === "warning"));
+});
+
+/** An RGBA buffer, all empty, with the given pixels filled in. */
+const picture = (width: number, height: number, filled: [number, number][]) => {
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (const [x, y] of filled) data[(y * width + x) * 4 + 3] = 255;
+  return data;
+};
+
+test("the visible bounds hug the mark and ignore empty margin", () => {
+  const data = picture(10, 8, [[3, 2], [6, 5], [4, 3]]);
+  assert.deepEqual(visibleBounds(data, 10, 8), { x: 3, y: 2, width: 4, height: 4 });
+});
+
+test("a picture with nothing in it has no bounds", () => {
+  assert.equal(visibleBounds(picture(6, 6, []), 6, 6), null);
+});
+
+test("a faint haze below the margin alpha is margin, not mark", () => {
+  const data = picture(6, 6, [[2, 2]]);
+  data[(0 * 6 + 0) * 4 + 3] = 8; // a stray near-invisible pixel in the corner
+  assert.deepEqual(visibleBounds(data, 6, 6), { x: 2, y: 2, width: 1, height: 1 });
+});
+
+test("a mark that fills the picture is its own bounds", () => {
+  const all: [number, number][] = [];
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 5; x++) all.push([x, y]);
+  assert.deepEqual(visibleBounds(picture(5, 4, all), 5, 4), { x: 0, y: 0, width: 5, height: 4 });
 });

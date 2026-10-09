@@ -75,6 +75,7 @@ import {
   CATEGORY_PALETTE,
   DEFAULT_LOGO_ZOOM,
   adviseLogo,
+  badgeColor,
   prepareLogo,
   readStyleSet,
   resolveStyles,
@@ -568,6 +569,12 @@ function CardSkeleton() {
 /* Category picker                                                             */
 /* -------------------------------------------------------------------------- */
 
+/** Ready-made badges: the two a logo most often needs, so it is one click away. */
+const BADGE_CHOICES = [
+  { label: "White", hex: "#ffffff" },
+  { label: "Dark", hex: "#111827" },
+] as const;
+
 /**
  * A category value as a map draws it close up: its logo on its colour, inside a
  * white ring so it reads on any basemap.
@@ -593,7 +600,7 @@ function CategoryBadge({
     >
       <span
         className="flex size-full items-center justify-center overflow-hidden rounded-full"
-        style={{ backgroundColor: style.color }}
+        style={{ backgroundColor: badgeColor(style) }}
       >
         {style.logo ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -611,9 +618,11 @@ function CategoryBadge({
 /**
  * One category value's colour and logo, and how they will look on a map.
  *
- * Both are always there: the colour is the dot a map draws zoomed out, and the
- * badge -- the logo on that colour -- is what it draws zoomed in. So the picker
- * shows both, and says so when a logo will not read on its colour.
+ * The colour is the dot a map draws zoomed out. The badge -- the logo on a disc
+ * -- is what it draws zoomed in, and its disc is the same colour unless it is
+ * given its own, because what makes a dot easy to tell apart and what makes a
+ * logo easy to read are often different colours. The picker shows both, and
+ * says so when a logo will not read on its badge.
  */
 function CategoryStylePicker({
   value,
@@ -703,6 +712,46 @@ function CategoryStylePicker({
           </div>
         </div>
 
+        {style.logo ? (
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium">Badge</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                aria-pressed={style.badge === undefined}
+                onClick={() => onChange({ ...style, badge: undefined })}
+                className="focus-visible:ring-ring hover:bg-muted text-muted-foreground aria-pressed:text-foreground aria-pressed:border-foreground h-6 rounded-full border px-2 text-[11px] focus-visible:ring-2 focus-visible:outline-none"
+              >
+                Same as dot
+              </button>
+              {BADGE_CHOICES.map(({ label, hex }) => (
+                <button
+                  key={hex}
+                  type="button"
+                  aria-label={`${label} badge`}
+                  aria-pressed={style.badge === hex}
+                  onClick={() => onChange({ ...style, badge: hex })}
+                  className="focus-visible:ring-ring size-6 rounded-full border focus-visible:ring-2 focus-visible:outline-none aria-pressed:ring-2 aria-pressed:ring-offset-1 aria-pressed:ring-offset-background aria-pressed:ring-foreground"
+                  style={{ backgroundColor: hex }}
+                />
+              ))}
+              <label className="text-muted-foreground hover:text-foreground focus-within:ring-ring flex size-6 cursor-pointer items-center justify-center rounded-full border border-dashed text-[10px] focus-within:ring-2">
+                <span aria-hidden>+</span>
+                <span className="sr-only">Custom badge colour</span>
+                <input
+                  type="color"
+                  className="sr-only"
+                  value={/^#[0-9a-f]{6}$/i.test(badgeColor(style)) ? badgeColor(style) : "#ffffff"}
+                  onChange={(e) => onChange({ ...style, badge: e.target.value })}
+                />
+              </label>
+            </div>
+            <p className="text-muted-foreground text-[11px]">
+              What the logo sits on. The dot keeps its own colour.
+            </p>
+          </div>
+        ) : null}
+
         <div className="space-y-1.5">
           <p className="text-xs font-medium">Logo</p>
           <div className="flex items-center gap-2">
@@ -755,7 +804,7 @@ function CategoryStylePicker({
                   <Button
                     variant="outline"
                     size="xs"
-                    onClick={() => onChange({ ...style, color: a.suggestion! })}
+                    onClick={() => onChange({ ...style, badge: a.suggestion! })}
                   >
                     Use {a.suggestion === "#ffffff" ? "a white" : "a dark"} badge
                   </Button>
