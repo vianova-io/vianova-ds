@@ -71,6 +71,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/registry/vianova/ui/tabs";
 import { Textarea } from "@/registry/vianova/ui/textarea";
 import { ConfirmDialog } from "@/registry/vianova/patterns/confirm-dialog";
 import { CategoryBadge } from "@/registry/vianova/product/category-badge";
+import { LegendCategorical } from "@/registry/vianova/product/legend-categorical";
+import { MapCanvas } from "@/registry/vianova/product/map-canvas";
+import {
+  useCategoryPointLayer,
+  type CategoryPoint,
+} from "@/registry/vianova/hooks/use-category-point-layer";
 import { InlineEdit } from "@/registry/vianova/patterns/inline-edit";
 import {
   CATEGORY_PALETTE,
@@ -98,6 +104,7 @@ import { cn } from "@/registry/vianova/lib/utils";
 declare const process: { env: Record<string, string | undefined> };
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+const WORKER_URL = `${BASE_PATH}/maplibre/maplibre-gl-worker.mjs`;
 
 /**
  * A fake Mobility Data Specification trips feed for Lisbon, September 2026:
@@ -158,6 +165,14 @@ type Dataset = {
   columns: Column[];
   /** Real rows, when the dataset came from a file. Otherwise a preview is generated. */
   preview?: string[][];
+  /**
+   * Where each row is, when the file has a geometry column, tagged with the
+   * value of `mapColumn`. Kept apart from `preview` because the table needs
+   * only a page of rows and a map of 2,000 trips needs all of them.
+   */
+  mapPoints?: CategoryPoint[];
+  /** The category column the map colours by. */
+  mapColumn?: string;
   seed: number;
 };
 
@@ -1064,6 +1079,8 @@ function DatasetDetail({
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)]">
+        <div className="min-w-0 space-y-4">
+        <DatasetMap dataset={dataset} />
         <section className="bg-card h-fit rounded-xl border">
           <h3 className="border-b px-4 py-3 text-sm font-medium">Data information</h3>
           <div className="space-y-4 p-4">
@@ -1125,6 +1142,7 @@ function DatasetDetail({
             />
           </div>
         </section>
+        </div>
 
         <section className="bg-card min-w-0 rounded-xl border">
           <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
@@ -1182,6 +1200,126 @@ function DatasetDetail({
   );
 }
 
+/** The first vertex of a WKT geometry: where a trip started, or the point itself. */
+const FIRST_VERTEX = /\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/;
+/** A map of this many points is already a blur; more would only cost memory. */
+const MAX_MAP_POINTS = 20_000;
+
+/**
+ * A small map of the dataset, coloured by its first category column with the
+ * same colours and logos the picker sets -- so a change made in the table can
+ * be checked here, and what the map workspace will draw is seen before leaving.
+ */
+function DatasetMap({ dataset }: { dataset: Dataset }) {
+  const points = dataset.mapPoints;
+  const column = dataset.columns.find((c) => c.name === dataset.mapColumn);
+  const [map, setMap] = React.useState<import("maplibre-gl").Map | null>(null);
+  const fitted = React.useRef(false);
+
+  const values = column?.values ?? [];
+  const logoZoom = column?.logoZoom ?? DEFAULT_LOGO_ZOOM;
+  const styles = React.useMemo(
+    // With no category column every point is one value, in the first colour.
+    () => resolveStyles(column ? values : [""], { logoZoom, values: column?.styles }),
+    // `values` is a new array each render when the column has none.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [column?.values, column?.styles, logoZoom],
+  );
+
+  useCategoryPointLayer({
+    map,
+    enabled: !!points?.length,
+    points: points ?? [],
+    styles,
+    logoZoom,
+    id: "datahub-points",
+  });
+
+  // Frame the data once. Re-framing on every style change would throw away
+  // wherever the reader had panned to.
+  React.useEffect(() => {
+    if (!map || !points?.length || fitted.current) return;
+    fitted.current = true;
+    let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const { position: [x, y] } of points) {
+      w = Math.min(w, x);
+      e = Math.max(e, x);
+      s = Math.min(s, y);
+      n = Math.max(n, y);
+    }
+    map.fitBounds([[w, s], [e, n]], { padding: 24, duration: 0, maxZoom: 15 });
+  }, [map, points]);
+
+  const [logosShown, setLogosShown] = React.useState(false);
+  React.useEffect(() => {
+    if (!map) return;
+    const update = () => setLogosShown(map.getZoom() >= logoZoom);
+    update();
+    map.on("zoom", update);
+    return () => {
+      map.off("zoom", update);
+    };
+  }, [map, logoZoom]);
+
+  return (
+    <section className="bg-card min-w-0 overflow-hidden rounded-xl border" data-slot="datahub-map">
+      <h3 className="border-b px-4 py-3 text-sm font-medium">Map</h3>
+      {points?.length ? (
+        <>
+          <div className="relative h-56 w-full">
+            <MapCanvas
+              className="absolute inset-0"
+              workerUrl={WORKER_URL}
+              cooperativeGesturesBelow={1024}
+              onStyleReady={setMap}
+              fallback={
+                <div className="text-muted-foreground flex h-full items-center justify-center p-4 text-center text-xs">
+                  The map can&apos;t be shown here because WebGL is unavailable.
+                </div>
+              }
+            />
+          </div>
+          <div className="space-y-2 p-4">
+            <p className="text-muted-foreground text-xs">
+              {count.format(points.length)} {points.length === 1 ? "point" : "points"}
+              {column ? (
+                <>
+                  , coloured by <span className="text-foreground">{column.name}</span>. Zoom in to see logos.
+                </>
+              ) : (
+                "."
+              )}
+            </p>
+            {column ? (
+            <LegendCategorical
+              showLogos={logosShown}
+              items={values.map((label) => {
+                const style = styles[label];
+                return {
+                  label,
+                  color: style?.color ?? "#888888",
+                  logo: style?.logo
+                    ? {
+                        src: style.logo,
+                        solid: style.logoKind === "solid",
+                        background: badgeColor(style),
+                      }
+                    : undefined,
+                };
+              })}
+            />
+            ) : null}
+          </div>
+        </>
+      ) : (
+        <p className="text-muted-foreground p-4 text-xs">
+          No map preview: this dataset has no geometry column with readable coordinates.
+        </p>
+      )}
+    </section>
+  );
+}
+
 /** Past this a browser tab struggles to hold the text, never mind parse it. */
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const PREVIEW_ROWS = 200;
@@ -1207,6 +1345,23 @@ function datasetFromCsv(id: string, filename: string, text: string): Dataset | s
     description: "",
     unit: "N/A",
   }));
+  // Where to put the dataset on a map: the first geometry column whose cells
+  // read as coordinates, coloured by the first category column.
+  const header = parsed.header;
+  const geometryAt = columns.findIndex((c) => c.type === "geometry");
+  const categoryAt = columns.findIndex((c) => c.type === "category");
+  const mapPoints: CategoryPoint[] = [];
+  if (geometryAt >= 0) {
+    for (const row of parsed.rows) {
+      const m = FIRST_VERTEX.exec(row[geometryAt] ?? "");
+      if (!m) continue;
+      mapPoints.push({
+        position: [Number(m[1]), Number(m[2])],
+        category: categoryAt >= 0 ? (row[categoryAt] ?? "") : "",
+      });
+      if (mapPoints.length >= MAX_MAP_POINTS) break;
+    }
+  }
   const clip = (v: string) => (v.length > CELL_LIMIT ? `${v.slice(0, CELL_LIMIT)}…` : v);
 
   return {
@@ -1226,6 +1381,8 @@ function datasetFromCsv(id: string, filename: string, text: string): Dataset | s
       .slice(0, PREVIEW_ROWS)
       .map((row) => parsed.header.map((_, i) => clip(row[i] ?? ""))),
     seed: filename.length,
+    mapPoints: mapPoints.length ? mapPoints : undefined,
+    mapColumn: categoryAt >= 0 && mapPoints.length ? header[categoryAt] : undefined,
   };
 }
 
