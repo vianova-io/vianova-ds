@@ -98,6 +98,7 @@ import {
 } from "@/registry/vianova/lib/category-style";
 import { inferColumns, parseCsv, type ColumnType } from "@/registry/vianova/lib/csv";
 import { useColorScheme } from "@/registry/vianova/hooks/use-color-scheme";
+import { resolveCssColor } from "@/registry/vianova/lib/css-color";
 import { cn } from "@/registry/vianova/lib/utils";
 
 /* -------------------------------------------------------------------------- */
@@ -863,7 +864,7 @@ function CategoryStylePicker({
             <div className="flex flex-col items-center gap-1.5">
               <span
                 aria-hidden
-                className="size-3.5 rounded-full border border-white"
+                className="border-border size-3.5 rounded-full border"
                 style={{ backgroundColor: style.color }}
               />
               <span className="text-muted-foreground text-[11px]">Below zoom {logoZoom}</span>
@@ -1418,12 +1419,18 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
     styles,
     id: "datahub-shapes",
   });
+  // The hidden map is in the other theme, so its dots take that theme's border.
+  const ghostStroke = React.useMemo(
+    () => (otherScheme ? (resolveCssColor("--border", otherScheme) ?? undefined) : undefined),
+    [otherScheme],
+  );
   useCategoryPointLayer({
     map: ghost,
     enabled: !!points?.length,
     points: points ?? [],
     styles,
     logoZoom,
+    strokeColor: ghostStroke,
     id: "datahub-points",
   });
   useCategoryShapeLayer({
