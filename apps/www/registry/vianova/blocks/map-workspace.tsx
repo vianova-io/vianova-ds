@@ -56,10 +56,7 @@ import {
   ColorizePanel,
   type ColorizeField,
 } from "@/registry/vianova/product/colorize-panel";
-import {
-  sortStops,
-  type ColorStop,
-} from "@/registry/vianova/product/color-stop-slider";
+import { type ColorStop } from "@/registry/vianova/product/color-stop-slider";
 import { DataLayerCard } from "@/registry/vianova/product/data-layer-card";
 import { FilterBuilder } from "@/registry/vianova/product/filter-builder";
 import { FilterFacets } from "@/registry/vianova/product/filter-facets";
@@ -79,16 +76,10 @@ import {
   PanelStepBody,
   PanelStepper,
 } from "@/registry/vianova/product/panel-stepper";
-import {
-  PresetPicker,
-  type ColorPalette,
-} from "@/registry/vianova/product/preset-picker";
+import { PresetPicker } from "@/registry/vianova/product/preset-picker";
 import { RankedBars } from "@/registry/vianova/product/ranked-bars";
+import { SampleMapLayer } from "@/registry/vianova/product/sample-map-layer";
 import type { VisualizationTypeId } from "@/registry/vianova/product/visualization-picker";
-import {
-  useCategoryPointLayer,
-  type CategoryPoint,
-} from "@/registry/vianova/hooks/use-category-point-layer";
 import { useColorScheme } from "@/registry/vianova/hooks/use-color-scheme";
 import { InlineEdit } from "@/registry/vianova/patterns/inline-edit";
 import {
@@ -97,17 +88,20 @@ import {
   type FilterField,
   type FilterGroup,
 } from "@/registry/vianova/lib/filter-ast";
-import { parseHex } from "@/registry/vianova/lib/category-style";
-import { compileFilter } from "@/registry/vianova/lib/filter-eval";
 import {
-  DEFAULT_LOGO_ZOOM,
-  STYLE_STORAGE_KEY,
-  badgeColor,
-  readStyleSet,
-  resolveStyles,
-  type CategoryStyleSet,
-} from "@/registry/vianova/lib/category-style";
-import { inferColumns, parseCsv } from "@/registry/vianova/lib/csv";
+  CATEGORICAL_PALETTES,
+  SEQUENTIAL_PALETTES,
+  quantileEdges,
+  rampFromStops,
+  stopsFromRamp,
+} from "@/registry/vianova/lib/color-ramp";
+import {
+  SAMPLE_FEEDS,
+  columnLabel,
+  type ParsedSample,
+} from "@/registry/vianova/lib/sample-datasets";
+import { compileFilter } from "@/registry/vianova/lib/filter-eval";
+import { badgeColor } from "@/registry/vianova/lib/category-style";
 import { cn } from "@/registry/vianova/lib/utils";
 
 /* -------------------------------------------------------------------------- */
@@ -225,134 +219,6 @@ const COLOR_FIELDS: ColorizeField[] = [
 
 /** The field the layer arrives coloured by, matching the ramp legend. */
 const DEFAULT_COLOR_FIELD = "volume";
-
-/**
- * Palettes for a categorical colouring.
- *
- * Only Categorical: a road type has no order, so a sequential ramp would imply
- * that motorway outranks residential. The numeric body does not use these at
- * all -- it reads `--map-ramp-*` through readRamp, so it follows the map scheme
- * the way the legend does.
- */
-const PALETTES: ColorPalette[] = [
-  {
-    name: "Spectrum",
-    family: "Categorical",
-    colors: [
-      "#3b82f6",
-      "#ef4444",
-      "#22c55e",
-      "#f59e0b",
-      "#a855f7",
-      "#06b6d4",
-      "#ec4899",
-      "#84cc16",
-    ],
-  },
-  {
-    name: "Accessible",
-    family: "Categorical",
-    colorBlindSafe: true,
-    colors: [
-      "#0072b2",
-      "#e69f00",
-      "#009e73",
-      "#cc79a7",
-      "#56b4e9",
-      "#d55e00",
-      "#f0e442",
-      "#000000",
-    ],
-  },
-  {
-    name: "Tableau",
-    family: "Categorical",
-    colorBlindSafe: true,
-    colors: [
-      "#4e79a7",
-      "#f28e2b",
-      "#59a14f",
-      "#e15759",
-      "#b07aa1",
-      "#76b7b2",
-      "#edc948",
-      "#9c755f",
-    ],
-  },
-  {
-    name: "Pastel",
-    family: "Categorical",
-    colors: [
-      "#93c5fd",
-      "#fca5a5",
-      "#86efac",
-      "#fcd34d",
-      "#d8b4fe",
-      "#67e8f9",
-      "#f9a8d4",
-      "#bef264",
-    ],
-  },
-  {
-    name: "Deep 700",
-    family: "Categorical",
-    colors: [
-      "#1d4ed8",
-      "#15803d",
-      "#c2410c",
-      "#be185d",
-      "#6d28d9",
-      "#0e7490",
-      "#b91c1c",
-      "#4d7c0f",
-    ],
-  },
-];
-
-/**
- * Ramps for a numeric colouring.
- *
- * Kept apart from the categorical set rather than filtered out of one list: a
- * sequential ramp on a road type implies that motorway outranks residential,
- * and an unordered set on a measure throws away the order that is the whole
- * point. Offering either for the wrong field type is a mistake waiting to be
- * made, so the panel is only ever handed the half that applies.
- */
-const RAMP_PALETTES: ColorPalette[] = [
-  {
-    name: "Viridis",
-    family: "Sequential",
-    colorBlindSafe: true,
-    colors: ["#440154", "#3b528b", "#21918c", "#5ec962", "#fde725"],
-  },
-  {
-    name: "Blues",
-    family: "Sequential",
-    colors: ["#eff6ff", "#bfdbfe", "#60a5fa", "#2563eb", "#1e3a8a"],
-  },
-  {
-    name: "Heat",
-    family: "Sequential",
-    colors: ["#fff7ec", "#fdd49e", "#fc8d59", "#d7301f", "#7f0000"],
-  },
-  {
-    name: "Teal",
-    family: "Sequential",
-    colors: ["#f0fdfa", "#99f6e4", "#2dd4bf", "#0f766e", "#134e4a"],
-  },
-  {
-    name: "Red\u2013Blue",
-    family: "Diverging",
-    colorBlindSafe: true,
-    colors: ["#b2182b", "#ef8a62", "#f7f7f7", "#67a9cf", "#2166ac"],
-  },
-  {
-    name: "Brown\u2013Teal",
-    family: "Diverging",
-    colorBlindSafe: true,
-    colors: ["#8c510a", "#d8b365", "#f5f5f5", "#5ab4ac", "#01665e"],
-  },
-];
 
 /** Everything past the top N, on the map and in the panel alike. */
 const OTHER_COLOR = "#a1a1aa";
@@ -479,29 +345,6 @@ const compact = new Intl.NumberFormat("en", {
 const plain = new Intl.NumberFormat("en");
 
 /**
- * Quantile edges, one per ramp stop.
- *
- * Equal intervals are useless on this measure. Volume runs from 8 to 19,778
- * but its median is 251, so ten equal slices put ~97% of the network in the
- * first colour and leave nine colours for the motorways. Quantiles spend the
- * ramp where the roads actually are.
- *
- * Ties are collapsed rather than repeated: `step` requires strictly increasing
- * inputs and throws on a duplicate, and the lower deciles of a skewed count
- * repeat constantly.
- */
-function quantileEdges(values: number[], count: number): number[] {
-  if (!values.length) return [];
-  const sorted = [...values].sort((a, b) => a - b);
-  const edges: number[] = [];
-  for (let i = 0; i < count; i++) {
-    const v = sorted[Math.floor(((sorted.length - 1) * i) / (count - 1))]!;
-    if (!edges.length || v > edges[edges.length - 1]!) edges.push(v);
-  }
-  return edges;
-}
-
-/**
  * Resolves --map-ramp-* to real colours.
  *
  * MapLibre paints on a canvas and cannot read a CSS custom property, so the
@@ -540,58 +383,6 @@ function colorExpression(
     steps.push(edges[i], colour);
   }
   return steps as DataDrivenPropertyValueSpecification<string>;
-}
-
-/**
- * Spreads a handful of editable stops into one colour per ramp band.
- *
- * The panel gives the user five anchors; the map and the legend both want a
- * colour for every band, so the gaps are filled by interpolating between the
- * surrounding pair. sRGB on purpose rather than a perceptual space: these are
- * the exact colours someone picked, and bending them through Lab hands back
- * shades they did not choose.
- */
-function rampFromStops(stops: ColorStop[], count: number): string[] {
-  const sorted = sortStops(stops).filter((s) => parseHex(s.color));
-  if (!sorted.length) return [];
-  const first = sorted[0]!;
-  const last = sorted[sorted.length - 1]!;
-
-  const hex = (rgb: number[]) =>
-    `#${rgb.map((v) => Math.round(v).toString(16).padStart(2, "0")).join("")}`;
-
-  return Array.from({ length: count }, (_, i) => {
-    const at = (i / (count - 1)) * 100;
-    // Clamped rather than extrapolated: a stop list that starts at 20% means
-    // everything below 20% is that colour, not a colour nobody chose.
-    if (at <= first.position) return hex(parseHex(first.color)!);
-    if (at >= last.position) return hex(parseHex(last.color)!);
-
-    let lo = first;
-    let hi = last;
-    for (let j = 0; j < sorted.length - 1; j++) {
-      if (at >= sorted[j]!.position && at <= sorted[j + 1]!.position) {
-        lo = sorted[j]!;
-        hi = sorted[j + 1]!;
-        break;
-      }
-    }
-    const span = hi.position - lo.position;
-    const t = span > 0 ? (at - lo.position) / span : 0;
-    const a = parseHex(lo.color)!;
-    const b = parseHex(hi.color)!;
-    return hex(a.map((v, k) => v + (b[k]! - v) * t));
-  });
-}
-
-/** Five editable anchors sampled out of a full ramp. */
-function stopsFromRamp(ramp: readonly string[]): ColorStop[] {
-  if (ramp.length < 2) return [];
-  return [0, 25, 50, 75, 100].map((position) => ({
-    position,
-    color: ramp[Math.round(((ramp.length - 1) * position) / 100)]!,
-    opacity: 100,
-  }));
 }
 
 /**
@@ -642,6 +433,17 @@ const VOLUME_CONFIG = {
   volume: { label: "Vehicles", color: "var(--chart-1)" },
 } satisfies ChartConfig;
 
+/**
+ * The panel's two lists.
+ *
+ * "zones" holds the hub's `zones` AND `regulations` sections: both are areas
+ * drawn on the map, and a third tab would leave two lists of four and two.
+ */
+type LayerTab = "data" | "zones";
+
+const tabOf = (section: string): LayerTab =>
+  section === "data" ? "data" : "zones";
+
 /** Names the scheme's own ramp in the Preset row, before one is chosen. */
 const MAP_SCHEME_LABELS: Record<string, string> = {
   viridis: "Viridis",
@@ -652,11 +454,8 @@ const MAP_SCHEME_LABELS: Record<string, string> = {
  *  step's title and the chart selector cannot drift apart. */
 const LAYER_NAME = "Vehicle Flows";
 
-const CHART_LAYERS: Record<string, string> = {
-  flows: "Vehicle Flows",
-  accidents: "Accidents ZH 2011-2023",
-  overspeeding: "Overspeeding Events",
-};
+/** How many bars a breakdown shows before the tail is dropped. */
+const CHART_BARS = 8;
 
 export function MapWorkspace({
   className,
@@ -702,96 +501,128 @@ export function MapWorkspace({
   // that must re-run when the map arrives needs something React can see change.
   const [map, setMap] = React.useState<MapLibreMap | null>(null);
 
-  const [tripsVisible, setTripsVisible] = React.useState(false);
-  const [trips, setTrips] = React.useState<{
-    points: CategoryPoint[];
-    providers: string[];
-  } | null>(null);
-  const [savedStyles, setSavedStyles] = React.useState<
-    CategoryStyleSet | undefined
-  >();
+  /* --------------------------- sample layers ---------------------------- */
 
-  // Read after mount, never in the initial state: the server has no storage.
-  React.useEffect(() => {
-    const read = () =>
-      setSavedStyles(readStyleSet(TRIPS_DATASET, TRIPS_COLUMN));
-    read();
-    // Fires in this tab when ANOTHER tab writes, which is how a logo set in the
-    // data hub shows up here without a reload.
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === null || e.key === STYLE_STORAGE_KEY) read();
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+  const [tab, setTab] = React.useState<LayerTab>("data");
+  const [query, setQuery] = React.useState("");
+  /** Which sample layers are switched on, by feed id. */
+  const [layerOn, setLayerOn] = React.useState<Record<string, boolean>>({});
+  /** The rows each visible sample layer is showing, for the charts. */
+  const [layerData, setLayerData] = React.useState<
+    Record<string, { sample: ParsedSample; rows: Record<string, string>[] }>
+  >({});
+
+  const onSampleChange = React.useCallback(
+    (
+      id: string,
+      state: { sample: ParsedSample; rows: Record<string, string>[] } | null,
+    ) =>
+      setLayerData((all) => {
+        if (!state) {
+          if (!(id in all)) return all;
+          const { [id]: _gone, ...rest } = all;
+          return rest;
+        }
+        // Same rows as last time means the same object: this runs on every
+        // render of every layer, and a fresh map each time would re-render the
+        // charts panel for nothing.
+        if (all[id]?.rows === state.rows && all[id]?.sample === state.sample)
+          return all;
+        return { ...all, [id]: state };
+      }),
+    [],
+  );
+
+  const setLayerVisible = React.useCallback((id: string, on: boolean) => {
+    setLayerOn((all) => ({ ...all, [id]: on }));
+    // Switching a layer on points the charts at it. Otherwise the panel keeps
+    // describing Zürich while the map has flown to Lisbon, which reads as the
+    // charts being broken rather than as a selection waiting to be made.
+    if (on) setChartLayer(id);
   }, []);
 
-  // Fetched the first time the layer is switched on, not on mount: most visitors
-  // never turn it on, and it is 700KB.
-  React.useEffect(() => {
-    if (!tripsVisible || trips) return;
-    const controller = new AbortController();
-    fetch(TRIPS_URL, { signal: controller.signal })
-      .then((r) =>
-        r.ok ? r.text() : Promise.reject(new Error(String(r.status))),
-      )
-      .then((text) => {
-        const parsed = parseCsv(text);
-        const at = parsed.header.indexOf("route");
-        const by = parsed.header.indexOf(TRIPS_COLUMN);
-        if (at < 0 || by < 0) return;
-        const points: CategoryPoint[] = [];
-        for (const row of parsed.rows) {
-          const m = FIRST_VERTEX.exec(row[at] ?? "");
-          if (m)
-            points.push({
-              position: [Number(m[1]), Number(m[2])],
-              category: row[by] ?? "",
-            });
-        }
-        // Same inference the data hub runs, so providers come out in the same
-        // order and an unstyled one is the same colour in both places.
-        const providers = inferColumns(parsed)[by]?.values ?? [];
-        setTrips({ points, providers });
-      })
-      .catch(() => {});
-    return () => controller.abort();
-  }, [tripsVisible, trips]);
+  const visibleFeeds = React.useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return SAMPLE_FEEDS.filter(
+      (feed) =>
+        tabOf(feed.section) === tab &&
+        (!needle ||
+          feed.title.toLowerCase().includes(needle) ||
+          feed.description.toLowerCase().includes(needle)),
+    );
+  }, [query, tab]);
 
-  const tripStyles = React.useMemo(
-    () => resolveStyles(trips?.providers ?? [], savedStyles),
-    [trips, savedStyles],
+  /**
+   * What the Charts panel can describe: the flows, plus every sample layer that
+   * is switched on. A layer that is off has no rows loaded, so offering it
+   * would only ever produce an empty panel.
+   */
+  const chartSources = React.useMemo(
+    () => [
+      { value: "flows", label: LAYER_NAME },
+      ...SAMPLE_FEEDS.filter((f) => layerData[f.id]).map((f) => ({
+        value: f.id,
+        label: f.title,
+      })),
+    ],
+    [layerData],
   );
-  const logoZoom = savedStyles?.logoZoom ?? DEFAULT_LOGO_ZOOM;
 
-  // Whether the map is drawing logos right now. The layer swaps dots for logos
-  // at logoZoom by minzoom/maxzoom, which MapLibre applies itself, so the legend
-  // has to be told the same fact. Only a boolean is kept: a zoom value would
-  // re-render the whole workspace on every frame of a pinch.
-  const [logosShown, setLogosShown] = React.useState(false);
+  /**
+   * Counts of a sample layer's own category columns.
+   *
+   * Generic on purpose: these files are not known in advance, and the two
+   * columns worth charting are simply the first two that vary. Percentages are
+   * against the commonest value rather than the total, so the longest bar is
+   * always full and a long tail stays readable -- the same shape the flows
+   * charts use.
+   */
+  const sampleCharts = React.useMemo(() => {
+    const state = layerData[chartLayer];
+    if (!state) return null;
+    const { sample, rows } = state;
+    const breakdowns = sample.columns
+      .filter((c) => c.type === "category" && (c.values?.length ?? 0) > 1)
+      .slice(0, 2)
+      .map((column) => {
+        const counts = new Map<string, number>();
+        for (const row of rows) {
+          const value = row[column.name] ?? "";
+          if (value) counts.set(value, (counts.get(value) ?? 0) + 1);
+        }
+        const ranked = [...counts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, CHART_BARS);
+        const peak = ranked[0]?.[1] ?? 1;
+        return {
+          name: column.name,
+          label: columnLabel(column.name),
+          items: ranked.map(([label, count]) => ({
+            label,
+            percent: Math.round((count / peak) * 100),
+            count: plain.format(count),
+          })),
+        };
+      });
+    return { shown: rows.length, total: sample.rows.length, breakdowns };
+  }, [chartLayer, layerData]);
+
+  // A layer switched OFF takes its charts with it, so the panel falls back to
+  // the one source that is always there. Keyed on `layerOn` rather than on the
+  // loaded rows: a layer whose fetch is still running is a valid selection, and
+  // testing for rows here undid the selection the click had just made.
   React.useEffect(() => {
-    if (!map) return;
-    const update = () => setLogosShown(map.getZoom() >= logoZoom);
-    update();
-    map.on("zoom", update);
-    return () => {
-      map.off("zoom", update);
-    };
-  }, [map, logoZoom]);
+    if (chartLayer !== "flows" && !layerOn[chartLayer]) setChartLayer("flows");
+  }, [chartLayer, layerOn]);
 
-  useCategoryPointLayer({
-    map,
-    enabled: tripsVisible,
-    points: trips?.points ?? [],
-    styles: tripStyles,
-    logoZoom,
-  });
-
-  // The flows are Zürich and the trips are Lisbon, so switching the layer on
-  // would otherwise show nothing at all.
+  // The flows are Zürich and every sample is Lisbon, so switching one on would
+  // otherwise show nothing at all. Keyed on the set of layers that are on, so
+  // turning a second one on does not re-fly the camera.
+  const lisbonOn = SAMPLE_FEEDS.some((f) => layerOn[f.id]);
   React.useEffect(() => {
-    if (tripsVisible && map)
+    if (lisbonOn && map)
       map.flyTo({ center: LISBON, zoom: 11.5, duration: 1200 });
-  }, [tripsVisible, map]);
+  }, [lisbonOn, map]);
   const rootRef = React.useRef<HTMLDivElement>(null);
   // Namespaced so aria-controls still resolves if two of these ever share a page.
   const uid = React.useId();
@@ -936,7 +767,7 @@ export function MapWorkspace({
   /* ------------------------------- colour ------------------------------- */
 
   const [colorField, setColorField] = React.useState(DEFAULT_COLOR_FIELD);
-  const [preset, setPreset] = React.useState(PALETTES[0]!.name);
+  const [preset, setPreset] = React.useState(CATEGORICAL_PALETTES[0]!.name);
   /** Null until a ramp is chosen, while the theme's own scheme is in force. */
   const [rampPreset, setRampPreset] = React.useState<string | null>(null);
   /** The stops have been dragged away from whatever the row names. */
@@ -999,7 +830,9 @@ export function MapWorkspace({
   const categorical = colorFieldType === "string" && !aggregate;
 
   const paletteColors = React.useMemo(() => {
-    const palette = PALETTES.find((p) => p.name === preset) ?? PALETTES[0]!;
+    const palette =
+      CATEGORICAL_PALETTES.find((p) => p.name === preset) ??
+      CATEGORICAL_PALETTES[0]!;
     return reversed ? [...palette.colors].reverse() : palette.colors;
   }, [preset, reversed]);
 
@@ -1586,7 +1419,7 @@ export function MapWorkspace({
           )}
         >
           <FloatingPanelHeader>
-            <Tabs defaultValue="data">
+            <Tabs value={tab} onValueChange={(v) => setTab(v as LayerTab)}>
               <TabsList>
                 <TabsTrigger value="data">Data</TabsTrigger>
                 <TabsTrigger value="zones">Zones</TabsTrigger>
@@ -1611,164 +1444,131 @@ export function MapWorkspace({
                 <InputGroupAddon>
                   <Search />
                 </InputGroupAddon>
-                <InputGroupInput placeholder="Search data" />
+                <InputGroupInput
+                  placeholder={tab === "data" ? "Search data" : "Search zones"}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
               </InputGroup>
 
-              <DataLayerCard
-                name={LAYER_NAME}
-                meta={meta}
-                metaIcon={<Hash />}
-                visualizationType={viz}
-                onVisualizationTypeChange={setViz}
-                unavailableVisualizations={UNAVAILABLE}
-                unavailableVisualizationReason="this layer is road segments, with no zone polygons and no timestamps"
-                visible={visible}
-                onVisibilityChange={setVisible}
-                filters
-                filterCount={conditions || undefined}
-                onColorize={() => setColorizeOpen((open) => !open)}
-                colorizeOpen={colorizeOpen}
-                colorizeTriggerId={colorizeTriggerId}
-                // The legend describes what is actually painted, which is not
-                // always what the panel is set to: an aggregate visualisation
-                // keeps the magnitude ramp even while the panel says "Road type",
-                // because a grid cell has no single road type. `categorical` is
-                // already false in that case, so this follows the map by
-                // construction rather than by remembering to.
-                legend={
-                  loading ? (
-                    <Skeleton className="h-2.5 w-full" />
-                  ) : categorical && categories.shown.length ? (
-                    <LegendCategorical
-                      items={categories.shown.map((c) => ({
-                        label: c.label,
-                        color: c.color,
-                      }))}
-                    />
-                  ) : (
-                    <LegendRamp
-                      colors={rampColors.length ? rampColors : undefined}
-                      ticks={ticks}
-                      showTicks={Boolean(ticks)}
-                    />
-                  )
-                }
-                filtersAction={
-                  <Popover>
-                    <PopoverTrigger
-                      render={
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          aria-label="Edit Vehicle Flows filters"
-                        >
-                          <ListFilter />
-                        </Button>
-                      }
-                    />
-                    {/* 440px is wider than a phone. The popup is portalled and
-                      fixed-positioned, and Base UI's collision handling SHIFTS
-                      it but never SHRINKS it, so at 375px the right-hand ~65px
-                      -- the value inputs -- hangs off-screen with no way to
-                      reach it. --available-width comes off the positioner and
-                      inherits down to here, so it already accounts for the
-                      anchor and the collision padding; a viewport calc() would
-                      not. */}
-                    <PopoverContent
-                      align="end"
-                      className="w-[440px] max-w-[var(--available-width)] p-3"
-                    >
-                      <FilterBuilder
-                        fields={FILTER_FIELDS}
+              {/* Zürich, so it belongs with the feeds rather than the
+                  areas -- and it is the only layer here that is not one of
+                  the hub's samples. */}
+              {tab === "data" ? (
+                <DataLayerCard
+                  name={LAYER_NAME}
+                  meta={meta}
+                  metaIcon={<Hash />}
+                  visualizationType={viz}
+                  onVisualizationTypeChange={setViz}
+                  unavailableVisualizations={UNAVAILABLE}
+                  unavailableVisualizationReason="this layer is road segments, with no zone polygons and no timestamps"
+                  visible={visible}
+                  onVisibilityChange={setVisible}
+                  filters
+                  filterCount={conditions || undefined}
+                  onColorize={() => setColorizeOpen((open) => !open)}
+                  colorizeOpen={colorizeOpen}
+                  colorizeTriggerId={colorizeTriggerId}
+                  // The legend describes what is actually painted, which is not
+                  // always what the panel is set to: an aggregate visualisation
+                  // keeps the magnitude ramp even while the panel says "Road type",
+                  // because a grid cell has no single road type. `categorical` is
+                  // already false in that case, so this follows the map by
+                  // construction rather than by remembering to.
+                  legend={
+                    loading ? (
+                      <Skeleton className="h-2.5 w-full" />
+                    ) : categorical && categories.shown.length ? (
+                      <LegendCategorical
+                        items={categories.shown.map((c) => ({
+                          label: c.label,
+                          color: c.color,
+                        }))}
+                      />
+                    ) : (
+                      <LegendRamp
+                        colors={rampColors.length ? rampColors : undefined}
+                        ticks={ticks}
+                        showTicks={Boolean(ticks)}
+                      />
+                    )
+                  }
+                  filtersAction={
+                    <Popover>
+                      <PopoverTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label="Edit Vehicle Flows filters"
+                          >
+                            <ListFilter />
+                          </Button>
+                        }
+                      />
+                      {/* 440px is wider than a phone. The popup is portalled and
+                        fixed-positioned, and Base UI's collision handling SHIFTS
+                        it but never SHRINKS it, so at 375px the right-hand ~65px
+                        -- the value inputs -- hangs off-screen with no way to
+                        reach it. --available-width comes off the positioner and
+                        inherits down to here, so it already accounts for the
+                        anchor and the collision padding; a viewport calc() would
+                        not. */}
+                      <PopoverContent
+                        align="end"
+                        className="w-[440px] max-w-[var(--available-width)] p-3"
+                      >
+                        <FilterBuilder
+                          fields={FILTER_FIELDS}
+                          value={filter}
+                          onValueChange={setFilter}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  }
+                  filtersContent={
+                    loading ? (
+                      <Skeleton className="h-32 w-full" />
+                    ) : (
+                      <FilterFacets
+                        fields={facetFields}
                         value={filter}
                         onValueChange={setFilter}
+                        bounds={bounds}
+                        choices={choices}
                       />
-                    </PopoverContent>
-                  </Popover>
-                }
-                filtersContent={
-                  loading ? (
-                    <Skeleton className="h-32 w-full" />
-                  ) : (
-                    <FilterFacets
-                      fields={facetFields}
-                      value={filter}
-                      onValueChange={setFilter}
-                      bounds={bounds}
-                      choices={choices}
-                    />
-                  )
-                }
-              />
+                    )
+                  }
+                />
+              ) : null}
 
-              <DataLayerCard
-                name="Lisbon trips (MDS)"
-                meta="Sep 1 – Sep 30, 2026 · Trips by provider"
-                visualizationType="points"
-                unavailableVisualizations={[
-                  "clusters",
-                  "grid",
-                  "heatmap",
-                  "lines",
-                  "zones",
-                  "trips",
-                ]}
-                unavailableVisualizationReason="This layer draws each trip's start point"
-                expanded
-                visible={tripsVisible}
-                onVisibilityChange={setTripsVisible}
-                legend={
-                  trips ? (
-                    <div className="space-y-1.5">
-                      <LegendCategorical
-                        showLogos={logosShown}
-                        items={trips.providers.map((label) => {
-                          const style = tripStyles[label];
-                          return {
-                            label,
-                            color: style?.color ?? "#888888",
-                            logo: style?.logo
-                              ? {
-                                  src: style.logo,
-                                  solid: style.logoKind === "solid",
-                                  background: badgeColor(style),
-                                }
-                              : undefined,
-                          };
-                        })}
-                      />
-                      <p className="text-muted-foreground text-[11px]">
-                        Logos from zoom {logoZoom}
-                      </p>
-                    </div>
-                  ) : null
-                }
-              />
-              <DataLayerCard
-                name="Accidents ZH 2011-2023"
-                expanded={false}
-                visible={false}
-              />
-              <DataLayerCard
-                name="Speed by Roads"
-                expanded={false}
-                visible={false}
-              />
-              <DataLayerCard
-                name="Overspeeding Events"
-                expanded={false}
-                visible={false}
-              />
-              <DataLayerCard
-                name="Overspeeding"
-                expanded={false}
-                visible={false}
-              />
-              <DataLayerCard
-                name="Heavy braking Events"
-                expanded={false}
-                visible={false}
-              />
+              {/* The data hub's own sample feeds, as layers. Each card loads
+                  its CSV the first time it is switched on, infers its own
+                  columns, and so brings its own colorize fields, filters and
+                  legend -- a feed added to the catalogue needs no code here.
+
+                  Split by the feed's section: the Data tab lists the feeds, the
+                  Zones tab the areas and the regulations. That is the
+                  distinction the hub already draws, and the reason the Zones
+                  tab exists. */}
+              {visibleFeeds.map((feed) => (
+                <SampleMapLayer
+                  key={feed.id}
+                  feed={feed}
+                  map={map}
+                  dataUrl={`${BASE_PATH}/data`}
+                  visible={Boolean(layerOn[feed.id])}
+                  onVisibleChange={(on) => setLayerVisible(feed.id, on)}
+                  onSampleChange={onSampleChange}
+                />
+              ))}
+
+              {visibleFeeds.length === 0 ? (
+                <p className="text-muted-foreground px-1 py-6 text-center text-sm">
+                  Nothing here matches &ldquo;{query}&rdquo;.
+                </p>
+              ) : null}
             </div>
           </FloatingPanelBody>
         </FloatingPanel>
@@ -1838,9 +1638,11 @@ export function MapWorkspace({
           >
             <PanelStepBody className="max-h-80 p-0">
               {/* Only the half that applies to the field in play -- see
-                  RAMP_PALETTES for why the two sets are kept apart. */}
+                  SEQUENTIAL_PALETTES for why the two sets are kept apart. */}
               <PresetPicker
-                palettes={categorical ? PALETTES : RAMP_PALETTES}
+                palettes={
+                  categorical ? CATEGORICAL_PALETTES : SEQUENTIAL_PALETTES
+                }
                 value={categorical ? preset : (rampPreset ?? "")}
                 onValueChange={(name) => {
                   if (categorical) {
@@ -1849,7 +1651,9 @@ export function MapWorkspace({
                   }
                   // A ramp is chosen by its colours, so selecting one writes
                   // the stops the editor and the map both read.
-                  const chosen = RAMP_PALETTES.find((p) => p.name === name);
+                  const chosen = SEQUENTIAL_PALETTES.find(
+                    (p) => p.name === name,
+                  );
                   if (!chosen) return;
                   setRampPreset(name);
                   setRampCustom(false);
@@ -1899,11 +1703,13 @@ export function MapWorkspace({
               {/* Base UI renders the raw value unless given a mapping, which
                   would show "flows" instead of the layer name. */}
               <SelectValue>
-                {(value: string) => CHART_LAYERS[value] ?? value}
+                {(value: string) =>
+                  chartSources.find((s) => s.value === value)?.label ?? value
+                }
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {Object.entries(CHART_LAYERS).map(([value, label]) => (
+              {chartSources.map(({ value, label }) => (
                 <SelectItem key={value} value={value}>
                   {label}
                 </SelectItem>
@@ -1921,9 +1727,40 @@ export function MapWorkspace({
         <FloatingPanelBody>
           <div className="space-y-2 p-2">
             {chartLayer !== "flows" ? (
-              <p className="px-1 py-6 text-center text-xs text-muted-foreground">
-                No data loaded for {CHART_LAYERS[chartLayer]}.
-              </p>
+              sampleCharts ? (
+                <>
+                  <ChartCard>
+                    <ChartCardHeader title="Rows on the map" icon={<Hash />} />
+                    <ChartCardMetric
+                      value={plain.format(sampleCharts.shown)}
+                      unit={`of ${plain.format(sampleCharts.total)} · ${
+                        chartSources.find((s) => s.value === chartLayer)
+                          ?.label ?? ""
+                      }`}
+                    />
+                  </ChartCard>
+                  {sampleCharts.breakdowns.map((breakdown) => (
+                    <ChartCard key={breakdown.name}>
+                      <ChartCardHeader
+                        title={`By ${breakdown.label.toLowerCase()}`}
+                        icon={<BarChart3 />}
+                      />
+                      {breakdown.items.length ? (
+                        <RankedBars items={breakdown.items} />
+                      ) : (
+                        <p className="text-muted-foreground py-4 text-center text-xs">
+                          No rows match these filters.
+                        </p>
+                      )}
+                    </ChartCard>
+                  ))}
+                </>
+              ) : (
+                <p className="text-muted-foreground px-1 py-6 text-center text-xs">
+                  Loading{" "}
+                  {chartSources.find((src) => src.value === chartLayer)?.label}…
+                </p>
+              )
             ) : loading ? (
               <>
                 <Skeleton className="h-20 w-full" />

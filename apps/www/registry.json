@@ -160,6 +160,21 @@
       ]
     },
     {
+      "name": "color-ramp",
+      "type": "registry:lib",
+      "title": "Color Ramp",
+      "description": "Color Ramp helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/color-ramp.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "registryDependencies": [
+        "@vianova/category-style"
+      ]
+    },
+    {
       "name": "csv",
       "type": "registry:lib",
       "title": "Csv",
@@ -223,6 +238,21 @@
           "path": "registry/vianova/lib/report-grid.ts",
           "type": "registry:lib"
         }
+      ]
+    },
+    {
+      "name": "sample-datasets",
+      "type": "registry:lib",
+      "title": "Sample Datasets",
+      "description": "Sample Datasets helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/sample-datasets.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "registryDependencies": [
+        "@vianova/csv"
       ]
     },
     {
@@ -310,6 +340,21 @@
       "dependencies": []
     },
     {
+      "name": "use-ramp-layer",
+      "type": "registry:hook",
+      "title": "Use Ramp Layer",
+      "description": "Use Ramp Layer hook.",
+      "files": [
+        {
+          "path": "registry/vianova/hooks/use-ramp-layer.ts",
+          "type": "registry:hook"
+        }
+      ],
+      "dependencies": [
+        "maplibre-gl"
+      ]
+    },
+    {
       "name": "use-scroll-activity",
       "type": "registry:hook",
       "title": "Use Scroll Activity",
@@ -346,6 +391,7 @@
         "@vianova/legend-categorical",
         "@vianova/map-canvas",
         "@vianova/popover",
+        "@vianova/sample-datasets",
         "@vianova/select",
         "@vianova/skeleton",
         "@vianova/table",
@@ -381,9 +427,9 @@
         "@vianova/category-style",
         "@vianova/chart",
         "@vianova/chart-card",
+        "@vianova/color-ramp",
         "@vianova/color-stop-slider",
         "@vianova/colorize-panel",
-        "@vianova/csv",
         "@vianova/data-layer-card",
         "@vianova/filter-ast",
         "@vianova/filter-builder",
@@ -400,10 +446,11 @@
         "@vianova/popover",
         "@vianova/preset-picker",
         "@vianova/ranked-bars",
+        "@vianova/sample-datasets",
+        "@vianova/sample-map-layer",
         "@vianova/select",
         "@vianova/skeleton",
         "@vianova/tabs",
-        "@vianova/use-category-point-layer",
         "@vianova/use-color-scheme",
         "@vianova/utils",
         "@vianova/visualization-picker"
@@ -2581,6 +2628,51 @@
       "files": [
         {
           "path": "registry/vianova/product/ranked-bars.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "sample-map-layer",
+      "type": "registry:ui",
+      "title": "Sample Map Layer",
+      "description": "Sample Map Layer — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react",
+        "maplibre-gl"
+      ],
+      "registryDependencies": [
+        "@vianova/button",
+        "@vianova/category-style",
+        "@vianova/color-ramp",
+        "@vianova/colorize-panel",
+        "@vianova/data-layer-card",
+        "@vianova/filter-ast",
+        "@vianova/filter-builder",
+        "@vianova/filter-eval",
+        "@vianova/filter-facets",
+        "@vianova/legend-categorical",
+        "@vianova/legend-ramp",
+        "@vianova/panel-stepper",
+        "@vianova/popover",
+        "@vianova/preset-picker",
+        "@vianova/sample-datasets",
+        "@vianova/skeleton",
+        "@vianova/use-category-point-layer",
+        "@vianova/use-category-shape-layer",
+        "@vianova/use-ramp-layer",
+        "@vianova/utils",
+        "@vianova/visualization-picker"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/sample-map-layer.tsx",
           "type": "registry:ui"
         }
       ],

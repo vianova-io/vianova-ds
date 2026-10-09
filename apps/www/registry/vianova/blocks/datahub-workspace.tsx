@@ -29,8 +29,17 @@ import {
   X,
 } from "lucide-react";
 
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/registry/vianova/ui/alert";
-import { Avatar, AvatarFallback, AvatarImage } from "@/registry/vianova/ui/avatar";
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from "@/registry/vianova/ui/alert";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/registry/vianova/ui/avatar";
 import { Badge } from "@/registry/vianova/ui/badge";
 import { Button } from "@/registry/vianova/ui/button";
 import {
@@ -93,7 +102,19 @@ import {
   writeStyleSet,
   type CategoryStyle,
 } from "@/registry/vianova/lib/category-style";
-import { inferColumns, parseCsv, type ColumnType } from "@/registry/vianova/lib/csv";
+import {
+  inferColumns,
+  parseCsv,
+  type ColumnType,
+} from "@/registry/vianova/lib/csv";
+import {
+  MAX_MAP_POINTS,
+  SAMPLE_COLUMN_DESCRIPTIONS,
+  SAMPLE_FEEDS,
+  firstPosition,
+  ringOf,
+  type SampleFeed,
+} from "@/registry/vianova/lib/sample-datasets";
 import { cn } from "@/registry/vianova/lib/utils";
 
 /* -------------------------------------------------------------------------- */
@@ -118,178 +139,8 @@ const WORKER_URL = `${BASE_PATH}/maplibre/maplibre-gl-worker.mjs`;
  * build-datahub-samples.mjs, which share their operators and geography, so the
  * datasets agree with one another.
  */
-type SampleFeed = {
-  /** The dataset's id. Category styles are saved under it, so other pages that
-   * draw the same data (the map and reports workspaces) look it up by this. */
-  id: string;
-  file: string;
-  section: Section;
-  description: string;
-  rowRepresents: string;
-  domain: string;
-  uploadedAt: string;
-  dateRange?: [string, string];
-  /** Regulations only. */
-  status?: "active" | "inactive";
-  units?: Record<string, string>;
-};
-
-const SAMPLE_FEEDS: SampleFeed[] = [
-  {
-    id: "sample-mds-lisbon",
-    file: "mds-trips-lisbon.csv",
-    section: "data",
-    description:
-      "Fake Mobility Data Specification trips for shared scooters and bikes in Lisbon, September 2026, from five operators.",
-    rowRepresents: "a trip taken on a shared vehicle",
-    domain: "micromobility",
-    uploadedAt: "2026-10-01T09:00:00Z",
-    dateRange: ["2026-09-01", "2026-09-30"],
-    units: { trip_duration: "s", trip_distance: "m" },
-  },
-  {
-    id: "sample-infringements-lisbon",
-    file: "infringements-lisbon.csv",
-    section: "data",
-    description:
-      "Fake parking infringements by shared scooters and bikes in Lisbon, September 2026: where a vehicle was left, what rule it broke and whether it was fined.",
-    rowRepresents: "a parking infringement by a shared vehicle",
-    domain: "micromobility",
-    uploadedAt: "2026-10-02T09:00:00Z",
-    dateRange: ["2026-09-01", "2026-09-30"],
-    units: { fine_eur: "EUR" },
-  },
-  {
-    id: "sample-mds-events-lisbon",
-    file: "mds-events-lisbon.csv",
-    section: "data",
-    description:
-      "Fake Mobility Data Specification vehicle events in Lisbon, September 2026: reservations, trip starts and ends, rebalancing, low batteries and maintenance.",
-    rowRepresents: "a change in a vehicle's state",
-    domain: "micromobility",
-    uploadedAt: "2026-10-03T09:00:00Z",
-    dateRange: ["2026-09-01", "2026-09-30"],
-    units: { battery_pct: "%" },
-  },
-  {
-    id: "sample-mds-vehicles-lisbon",
-    file: "mds-vehicles-lisbon.csv",
-    section: "data",
-    description:
-      "Fake snapshot of every shared vehicle in Lisbon at the end of September 2026: where it is, who runs it and whether it can be rented.",
-    rowRepresents: "a shared vehicle",
-    domain: "micromobility",
-    uploadedAt: "2026-10-01T00:00:00Z",
-    units: { battery_pct: "%" },
-  },
-  {
-    id: "sample-parking-zones-lisbon",
-    file: "parking-zones-lisbon.csv",
-    section: "zones",
-    description:
-      "Fake parking bays, no-parking areas and slow zones for shared vehicles in Lisbon.",
-    rowRepresents: "a zone",
-    domain: "zones",
-    uploadedAt: "2026-08-20T10:00:00Z",
-    units: { speed_limit_kmh: "km/h" },
-  },
-  {
-    id: "sample-districts-lisbon",
-    file: "districts-lisbon.csv",
-    section: "zones",
-    description: "Fake outlines of twelve Lisbon neighbourhoods, with the kind of area each is.",
-    rowRepresents: "a neighbourhood",
-    domain: "zones",
-    uploadedAt: "2026-07-14T10:00:00Z",
-  },
-  {
-    id: "sample-regulation-speed-limit",
-    file: "regulation-speed-limit-baixa.csv",
-    section: "regulations",
-    status: "active",
-    description: "Fake 15 km/h limit for shared vehicles in the centre of Lisbon.",
-    rowRepresents: "an area the rule covers",
-    domain: "regulations",
-    uploadedAt: "2026-02-20T09:00:00Z",
-  },
-  {
-    id: "sample-regulation-no-parking",
-    file: "regulation-no-parking-historic-centre.csv",
-    section: "regulations",
-    status: "active",
-    description: "Fake parking restrictions in the historic centre: no parking, or bays only.",
-    rowRepresents: "an area the rule covers",
-    domain: "regulations",
-    uploadedAt: "2026-01-10T09:00:00Z",
-  },
-  {
-    id: "sample-regulation-fleet-cap",
-    file: "regulation-fleet-cap-per-operator.csv",
-    section: "regulations",
-    status: "active",
-    description: "Fake limit on how many vehicles each operator may leave in an area.",
-    rowRepresents: "an operator's cap in an area",
-    domain: "regulations",
-    uploadedAt: "2026-05-18T09:00:00Z",
-  },
-  {
-    id: "sample-regulation-night-curfew",
-    file: "regulation-night-curfew-bairro-alto.csv",
-    section: "regulations",
-    status: "inactive",
-    description: "Fake summer night curfew for shared vehicles around Bairro Alto. No longer in force.",
-    rowRepresents: "an area the rule covers",
-    domain: "regulations",
-    uploadedAt: "2025-05-20T09:00:00Z",
-  },
-];
-
-/** What each column of the samples means, so they read like real feeds. */
-const SAMPLE_DESCRIPTIONS: Record<string, string> = {
-  trip_id: "Unique identifier for the trip",
-  provider_id: "Identifier of the operator that reported the record",
-  provider_name: "Operator that runs the vehicle",
-  device_id: "Identifier of the vehicle, stable across records",
-  vehicle_type: "Kind of vehicle used",
-  propulsion_types: "How the vehicle is powered",
-  start_time: "When the trip started, in UTC",
-  end_time: "When the trip ended, in UTC",
-  trip_duration: "Length of the trip in seconds",
-  trip_distance: "Distance travelled in metres",
-  route: "Path taken, as a line of longitude and latitude points",
-  infringement_id: "Unique identifier for the infringement",
-  infringement_type: "The rule the vehicle broke",
-  status: "Where the case stands: open, resolved or fined",
-  fine_eur: "Amount fined, when the case ended in a fine",
-  detected_at: "When the infringement was detected, in UTC",
-  resolved_at: "When the case was closed, in UTC",
-  location: "Where the vehicle was",
-  event_id: "Unique identifier for the event",
-  event_type: "What happened to the vehicle",
-  event_time: "When it happened, in UTC",
-  battery_pct: "Battery charge of the vehicle",
-  state: "Whether the vehicle can be rented",
-  last_event_time: "When the vehicle last reported, in UTC",
-  zone_id: "Unique identifier for the zone",
-  name: "Display name",
-  zone_type: "What the zone is for",
-  max_vehicles: "How many vehicles the bay holds",
-  speed_limit_kmh: "Speed limit inside the zone",
-  geometry: "Outline of the area",
-  district_id: "Unique identifier for the neighbourhood",
-  area_type: "The character of the area",
-  population: "Number of residents",
-  rule_id: "Unique identifier for the rule",
-  area: "Where the rule applies",
-  rule: "Short statement of the rule",
-  applies_to: "Which operators the rule applies to",
-  vehicle_cap: "Most vehicles an operator may leave in the area",
-  valid_from: "Start of validity",
-  valid_to: "End of validity",
-};
 
 type Section = "data" | "zones" | "regulations";
-
 
 type Column = {
   name: string;
@@ -347,7 +198,10 @@ const COLUMN_TYPES: ColumnType[] = [
   "text",
 ];
 
-const TYPE_ICON: Record<ColumnType, React.ComponentType<{ className?: string }>> = {
+const TYPE_ICON: Record<
+  ColumnType,
+  React.ComponentType<{ className?: string }>
+> = {
   id: Hash,
   category: Tag,
   geometry: MapPin,
@@ -403,7 +257,13 @@ function previewRows(dataset: Dataset, n = 40): string[][] {
         case "category":
           return c.values?.[Math.floor(next() * c.values.length)] ?? "";
         case "timestamp": {
-          const t = Date.UTC(2025, 3, 1 + Math.floor(next() * 28), 7 + Math.floor(next() * 12), Math.floor(next() * 60));
+          const t = Date.UTC(
+            2025,
+            3,
+            1 + Math.floor(next() * 28),
+            7 + Math.floor(next() * 12),
+            Math.floor(next() * 60),
+          );
           return dateTimeFormat.format(t);
         }
         case "number":
@@ -443,17 +303,35 @@ function Thumbnail({ seed, className }: { seed: number; className?: string }) {
   ];
   const route = `M${(next() * 20).toFixed(1)} ${(10 + next() * 40).toFixed(1)} C30 ${(next() * 60).toFixed(1)} 60 ${(next() * 60).toFixed(1)} ${(80 + next() * 20).toFixed(1)} ${(10 + next() * 40).toFixed(1)}`;
   return (
-    <div className={cn("bg-muted relative overflow-hidden", className)} aria-hidden>
-      <svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 size-full">
+    <div
+      className={cn("bg-muted relative overflow-hidden", className)}
+      aria-hidden
+    >
+      <svg
+        viewBox="0 0 100 60"
+        preserveAspectRatio="xMidYMid slice"
+        className="absolute inset-0 size-full"
+      >
         {streets.map((d, i) => (
-          <path key={i} d={d} fill="none" className="stroke-border" strokeWidth="1.1" />
+          <path
+            key={i}
+            d={d}
+            fill="none"
+            className="stroke-border"
+            strokeWidth="1.1"
+          />
         ))}
-        <path d={route} fill="none" className="stroke-primary" strokeWidth="1.6" strokeLinecap="round" />
+        <path
+          d={route}
+          fill="none"
+          className="stroke-primary"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
       </svg>
     </div>
   );
 }
-
 
 /**
  * The dataset's own geometry, drawn small: points and areas in their category
@@ -461,16 +339,40 @@ function Thumbnail({ seed, className }: { seed: number; className?: string }) {
  * opened and photographed -- it needs no WebGL and no tiles, so a list of a
  * dozen of them costs nothing, and it is the data rather than a stand-in.
  */
-function DataPlot({ dataset, className }: { dataset: Dataset; className?: string }) {
+function DataPlot({
+  dataset,
+  className,
+}: {
+  dataset: Dataset;
+  className?: string;
+}) {
   const column = dataset.columns.find((c) => c.name === dataset.mapColumn);
-  const styles = resolveStyles(column?.values ?? [""], { values: column?.styles });
-  const colour = (category: string) => styles[category]?.color ?? CATEGORY_PALETTE[0];
+  const styles = resolveStyles(column?.values ?? [""], {
+    values: column?.styles,
+  });
+  const colour = (category: string) =>
+    styles[category]?.color ?? CATEGORY_PALETTE[0];
 
   const points = dataset.mapPoints ?? [];
   const shapes = dataset.mapShapes ?? [];
   let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const { position: [x, y] } of points) [w, s, e, n] = [Math.min(w, x), Math.min(s, y), Math.max(e, x), Math.max(n, y)];
-  for (const { ring } of shapes) for (const [x, y] of ring) [w, s, e, n] = [Math.min(w, x), Math.min(s, y), Math.max(e, x), Math.max(n, y)];
+  for (const {
+    position: [x, y],
+  } of points)
+    [w, s, e, n] = [
+      Math.min(w, x),
+      Math.min(s, y),
+      Math.max(e, x),
+      Math.max(n, y),
+    ];
+  for (const { ring } of shapes)
+    for (const [x, y] of ring)
+      [w, s, e, n] = [
+        Math.min(w, x),
+        Math.min(s, y),
+        Math.max(e, x),
+        Math.max(n, y),
+      ];
 
   // The frame is the card's picture, about 3.7 times wider than tall. Longitude
   // degrees are shorter than latitude ones away from the equator, so the shape
@@ -488,21 +390,39 @@ function DataPlot({ dataset, className }: { dataset: Dataset; className?: string
   const stride = Math.max(1, Math.ceil(points.length / 400));
 
   return (
-    <div className={cn("bg-muted relative overflow-hidden", className)} aria-hidden>
-      <svg viewBox="0 0 100 27" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 size-full">
+    <div
+      className={cn("bg-muted relative overflow-hidden", className)}
+      aria-hidden
+    >
+      <svg
+        viewBox="0 0 100 27"
+        preserveAspectRatio="xMidYMid slice"
+        className="absolute inset-0 size-full"
+      >
         {shapes.map((shape, i) => (
           <polygon
             key={i}
-            points={shape.ring.map(([x, y]) => `${px(x).toFixed(1)},${py(y).toFixed(1)}`).join(" ")}
+            points={shape.ring
+              .map(([x, y]) => `${px(x).toFixed(1)},${py(y).toFixed(1)}`)
+              .join(" ")}
             fill={colour(shape.category)}
             fillOpacity={0.4}
             stroke={colour(shape.category)}
             strokeWidth={0.3}
           />
         ))}
-        {points.filter((_, i) => i % stride === 0).map((p, i) => (
-          <circle key={i} cx={px(p.position[0])} cy={py(p.position[1])} r={0.7} fill={colour(p.category)} fillOpacity={0.9} />
-        ))}
+        {points
+          .filter((_, i) => i % stride === 0)
+          .map((p, i) => (
+            <circle
+              key={i}
+              cx={px(p.position[0])}
+              cy={py(p.position[1])}
+              r={0.7}
+              fill={colour(p.category)}
+              fillOpacity={0.9}
+            />
+          ))}
       </svg>
     </div>
   );
@@ -545,7 +465,12 @@ function writeThumb(dataset: Dataset, url: string) {
  * is taken from inside a render forced for the purpose rather than at an idle
  * moment, when the buffer has already been cleared.
  */
-function useMapThumbnail(map: MapLibreMap | null, dataset: Dataset, layerId: string, stale: unknown) {
+function useMapThumbnail(
+  map: MapLibreMap | null,
+  dataset: Dataset,
+  layerId: string,
+  stale: unknown,
+) {
   const datasetRef = React.useRef(dataset);
   datasetRef.current = dataset;
   const dirty = React.useRef(true);
@@ -571,7 +496,10 @@ function useMapThumbnail(map: MapLibreMap | null, dataset: Dataset, layerId: str
           const out = document.createElement("canvas");
           out.width = THUMB_WIDTH;
           out.height = THUMB_HEIGHT;
-          const keep = Math.min(source.height, (source.width * THUMB_HEIGHT) / THUMB_WIDTH);
+          const keep = Math.min(
+            source.height,
+            (source.width * THUMB_HEIGHT) / THUMB_WIDTH,
+          );
           out
             .getContext("2d")
             ?.drawImage(
@@ -636,7 +564,11 @@ function DatasetCard({
           </div>
         ) : thumb ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={thumb} alt="" className="bg-muted h-24 w-full object-cover" />
+          <img
+            src={thumb}
+            alt=""
+            className="bg-muted h-24 w-full object-cover"
+          />
         ) : dataset.mapPoints || dataset.mapShapes ? (
           <DataPlot dataset={dataset} className="h-24" />
         ) : (
@@ -741,7 +673,9 @@ function CategoryStylePicker({
         badge: undefined,
         color: logoColor ?? style.color,
       };
-      const fix = adviseLogo(next).find((a) => a.kind === "warning")?.suggestion;
+      const fix = adviseLogo(next).find(
+        (a) => a.kind === "warning",
+      )?.suggestion;
       onChange(fix ? { ...next, badge: fix } : next);
     } catch (e) {
       setError(e instanceof Error ? e.message : "That file could not be used.");
@@ -761,7 +695,12 @@ function CategoryStylePicker({
           />
         }
       >
-        <CategoryBadge color={badgeColor(style)} logo={style.logo} logoKind={style.logoKind} size={22} />
+        <CategoryBadge
+          color={badgeColor(style)}
+          logo={style.logo}
+          logoKind={style.logoKind}
+          size={22}
+        />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 space-y-4">
         <div className="space-y-1.5">
@@ -773,11 +712,20 @@ function CategoryStylePicker({
                 className="size-3.5 rounded-full border border-white"
                 style={{ backgroundColor: style.color }}
               />
-              <span className="text-muted-foreground text-[11px]">Below zoom {logoZoom}</span>
+              <span className="text-muted-foreground text-[11px]">
+                Below zoom {logoZoom}
+              </span>
             </div>
             <div className="flex flex-col items-center gap-1.5">
-              <CategoryBadge color={badgeColor(style)} logo={style.logo} logoKind={style.logoKind} size={44} />
-              <span className="text-muted-foreground text-[11px]">From zoom {logoZoom}</span>
+              <CategoryBadge
+                color={badgeColor(style)}
+                logo={style.logo}
+                logoKind={style.logoKind}
+                size={44}
+              />
+              <span className="text-muted-foreground text-[11px]">
+                From zoom {logoZoom}
+              </span>
             </div>
           </div>
         </div>
@@ -802,7 +750,9 @@ function CategoryStylePicker({
               <input
                 type="color"
                 className="sr-only"
-                value={/^#[0-9a-f]{6}$/i.test(style.color) ? style.color : "#0f766e"}
+                value={
+                  /^#[0-9a-f]{6}$/i.test(style.color) ? style.color : "#0f766e"
+                }
                 onChange={(e) => onChange({ ...style, color: e.target.value })}
               />
             </label>
@@ -838,8 +788,14 @@ function CategoryStylePicker({
                 <input
                   type="color"
                   className="sr-only"
-                  value={/^#[0-9a-f]{6}$/i.test(badgeColor(style)) ? badgeColor(style) : "#ffffff"}
-                  onChange={(e) => onChange({ ...style, badge: e.target.value })}
+                  value={
+                    /^#[0-9a-f]{6}$/i.test(badgeColor(style))
+                      ? badgeColor(style)
+                      : "#ffffff"
+                  }
+                  onChange={(e) =>
+                    onChange({ ...style, badge: e.target.value })
+                  }
                 />
               </label>
             </div>
@@ -852,7 +808,12 @@ function CategoryStylePicker({
         <div className="space-y-1.5">
           <p className="text-xs font-medium">Logo</p>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => fileRef.current?.click()}
+            >
               <ImagePlus data-icon="inline-start" />
               {busy ? "Reading…" : style.logo ? "Replace" : "Upload"}
             </Button>
@@ -894,7 +855,9 @@ function CategoryStylePicker({
                   : "text-muted-foreground",
               )}
             >
-              {a.kind === "warning" ? <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> : null}
+              {a.kind === "warning" ? (
+                <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+              ) : null}
               <div className="space-y-1.5">
                 <p>{a.message}</p>
                 {a.suggestion ? (
@@ -903,7 +866,8 @@ function CategoryStylePicker({
                     size="xs"
                     onClick={() => onChange({ ...style, badge: a.suggestion! })}
                   >
-                    Use {a.suggestion === "#ffffff" ? "a white" : "a dark"} badge
+                    Use {a.suggestion === "#ffffff" ? "a white" : "a dark"}{" "}
+                    badge
                   </Button>
                 ) : null}
               </div>
@@ -945,7 +909,10 @@ function ColumnRow({
                 className="hover:bg-muted focus-visible:ring-ring -ml-1 rounded p-0.5 focus-visible:ring-2 focus-visible:outline-none"
               >
                 <ChevronRight
-                  className={cn("size-3.5 transition-transform", open && "rotate-90")}
+                  className={cn(
+                    "size-3.5 transition-transform",
+                    open && "rotate-90",
+                  )}
                 />
               </button>
             ) : (
@@ -960,7 +927,9 @@ function ColumnRow({
             value={column.description}
             label={`description of ${column.name}`}
             placeholder="Add a description"
-            onValueChange={(description) => onChange({ ...column, description })}
+            onValueChange={(description) =>
+              onChange({ ...column, description })
+            }
             className="max-w-full"
           />
         </TableCell>
@@ -971,7 +940,11 @@ function ColumnRow({
               onChange({ ...column, type: (type ?? column.type) as ColumnType })
             }
           >
-            <SelectTrigger size="sm" className="w-32" aria-label={`Type of ${column.name}`}>
+            <SelectTrigger
+              size="sm"
+              className="w-32"
+              aria-label={`Type of ${column.name}`}
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -988,7 +961,9 @@ function ColumnRow({
             value={column.unit === "N/A" ? "" : column.unit}
             label={`unit of ${column.name}`}
             placeholder="N/A"
-            onValueChange={(unit) => onChange({ ...column, unit: unit || "N/A" })}
+            onValueChange={(unit) =>
+              onChange({ ...column, unit: unit || "N/A" })
+            }
           />
         </TableCell>
       </TableRow>
@@ -1008,7 +983,12 @@ function ColumnRow({
                         // Written out in full, not just the value that changed:
                         // a value left on its palette default would otherwise
                         // drift if the palette order ever did.
-                        styles: { ...resolveStyles(column.values!, { values: column.styles }), [value]: next },
+                        styles: {
+                          ...resolveStyles(column.values!, {
+                            values: column.styles,
+                          }),
+                          [value]: next,
+                        },
                       })
                     }
                   />
@@ -1025,7 +1005,10 @@ function ColumnRow({
 
 function PreviewTable({ dataset }: { dataset: Dataset }) {
   const rows = React.useMemo(() => previewRows(dataset), [dataset]);
-  const [sort, setSort] = React.useState<{ index: number; dir: "asc" | "desc" } | null>(null);
+  const [sort, setSort] = React.useState<{
+    index: number;
+    dir: "asc" | "desc";
+  } | null>(null);
 
   const sorted = React.useMemo(() => {
     if (!sort) return rows;
@@ -1046,11 +1029,21 @@ function PreviewTable({ dataset }: { dataset: Dataset }) {
           {dataset.columns.map((c, i) => {
             const Icon = TYPE_ICON[c.type];
             const active = sort?.index === i;
-            const SortIcon = !active ? ArrowUpDown : sort.dir === "asc" ? ArrowUp : ArrowDown;
+            const SortIcon = !active
+              ? ArrowUpDown
+              : sort.dir === "asc"
+                ? ArrowUp
+                : ArrowDown;
             return (
               <TableHead
                 key={c.name}
-                aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+                aria-sort={
+                  active
+                    ? sort.dir === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
               >
                 <button
                   type="button"
@@ -1076,7 +1069,10 @@ function PreviewTable({ dataset }: { dataset: Dataset }) {
         {sorted.map((row, r) => (
           <TableRow key={r}>
             {row.map((cell, c) => (
-              <TableCell key={c} className="max-w-48 truncate whitespace-nowrap tabular-nums">
+              <TableCell
+                key={c}
+                className="max-w-48 truncate whitespace-nowrap tabular-nums"
+              >
                 {cell}
               </TableCell>
             ))}
@@ -1124,10 +1120,17 @@ function DatasetDetail({
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 p-4 md:p-6">
       <div className="flex items-center gap-3">
-        <Button variant="outline" size="icon-sm" onClick={onBack} aria-label="Back to data">
+        <Button
+          variant="outline"
+          size="icon-sm"
+          onClick={onBack}
+          aria-label="Back to data"
+        >
           <ArrowLeft />
         </Button>
-        <h2 className="truncate text-lg font-semibold tracking-tight">{dataset.title}</h2>
+        <h2 className="truncate text-lg font-semibold tracking-tight">
+          {dataset.title}
+        </h2>
       </div>
 
       {saveFailed ? (
@@ -1135,76 +1138,95 @@ function DatasetDetail({
           <TriangleAlert />
           <AlertTitle>Couldn&apos;t save your logos</AlertTitle>
           <AlertDescription>
-            This browser&apos;s storage is full or blocked, so the map won&apos;t see these changes
-            and they will be lost on reload.
+            This browser&apos;s storage is full or blocked, so the map
+            won&apos;t see these changes and they will be lost on reload.
           </AlertDescription>
         </Alert>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)]">
         <div className="min-w-0 space-y-4">
-        <DatasetMap dataset={dataset} />
-        <section className="bg-card h-fit rounded-xl border">
-          <h3 className="border-b px-4 py-3 text-sm font-medium">Data information</h3>
-          <div className="space-y-4 p-4">
-            <div className="space-y-1.5">
-              <label htmlFor={`${dataset.id}-description`} className="text-muted-foreground flex items-center gap-1 text-xs">
-                Description
-                {dataset.aiGenerated ? <Sparkles className="size-3" aria-label="AI-generated" /> : null}
-              </label>
-              <Textarea
-                id={`${dataset.id}-description`}
-                value={draft}
-                placeholder="Describe what this data contains"
-                rows={3}
-                onChange={(e) => setDraft(e.target.value)}
-                onBlur={() => draft !== dataset.description && onChange({ ...dataset, description: draft })}
+          <DatasetMap dataset={dataset} />
+          <section className="bg-card h-fit rounded-xl border">
+            <h3 className="border-b px-4 py-3 text-sm font-medium">
+              Data information
+            </h3>
+            <div className="space-y-4 p-4">
+              <div className="space-y-1.5">
+                <label
+                  htmlFor={`${dataset.id}-description`}
+                  className="text-muted-foreground flex items-center gap-1 text-xs"
+                >
+                  Description
+                  {dataset.aiGenerated ? (
+                    <Sparkles className="size-3" aria-label="AI-generated" />
+                  ) : null}
+                </label>
+                <Textarea
+                  id={`${dataset.id}-description`}
+                  value={draft}
+                  placeholder="Describe what this data contains"
+                  rows={3}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onBlur={() =>
+                    draft !== dataset.description &&
+                    onChange({ ...dataset, description: draft })
+                  }
+                />
+              </div>
+              {dataset.rowRepresents ? (
+                <p className="text-muted-foreground text-xs">
+                  Each row represents:{" "}
+                  <span className="text-foreground">
+                    {dataset.rowRepresents}
+                  </span>
+                </p>
+              ) : null}
+              <dl className="grid grid-cols-2 gap-4">
+                <Fact label="Owner">
+                  <Avatar className="size-5">
+                    <AvatarFallback className="text-[10px]">
+                      {dataset.owner
+                        .split(" ")
+                        .map((p) => p[0])
+                        .join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="truncate">{dataset.owner}</span>
+                </Fact>
+                <Fact label="Uploaded at">
+                  {dateFormat.format(new Date(dataset.uploadedAt))}
+                </Fact>
+                <Fact label="Domain">
+                  <Badge variant="secondary">{dataset.domain}</Badge>
+                </Fact>
+                <Fact label="Date range">
+                  {dataset.dateRange
+                    ? `${dateFormat.format(new Date(dataset.dateRange[0]))} – ${dateFormat.format(new Date(dataset.dateRange[1]))}`
+                    : "—"}
+                </Fact>
+                <Fact label="Records">
+                  {count.format(dataset.rows)}{" "}
+                  {dataset.rows === 1 ? "row" : "rows"} /{" "}
+                  {dataset.columns.length}{" "}
+                  {dataset.columns.length === 1 ? "column" : "columns"}
+                </Fact>
+              </dl>
+              <ConfirmDialog
+                trigger={
+                  <Button variant="destructive" size="sm">
+                    <Trash2 data-icon="inline-start" />
+                    Delete data
+                  </Button>
+                }
+                title={`Delete ${dataset.title}?`}
+                description="This removes the dataset and everything built on it. It cannot be undone."
+                confirmLabel="Delete"
+                destructive
+                onConfirm={onDelete}
               />
             </div>
-            {dataset.rowRepresents ? (
-              <p className="text-muted-foreground text-xs">
-                Each row represents:{" "}
-                <span className="text-foreground">{dataset.rowRepresents}</span>
-              </p>
-            ) : null}
-            <dl className="grid grid-cols-2 gap-4">
-              <Fact label="Owner">
-                <Avatar className="size-5">
-                  <AvatarFallback className="text-[10px]">
-                    {dataset.owner.split(" ").map((p) => p[0]).join("")}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="truncate">{dataset.owner}</span>
-              </Fact>
-              <Fact label="Uploaded at">{dateFormat.format(new Date(dataset.uploadedAt))}</Fact>
-              <Fact label="Domain">
-                <Badge variant="secondary">{dataset.domain}</Badge>
-              </Fact>
-              <Fact label="Date range">
-                {dataset.dateRange
-                  ? `${dateFormat.format(new Date(dataset.dateRange[0]))} – ${dateFormat.format(new Date(dataset.dateRange[1]))}`
-                  : "—"}
-              </Fact>
-              <Fact label="Records">
-                {count.format(dataset.rows)} {dataset.rows === 1 ? "row" : "rows"} / {dataset.columns.length}{" "}
-                {dataset.columns.length === 1 ? "column" : "columns"}
-              </Fact>
-            </dl>
-            <ConfirmDialog
-              trigger={
-                <Button variant="destructive" size="sm">
-                  <Trash2 data-icon="inline-start" />
-                  Delete data
-                </Button>
-              }
-              title={`Delete ${dataset.title}?`}
-              description="This removes the dataset and everything built on it. It cannot be undone."
-              confirmLabel="Delete"
-              destructive
-              onConfirm={onDelete}
-            />
-          </div>
-        </section>
+          </section>
         </div>
 
         <section className="bg-card min-w-0 rounded-xl border">
@@ -1245,7 +1267,9 @@ function DatasetDetail({
                         onChange={(next) =>
                           onChange({
                             ...dataset,
-                            columns: dataset.columns.map((x, j) => (j === i ? next : x)),
+                            columns: dataset.columns.map((x, j) =>
+                              j === i ? next : x,
+                            ),
                           })
                         }
                       />
@@ -1262,13 +1286,6 @@ function DatasetDetail({
     </div>
   );
 }
-
-/** The first vertex of a WKT geometry: where a trip started, or the point itself. */
-const FIRST_VERTEX = /\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/;
-/** Every longitude and latitude pair in a WKT geometry. */
-const NUMBER_PAIR = /(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/g;
-/** A map of this many points is already a blur; more would only cost memory. */
-const MAX_MAP_POINTS = 20_000;
 
 /**
  * A small map of the dataset, coloured by its first category column with the
@@ -1287,7 +1304,11 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
   const logoZoom = column?.logoZoom ?? DEFAULT_LOGO_ZOOM;
   const styles = React.useMemo(
     // With no category column every point is one value, in the first colour.
-    () => resolveStyles(column ? values : [""], { logoZoom, values: column?.styles }),
+    () =>
+      resolveStyles(column ? values : [""], {
+        logoZoom,
+        values: column?.styles,
+      }),
     // `values` is a new array each render when the column has none.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [column?.values, column?.styles, logoZoom],
@@ -1322,12 +1343,27 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
       s = Math.min(s, y);
       n = Math.max(n, y);
     };
-    for (const { position: [x, y] } of points ?? []) include(x, y);
-    for (const { ring } of shapes ?? []) for (const [x, y] of ring) include(x, y);
-    map.fitBounds([[w, s], [e, n]], { padding: 24, duration: 0, maxZoom: 15 });
+    for (const {
+      position: [x, y],
+    } of points ?? [])
+      include(x, y);
+    for (const { ring } of shapes ?? [])
+      for (const [x, y] of ring) include(x, y);
+    map.fitBounds(
+      [
+        [w, s],
+        [e, n],
+      ],
+      { padding: 24, duration: 0, maxZoom: 15 },
+    );
   }, [map, points, shapes, total]);
 
-  useMapThumbnail(map, dataset, shapes?.length ? "datahub-shapes-fill" : "datahub-points-dots", styles);
+  useMapThumbnail(
+    map,
+    dataset,
+    shapes?.length ? "datahub-shapes-fill" : "datahub-points-dots",
+    styles,
+  );
 
   const [logosShown, setLogosShown] = React.useState(false);
   React.useEffect(() => {
@@ -1341,7 +1377,10 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
   }, [map, logoZoom]);
 
   return (
-    <section className="bg-card min-w-0 overflow-hidden rounded-xl border" data-slot="datahub-map">
+    <section
+      className="bg-card min-w-0 overflow-hidden rounded-xl border"
+      data-slot="datahub-map"
+    >
       <h3 className="border-b px-4 py-3 text-sm font-medium">Map</h3>
       {total ? (
         <>
@@ -1360,10 +1399,18 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
           </div>
           <div className="space-y-2 p-4">
             <p className="text-muted-foreground text-xs">
-              {count.format(total)} {shapes?.length ? (total === 1 ? "area" : "areas") : total === 1 ? "point" : "points"}
+              {count.format(total)}{" "}
+              {shapes?.length
+                ? total === 1
+                  ? "area"
+                  : "areas"
+                : total === 1
+                  ? "point"
+                  : "points"}
               {column ? (
                 <>
-                  , coloured by <span className="text-foreground">{column.name}</span>
+                  , coloured by{" "}
+                  <span className="text-foreground">{column.name}</span>
                   {shapes?.length ? "." : ". Zoom in to see logos."}
                 </>
               ) : (
@@ -1371,29 +1418,30 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
               )}
             </p>
             {column ? (
-            <LegendCategorical
-              showLogos={logosShown}
-              items={values.map((label) => {
-                const style = styles[label];
-                return {
-                  label,
-                  color: style?.color ?? "#888888",
-                  logo: style?.logo
-                    ? {
-                        src: style.logo,
-                        solid: style.logoKind === "solid",
-                        background: badgeColor(style),
-                      }
-                    : undefined,
-                };
-              })}
-            />
+              <LegendCategorical
+                showLogos={logosShown}
+                items={values.map((label) => {
+                  const style = styles[label];
+                  return {
+                    label,
+                    color: style?.color ?? "#888888",
+                    logo: style?.logo
+                      ? {
+                          src: style.logo,
+                          solid: style.logoKind === "solid",
+                          background: badgeColor(style),
+                        }
+                      : undefined,
+                  };
+                })}
+              />
             ) : null}
           </div>
         </>
       ) : (
         <p className="text-muted-foreground p-4 text-xs">
-          No map preview: this dataset has no geometry column with readable coordinates.
+          No map preview: this dataset has no geometry column with readable
+          coordinates.
         </p>
       )}
     </section>
@@ -1413,10 +1461,15 @@ const CELL_LIMIT = 120;
  * whole file, but holding every row of a multi-million-row export in React
  * state would cost more than the preview is worth.
  */
-function datasetFromCsv(id: string, filename: string, text: string): Dataset | string {
+function datasetFromCsv(
+  id: string,
+  filename: string,
+  text: string,
+): Dataset | string {
   const parsed = parseCsv(text);
   if (parsed.header.length === 0) return "That file is empty.";
-  if (parsed.rows.length === 0) return "That file has column names but no rows.";
+  if (parsed.rows.length === 0)
+    return "That file has column names but no rows.";
 
   const columns: Column[] = inferColumns(parsed).map((c) => ({
     name: c.name,
@@ -1432,7 +1485,9 @@ function datasetFromCsv(id: string, filename: string, text: string): Dataset | s
   // A column with one value tells the map nothing, so the first that varies.
   const categoryAt = (() => {
     const first = columns.findIndex((c) => c.type === "category");
-    const varies = columns.findIndex((c) => c.type === "category" && (c.values?.length ?? 0) > 1);
+    const varies = columns.findIndex(
+      (c) => c.type === "category" && (c.values?.length ?? 0) > 1,
+    );
     return varies >= 0 ? varies : first;
   })();
   const mapPoints: CategoryPoint[] = [];
@@ -1441,19 +1496,20 @@ function datasetFromCsv(id: string, filename: string, text: string): Dataset | s
     for (const row of parsed.rows) {
       const cell = row[geometryAt] ?? "";
       const category = categoryAt >= 0 ? (row[categoryAt] ?? "") : "";
-      if (/^\s*POLYGON/i.test(cell)) {
-        const ring = [...cell.matchAll(NUMBER_PAIR)].map((m) => [Number(m[1]), Number(m[2])] as [number, number]);
-        if (ring.length >= 4) mapShapes.push({ ring, category });
+      if (/^\s*(MULTI)?POLYGON/i.test(cell)) {
+        const ring = ringOf(cell);
+        if (ring) mapShapes.push({ ring, category });
         continue;
       }
-      const m = FIRST_VERTEX.exec(cell);
-      if (!m) continue;
-      mapPoints.push({ position: [Number(m[1]), Number(m[2])], category });
+      const position = firstPosition(cell);
+      if (!position) continue;
+      mapPoints.push({ position, category });
       if (mapPoints.length >= MAX_MAP_POINTS) break;
     }
   }
   const mapped = mapPoints.length > 0 || mapShapes.length > 0;
-  const clip = (v: string) => (v.length > CELL_LIMIT ? `${v.slice(0, CELL_LIMIT)}…` : v);
+  const clip = (v: string) =>
+    v.length > CELL_LIMIT ? `${v.slice(0, CELL_LIMIT)}…` : v;
 
   return {
     id,
@@ -1506,7 +1562,8 @@ function withSavedStyles(dataset: Dataset): Dataset {
 function saveStyles(dataset: Dataset): boolean {
   let ok = true;
   for (const c of dataset.columns) {
-    if (c.type !== "category" || (!c.styles && c.logoZoom === undefined)) continue;
+    if (c.type !== "category" || (!c.styles && c.logoZoom === undefined))
+      continue;
     ok =
       writeStyleSet(storageKeyOf(dataset), c.name, {
         logoZoom: c.logoZoom ?? DEFAULT_LOGO_ZOOM,
@@ -1572,7 +1629,9 @@ export function DatahubWorkspace({
     setPending(samples.length);
     for (const feed of samples) {
       fetch(`${BASE_PATH}/data/${feed.file}`, { signal: controller.signal })
-        .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+        .then((r) =>
+          r.ok ? r.text() : Promise.reject(new Error(String(r.status))),
+        )
         .then((text) => {
           const parsed = datasetFromCsv(feed.id, feed.file, text);
           if (typeof parsed === "string") return;
@@ -1582,6 +1641,11 @@ export function DatahubWorkspace({
             // workspaces look these styles up by this exact id, so it is part
             // of that contract.
             storageKey: feed.id,
+            // The catalogue's own name, not the filename datasetFromCsv falls
+            // back to for an upload. The map workspace labels its layer cards
+            // from the same field, so the two pages call a dataset the same
+            // thing.
+            title: feed.title,
             section: feed.section,
             status: feed.status,
             description: feed.description,
@@ -1593,25 +1657,37 @@ export function DatahubWorkspace({
             dateRange: feed.dateRange,
             columns: parsed.columns.map((c) => ({
               ...c,
-              description: SAMPLE_DESCRIPTIONS[c.name] ?? c.description,
+              description: SAMPLE_COLUMN_DESCRIPTIONS[c.name] ?? c.description,
               unit: feed.units?.[c.name] ?? c.unit,
             })),
           };
           // Strict Mode runs effects twice in development; never list one twice.
-          setDatasets((all) => (all.some((d) => d.id === sample.id) ? all : [withSavedStyles(sample), ...all]));
+          setDatasets((all) =>
+            all.some((d) => d.id === sample.id)
+              ? all
+              : [withSavedStyles(sample), ...all],
+          );
         })
         .catch(() => {})
-        .finally(() => !controller.signal.aborted && setPending((n) => Math.max(0, n - 1)));
+        .finally(
+          () =>
+            !controller.signal.aborted && setPending((n) => Math.max(0, n - 1)),
+        );
     }
     return () => controller.abort();
   }, [samples]);
   // Until the samples have arrived the list would be empty, which reads as
   // "you have no data" -- so it shows what it is: loading.
-  const status = hostStatus === "ready" && pending > 0 && datasets.length === 0 ? "loading" : hostStatus;
+  const status =
+    hostStatus === "ready" && pending > 0 && datasets.length === 0
+      ? "loading"
+      : hostStatus;
   const [section, setSection] = React.useState<Section>("data");
   const [query, setQuery] = React.useState("");
   const [sort, setSort] = React.useState<SortKey>("recent");
-  const [regStatus, setRegStatus] = React.useState<"active" | "inactive" | "all">("active");
+  const [regStatus, setRegStatus] = React.useState<
+    "active" | "inactive" | "all"
+  >("active");
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [importing, setImporting] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
@@ -1624,12 +1700,18 @@ export function DatahubWorkspace({
   const upload = async (file: File) => {
     setUploadError(null);
     if (file.size > MAX_UPLOAD_BYTES) {
-      setUploadError(`That file is ${Math.round(file.size / 1024 / 1024)} MB. The limit here is 50 MB.`);
+      setUploadError(
+        `That file is ${Math.round(file.size / 1024 / 1024)} MB. The limit here is 50 MB.`,
+      );
       return;
     }
     setImporting(true);
     try {
-      const result = datasetFromCsv(`upload-${++uploads.current}`, file.name, await file.text());
+      const result = datasetFromCsv(
+        `upload-${++uploads.current}`,
+        file.name,
+        await file.text(),
+      );
       if (typeof result === "string") {
         setUploadError(result);
         return;
@@ -1652,8 +1734,15 @@ export function DatahubWorkspace({
     const q = query.trim().toLowerCase();
     return datasets
       .filter((d) => d.section === section)
-      .filter((d) => section !== "regulations" || regStatus === "all" || d.status === regStatus)
-      .filter((d) => !q || `${d.title} ${d.description}`.toLowerCase().includes(q))
+      .filter(
+        (d) =>
+          section !== "regulations" ||
+          regStatus === "all" ||
+          d.status === regStatus,
+      )
+      .filter(
+        (d) => !q || `${d.title} ${d.description}`.toLowerCase().includes(q),
+      )
       .sort((a, b) =>
         sort === "name"
           ? a.title.localeCompare(b.title)
@@ -1707,7 +1796,9 @@ export function DatahubWorkspace({
           <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
             <div className="space-y-1">
               <h2 className="text-xl font-semibold tracking-tight">Data</h2>
-              <p className="text-muted-foreground text-sm">Here&apos;s a list of all your data</p>
+              <p className="text-muted-foreground text-sm">
+                Here&apos;s a list of all your data
+              </p>
             </div>
             <Button onClick={pickFile} disabled={importing}>
               <Upload data-icon="inline-start" />
@@ -1721,7 +1812,11 @@ export function DatahubWorkspace({
               <AlertTitle>Couldn&apos;t import that file</AlertTitle>
               <AlertDescription>{uploadError}</AlertDescription>
               <AlertAction>
-                <Button variant="ghost" size="xs" onClick={() => setUploadError(null)}>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setUploadError(null)}
+                >
                   Dismiss
                 </Button>
               </AlertAction>
@@ -1760,10 +1855,14 @@ export function DatahubWorkspace({
             {section === "regulations" ? (
               <Select
                 value={regStatus}
-                onValueChange={(v) => setRegStatus((v ?? "active") as typeof regStatus)}
+                onValueChange={(v) =>
+                  setRegStatus((v ?? "active") as typeof regStatus)
+                }
               >
                 <SelectTrigger className="w-28" aria-label="Regulation status">
-                  <SelectValue>{(v: string) => v.charAt(0).toUpperCase() + v.slice(1)}</SelectValue>
+                  <SelectValue>
+                    {(v: string) => v.charAt(0).toUpperCase() + v.slice(1)}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="active">Active</SelectItem>
@@ -1772,7 +1871,10 @@ export function DatahubWorkspace({
                 </SelectContent>
               </Select>
             ) : null}
-            <Select value={sort} onValueChange={(v) => setSort((v ?? "recent") as SortKey)}>
+            <Select
+              value={sort}
+              onValueChange={(v) => setSort((v ?? "recent") as SortKey)}
+            >
               <SelectTrigger className="w-36" aria-label="Sort">
                 <SelectValue>{(v: string) => SORTS[v as SortKey]}</SelectValue>
               </SelectTrigger>
@@ -1804,7 +1906,8 @@ export function DatahubWorkspace({
                 </EmptyMedia>
                 <EmptyTitle>Couldn&apos;t load your data</EmptyTitle>
                 <EmptyDescription>
-                  Something went wrong reaching the data hub. Nothing was changed.
+                  Something went wrong reaching the data hub. Nothing was
+                  changed.
                 </EmptyDescription>
               </EmptyHeader>
               <EmptyContent>

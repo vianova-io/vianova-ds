@@ -646,6 +646,17 @@ for (const block of NON_MAP_BLOCKS) {
         await page.goto(`/blocks/${block}`);
         await settle(page);
         const root = page.locator(`[data-slot=${block}]`);
+        // Same wait readShape does for the map blocks, for the same reason:
+        // these render inside a Suspense boundary, and while it hydrates React
+        // keeps the server markup in the DOM but hides its container -- so the
+        // element resolves and measures 0, or is not there yet at all.
+        // settle() returns inside that window because `main` is visible.
+        await expect
+          .poll(() => root.evaluate((el) => el.getBoundingClientRect().width).catch(() => 0), {
+            timeout: 15_000,
+            message: "the block never laid out",
+          })
+          .toBeGreaterThan(0);
 
         const measure = () =>
           root.evaluate((el) => {
