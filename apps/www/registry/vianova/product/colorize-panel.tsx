@@ -25,6 +25,11 @@ import {
 } from "@/registry/vianova/product/color-stop-slider";
 import { PaletteStrip } from "@/registry/vianova/product/preset-picker";
 import { SegmentedControl } from "@/registry/vianova/product/segmented-control";
+import { CategoryStylePicker } from "@/registry/vianova/product/category-style-picker";
+import {
+  DEFAULT_LOGO_ZOOM,
+  type CategoryStyle,
+} from "@/registry/vianova/lib/category-style";
 import { cn } from "@/registry/vianova/lib/utils";
 
 export const CLASSIFICATION_METHODS = [
@@ -91,6 +96,38 @@ const DEFAULT_FIELDS: ColorizeField[] = Object.keys(COLOR_BY_METRICS).map(
  * dragging a handle and typing a percentage are the same edit. Selection is
  * shared too — that is what makes a ramp with many stops workable.
  */
+/**
+ * One setting: its name on the left, its control on the right.
+ *
+ * Two columns rather than a label stacked above its control. The panel sits
+ * beside a map, often with two more panels cascading off it, so every row it
+ * saves is a row of map you can still see -- and these controls are all short
+ * enough that a full-width field was only ever padding.
+ */
+function Row({
+  label,
+  children,
+  className,
+}: {
+  label: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid min-h-8 grid-cols-[5.25rem_minmax(0,1fr)] items-center gap-2",
+        className,
+      )}
+    >
+      {label}
+      <div className="flex min-w-0 items-center justify-end gap-2">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function ColorizePanel({
   layerName = "Micromobility",
   metric,
@@ -110,6 +147,9 @@ export function ColorizePanel({
   presetName = "Spectrum",
   presetCustom = false,
   presetColors,
+  categoryStyles,
+  logoZoom = DEFAULT_LOGO_ZOOM,
+  onCategoryStyleChange,
   onBrowsePresets,
   browsePresetsId,
   presetsOpen,
@@ -140,9 +180,21 @@ export function ColorizePanel({
   maxCategories?: number;
   otherColor?: string;
   singleColor?: string;
-  /** Fired by a category's swatch. The colour picker itself belongs to the
-   *  caller, which is what lets it be a step of a PanelStepper. */
+  /** Fired by a category's swatch when no `onCategoryStyleChange` is given, so
+   *  a caller can still supply a picker of its own. */
   onCategorySelect?: (value: string) => void;
+  /**
+   * Colours and logos per category value, keyed the way the map reads them.
+   *
+   * Supplying `onCategoryStyleChange` turns each swatch into the same picker
+   * the data hub uses: the palette, a custom colour, a logo to upload and the
+   * badge behind it, with the dot and the badge previewed as the map will draw
+   * them. Without it the swatches stay flat and only report a click.
+   */
+  categoryStyles?: Record<string, CategoryStyle>;
+  /** The zoom a map swaps dots for logo badges at, shown in the picker. */
+  logoZoom?: number;
+  onCategoryStyleChange?: (value: string, style: CategoryStyle) => void;
   opacity?: number;
   onOpacityChange?: (opacity: number) => void;
   presetName?: string;
@@ -264,20 +316,40 @@ export function ColorizePanel({
     fields.map((f) => [f.name, f.label ?? COLOR_BY_METRICS[f.name] ?? f.name]),
   );
 
-  const swatch = (color: string, label: string, value?: string) => (
-    <button
-      type="button"
-      // Named, not just "Choose color". Nine identically labelled buttons is
-      // what the product ships, and it leaves a screen reader user unable to
-      // tell which value they are about to recolour.
-      aria-label={`Choose color for ${label}`}
-      onClick={
-        value === undefined ? undefined : () => onCategorySelect?.(value)
-      }
-      className="size-5 shrink-0 rounded-sm border border-border/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-      style={{ backgroundColor: color }}
-    />
-  );
+  /**
+   * A category's colour, as a control.
+   *
+   * With `onCategoryStyleChange` this is the data hub's own picker, so a colour
+   * or logo set here is the one that page shows too -- one editor, not two that
+   * drift. Without it the swatch is a plain button that reports a click, which
+   * is what a caller supplying its own picker wants.
+   */
+  const swatch = (color: string, label: string, value?: string) => {
+    if (value !== undefined && onCategoryStyleChange) {
+      return (
+        <CategoryStylePicker
+          value={label}
+          style={categoryStyles?.[value] ?? { color }}
+          logoZoom={logoZoom}
+          onChange={(next) => onCategoryStyleChange(value, next)}
+        />
+      );
+    }
+    return (
+      <button
+        type="button"
+        // Named, not just "Choose color". Nine identically labelled buttons is
+        // what the product ships, and it leaves a screen reader user unable to
+        // tell which value they are about to recolour.
+        aria-label={`Choose color for ${label}`}
+        onClick={
+          value === undefined ? undefined : () => onCategorySelect?.(value)
+        }
+        className="size-5 shrink-0 rounded-sm border border-border/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+        style={{ backgroundColor: color }}
+      />
+    );
+  };
 
   return (
     <div
@@ -302,9 +374,11 @@ export function ColorizePanel({
                 <ChevronLeft />
               </Button>
             ) : null}
-            <span className="min-w-0 truncate text-sm">
-              <span className="font-semibold">Colorize</span>
-              <span className="text-muted-foreground"> · {layerName}</span>
+            {/* The layer's name is not repeated here: this panel is opened
+                from that layer's own card, and in a stepper the step's header
+                already carries it. It stays as the panel's accessible name. */}
+            <span className="min-w-0 truncate text-sm font-semibold">
+              Colorize
             </span>
             <Button
               variant="ghost"
@@ -320,15 +394,19 @@ export function ColorizePanel({
         </>
       ) : null}
 
-      <div className="space-y-3 p-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="color-by">Color by</Label>
+      <div className="space-y-2 p-3">
+        <Row label={<Label htmlFor="color-by">Color by</Label>}>
           <Select
             value={field}
             // Base UI allows clearing a Select, which this one never offers.
             onValueChange={(next) => next !== null && setField(next)}
           >
-            <SelectTrigger id="color-by" className="w-full">
+            {/* Borderless: a field box the width of the panel for a value of
+                one word is most of what made the old layout tall. */}
+            <SelectTrigger
+              id="color-by"
+              className="h-7 w-auto min-w-0 justify-end gap-1 border-0 bg-transparent px-1 shadow-none hover:underline"
+            >
               {/* Base UI renders the raw value unless given a mapping. */}
               <SelectValue>{(v: string) => fieldLabels[v] ?? v}</SelectValue>
             </SelectTrigger>
@@ -340,25 +418,30 @@ export function ColorizePanel({
               ))}
             </SelectContent>
           </Select>
-        </div>
+        </Row>
 
-        <div className="space-y-1.5">
-          <Label>Mode</Label>
+        <Row label={<Label>Mode</Label>}>
           <SegmentedControl
             aria-label="Colour mode"
+            size="sm"
             value={mode}
             onValueChange={setMode}
             items={modeItems}
           />
-        </div>
+        </Row>
 
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label>Preset</Label>
-            {!isCategorical && presetCustom ? (
-              <Badge variant="secondary">Custom</Badge>
-            ) : null}
-          </div>
+        <Row
+          label={
+            <div className="flex min-w-0 items-center gap-1.5">
+              <Label>Preset</Label>
+              {!isCategorical && presetCustom ? (
+                <Badge variant="secondary" className="px-1 py-0 text-[10px]">
+                  Custom
+                </Badge>
+              ) : null}
+            </div>
+          }
+        >
           <button
             type="button"
             id={browsePresetsId}
@@ -366,7 +449,7 @@ export function ColorizePanel({
             aria-haspopup={onBrowsePresets ? "dialog" : undefined}
             aria-expanded={onBrowsePresets ? Boolean(presetsOpen) : undefined}
             onClick={onBrowsePresets}
-            className="flex h-9 w-full items-center gap-3 rounded-md border border-input px-2 text-sm transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="flex h-7 min-w-0 items-center gap-2 rounded-md px-1 text-sm transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             {isCategorical ? (
               <PaletteStrip colors={ramp} className="w-16 shrink-0" />
@@ -378,38 +461,38 @@ export function ColorizePanel({
               />
             )}
             <span className="truncate">{presetName}</span>
-            <span className="ml-auto flex shrink-0 items-center gap-0.5 text-muted-foreground">
-              Browse
-              <ChevronRight className="size-3.5" />
-            </span>
+            {/* The chevron alone, with no "Browse" beside it: the row is the
+                control, and its accessible name already says what it opens. */}
+            <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
           </button>
-        </div>
+        </Row>
 
         {isCategorical ? (
-          <div className="space-y-1.5">
-            {/* Base UI puts the real <input> inside Slider.Thumb, so neither
-                htmlFor nor aria-label on the root reaches it. Only
-                aria-labelledby at the visible label does. */}
-            <Label id={opacityLabelId}>Opacity</Label>
-            <div className="flex items-center gap-3">
-              <Slider
-                aria-labelledby={opacityLabelId}
-                value={[opacity]}
-                onValueChange={(v) =>
-                  setOpacity(Array.isArray(v) ? (v[0] ?? 0) : v)
-                }
-                max={100}
-                step={1}
-                className="min-w-0 flex-1"
-              />
-              <Input
-                aria-label="Opacity percentage"
-                value={`${opacity}%`}
-                readOnly
-                className="w-16 shrink-0 text-center"
-              />
-            </div>
-          </div>
+          <Row
+            label={
+              /* Base UI puts the real <input> inside Slider.Thumb, so neither
+                 htmlFor nor aria-label on the root reaches it. Only
+                 aria-labelledby at the visible label does. */
+              <Label id={opacityLabelId}>Opacity</Label>
+            }
+          >
+            <Slider
+              aria-labelledby={opacityLabelId}
+              value={[opacity]}
+              onValueChange={(v) =>
+                setOpacity(Array.isArray(v) ? (v[0] ?? 0) : v)
+              }
+              max={100}
+              step={1}
+              className="min-w-0 flex-1"
+            />
+            <Input
+              aria-label="Opacity percentage"
+              value={`${opacity}%`}
+              readOnly
+              className="h-7 w-14 shrink-0 px-1 text-center text-xs"
+            />
+          </Row>
         ) : null}
       </div>
 
@@ -418,7 +501,7 @@ export function ColorizePanel({
           <Separator />
           <div className="space-y-2 p-3">
             {mode === "single" ? (
-              <div className="flex h-9 items-center gap-3">
+              <div className="flex h-8 items-center gap-2">
                 {swatch(singleColor, "all features")}
                 <span className="truncate text-sm">All features</span>
               </div>
@@ -430,7 +513,7 @@ export function ColorizePanel({
                   </p>
                 ) : null}
                 {shown.map((c) => (
-                  <div key={c.value} className="flex h-9 items-center gap-3">
+                  <div key={c.value} className="flex h-8 items-center gap-2">
                     {swatch(c.color, c.label ?? c.value, c.value)}
                     <span
                       className="truncate text-sm"
@@ -441,7 +524,7 @@ export function ColorizePanel({
                   </div>
                 ))}
                 {total > shown.length ? (
-                  <div className="flex h-9 items-center gap-3">
+                  <div className="flex h-8 items-center gap-2">
                     {swatch(otherColor, OTHER, OTHER)}
                     <span className="truncate text-sm">{OTHER}</span>
                   </div>
@@ -453,12 +536,11 @@ export function ColorizePanel({
       ) : (
         <>
           <Separator />
-          <div className="space-y-3 p-3">
-            <Label>Classification</Label>
-            <div className="flex items-center gap-2">
+          <div className="space-y-2 p-3">
+            <Row label={<Label>Classification</Label>}>
               <Select defaultValue="equal-intervals">
                 <SelectTrigger
-                  className="min-w-0 flex-1"
+                  className="h-7 w-auto min-w-0 justify-end gap-1 border-0 bg-transparent px-1 text-right shadow-none hover:underline"
                   aria-label="Classification method"
                 >
                   <SelectValue>
@@ -475,10 +557,10 @@ export function ColorizePanel({
               </Select>
               <Input
                 aria-label="Number of classes"
-                defaultValue="4 classes"
-                className="w-28 shrink-0 text-center"
+                defaultValue="4"
+                className="h-7 w-10 shrink-0 px-1 text-center text-xs"
               />
-            </div>
+            </Row>
             <ColorStopSlider
               stops={stops}
               selectedIndex={selected}

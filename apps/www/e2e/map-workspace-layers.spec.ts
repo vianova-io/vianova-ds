@@ -282,6 +282,88 @@ test.describe("every layer gets the chain", () => {
   });
 });
 
+test.describe("category colours and logos", () => {
+  test.use({ viewport: WIDE });
+
+  const openColorize = async (page: Page) => {
+    await open(page);
+    await toggle(page, "Vehicle events").click();
+    await page.getByRole("button", { name: "Colorize Vehicle events" }).click();
+    return page.locator('[data-slot="panel-step"][data-depth="1"]');
+  };
+
+  test("a swatch opens the data hub's colour and logo picker", async ({
+    page,
+  }) => {
+    const step = await openColorize(page);
+    const swatch = step.getByRole("button", { name: /^Colour and logo for/ }).first();
+    await expect(swatch).toBeVisible();
+
+    await swatch.click();
+
+    // The same editor the hub uses: the map preview, the palette, the logo.
+    // `exact`, because the docs page prints the block's source below the demo
+    // and "Rows on the map" and a comment both contain this phrase.
+    await expect(page.getByText("On the map", { exact: true })).toBeVisible();
+    await expect(page.getByText(/^Below zoom \d+$/)).toBeVisible();
+    await expect(page.getByText(/^From zoom \d+$/)).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Use #/ }).first()).toBeVisible();
+    await expect(page.getByText("Logo", { exact: true })).toBeVisible();
+  });
+
+  test("a colour chosen there sticks, and the legend follows", async ({
+    page,
+  }) => {
+    const step = await openColorize(page);
+    const firstSwatch = () =>
+      step.getByRole("button", { name: /^Colour and logo for/ }).first();
+    const legendColor = () =>
+      page
+        .locator('[data-slot="legend-categorical"] li > span[aria-hidden]')
+        .first()
+        .evaluate((e) => getComputedStyle(e).backgroundColor);
+    const before = await legendColor();
+
+    await firstSwatch().click();
+    const choices = page.getByRole("button", { name: /^Use #/ });
+    // A colour that is not the one already in play, so the change is visible.
+    await choices.nth(3).click();
+    await page.keyboard.press("Escape");
+
+    await expect.poll(legendColor).not.toBe(before);
+    const after = await legendColor();
+
+    // Saved where the hub reads it, so it survives the panel closing.
+    await step.getByRole("button", { name: "Close" }).click();
+    await page.getByRole("button", { name: "Colorize Vehicle events" }).click();
+    await expect.poll(legendColor).toBe(after);
+  });
+});
+
+test.describe("the panel is compact", () => {
+  test.use({ viewport: WIDE });
+
+  test("a setting's name and its control share one row", async ({ page }) => {
+    await open(page);
+    await toggle(page, "Vehicle events").click();
+    await page.getByRole("button", { name: "Colorize Vehicle events" }).click();
+    const step = page.locator('[data-slot="panel-step"][data-depth="1"]');
+    await expect(step).toBeVisible();
+
+    // Stacked, the control's top would sit below the label's bottom. Beside it,
+    // their centres line up -- which is the whole point of the layout and
+    // survives any amount of restyling that keeps it.
+    for (const name of ["Color by", "Mode", "Opacity"]) {
+      const label = step.getByText(name, { exact: true });
+      const row = label.locator("xpath=ancestor::div[contains(@class,'grid')][1]");
+      const [l, r] = await Promise.all([label.boundingBox(), row.boundingBox()]);
+      const labelMid = l!.y + l!.height / 2;
+      const rowMid = r!.y + r!.height / 2;
+      expect(Math.abs(labelMid - rowMid), `${name} is not on one row`).toBeLessThan(6);
+    }
+  });
+});
+
 test.describe("the charts follow the layer", () => {
   test.use({ viewport: WIDE });
 

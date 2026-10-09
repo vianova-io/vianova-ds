@@ -37,6 +37,8 @@ import {
   STYLE_STORAGE_KEY,
   readStyleSet,
   resolveStyles,
+  writeStyleSet,
+  type CategoryStyle,
   type CategoryStyleSet,
 } from "@/registry/vianova/lib/category-style";
 import {
@@ -195,6 +197,29 @@ export function SampleMapLayer({
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, [colorField, feed.id]);
+
+  /**
+   * Saves a category's colour or logo where the data hub reads it.
+   *
+   * Through the same storage, under the same dataset id and column, so a
+   * colour set on the map is the colour the hub's own preview draws, and a
+   * logo uploaded in either place shows in both. The write also fires the
+   * storage event other tabs listen on.
+   */
+  const setCategoryStyle = React.useCallback(
+    (value: string, next: CategoryStyle) => {
+      if (!colorField) return;
+      setSavedStyles((current) => {
+        const set: CategoryStyleSet = {
+          logoZoom: current?.logoZoom ?? DEFAULT_LOGO_ZOOM,
+          values: { ...current?.values, [value]: next },
+        };
+        writeStyleSet(feed.id, colorField, set);
+        return set;
+      });
+    },
+    [colorField, feed.id],
+  );
 
   /* -------------------------------- fields -------------------------------- */
 
@@ -534,6 +559,9 @@ export function SampleMapLayer({
             presetName={categorical ? preset : rampPreset}
             presetCustom={!categorical && rampCustom}
             presetColors={categorical ? paletteColors : undefined}
+            categoryStyles={styles}
+            logoZoom={logoZoom}
+            onCategoryStyleChange={setCategoryStyle}
             stops={!categorical && rampStops.length ? rampStops : undefined}
             onStopsChange={(next) => {
               setStops(next);

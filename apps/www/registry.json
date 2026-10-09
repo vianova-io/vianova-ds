@@ -393,8 +393,8 @@
         "@vianova/avatar",
         "@vianova/badge",
         "@vianova/button",
-        "@vianova/category-badge",
         "@vianova/category-style",
+        "@vianova/category-style-picker",
         "@vianova/confirm-dialog",
         "@vianova/css-color",
         "@vianova/csv",
@@ -2100,6 +2100,34 @@
       }
     },
     {
+      "name": "category-style-picker",
+      "type": "registry:ui",
+      "title": "Category Style Picker",
+      "description": "Category Style Picker — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/button",
+        "@vianova/category-badge",
+        "@vianova/category-style",
+        "@vianova/popover",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/category-style-picker.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "cell-renderers",
       "type": "registry:ui",
       "title": "Cell Renderers",
@@ -2211,6 +2239,8 @@
       "registryDependencies": [
         "@vianova/badge",
         "@vianova/button",
+        "@vianova/category-style",
+        "@vianova/category-style-picker",
         "@vianova/color-stop-list",
         "@vianova/color-stop-slider",
         "@vianova/input",
