@@ -40,7 +40,11 @@ const card = (page: Page, name: string) =>
  * whatever control the expanded form happens to end with.
  */
 const toggle = (page: Page, name: string) =>
-  page.getByRole("button", { name: new RegExp(`^(Show|Hide) ${name}$`) });
+  page.getByRole("button", {
+    // Escaped: "Trips (MDS)" would otherwise read as a capture group and the
+    // pattern would never match the label it was built from.
+    name: new RegExp(`^(Show|Hide) ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
+  });
 
 async function open(page: Page) {
   await page.goto("/blocks/map-workspace");
@@ -183,6 +187,98 @@ test.describe("a layer carries its own data", () => {
     const areas = card(page, "Districts");
     await expect(areas.getByRole("radio", { name: "Zones" })).toBeEnabled();
     await expect(areas.getByRole("radio", { name: "Points" })).toBeDisabled();
+  });
+});
+
+/**
+ * Every feed, not a sample of them.
+ *
+ * The colorize chain is built from whatever `inferColumns` found, so a feed
+ * whose columns the inference reads differently -- a regulation with three
+ * rows, a file whose only category column never varies -- is exactly where it
+ * would quietly produce a card with no legend and therefore no trigger, since
+ * the trigger is laid over the legend. Walking the whole catalogue is the only
+ * way that stays caught.
+ */
+const FEEDS: { tab: "Data" | "Zones"; name: string }[] = [
+  { tab: "Data", name: "Trips (MDS)" },
+  { tab: "Data", name: "Parking infringements" },
+  { tab: "Data", name: "Vehicle events" },
+  { tab: "Data", name: "Vehicle snapshot" },
+  { tab: "Zones", name: "Parking zones" },
+  { tab: "Zones", name: "Districts" },
+  { tab: "Zones", name: "Speed limit · Baixa" },
+  { tab: "Zones", name: "No parking · Historic centre" },
+  { tab: "Zones", name: "Fleet cap per operator" },
+  { tab: "Zones", name: "Night curfew · Bairro Alto" },
+];
+
+test.describe("every layer gets the chain", () => {
+  test.use({ viewport: WIDE });
+
+  for (const { tab, name } of FEEDS) {
+    test(`${name} colorizes by its own columns`, async ({ page }) => {
+      await open(page);
+      await page.getByRole("tab", { name: tab }).click();
+      await toggle(page, name).click();
+
+      // A legend, because the trigger is laid over it.
+      const legend = card(page, name).locator(
+        '[data-slot="legend-categorical"], [data-slot="legend-ramp"]',
+      );
+      await expect(legend.first()).toBeVisible();
+
+      const trigger = page.getByRole("button", { name: `Colorize ${name}` });
+      await expect(trigger).toBeVisible();
+      await trigger.click();
+
+      const step = page.locator('[data-slot="panel-step"][data-depth="1"]');
+      await expect(step).toBeVisible();
+      await expect(step).toHaveAttribute("data-side", "inline-end");
+
+      // Fields from this file, named by the hub rather than by the raw header.
+      await step.locator("#color-by").click();
+      // Waited for, not slept on: reading the listbox the instant the trigger
+      // is clicked returns an empty list on whichever layer happens to be slow.
+      await expect(page.getByRole("option").first()).toBeVisible();
+      const options = await page.getByRole("option").allInnerTexts();
+      expect(options.length).toBeGreaterThan(1);
+      expect(options.some((o) => /^[A-Z]/.test(o.trim()))).toBe(true);
+      await page.keyboard.press("Escape");
+
+      // And the chain goes a second step deep.
+      await step.getByRole("button", { name: "Preset" }).click();
+      const preset = page.locator('[data-slot="panel-step"][data-depth="2"]');
+      await expect(preset).toBeVisible();
+      await expect(preset.getByRole("option").first()).toBeVisible();
+    });
+  }
+
+  test("opening one layer's chain closes another's", async ({ page }) => {
+    await open(page);
+    await toggle(page, "Vehicle events").click();
+    await toggle(page, "Parking infringements").click();
+
+    await page.getByRole("button", { name: "Colorize Vehicle events" }).click();
+    await expect(page.locator('[data-slot="panel-step"][data-depth="1"]')).toHaveCount(1);
+
+    await page.getByRole("button", { name: "Colorize Parking infringements" }).click();
+
+    // One path, so one chain: the stepper truncates rather than stacking.
+    const open_ = page.locator('[data-slot="panel-step"][data-depth="1"]');
+    await expect(open_).toHaveCount(1);
+    // By its heading, not aria-label: cascaded, the step is named through
+    // PopoverTitle and aria-labelledby. Only the docked form sets aria-label.
+    await expect(open_).toContainText("Parking infringements");
+  });
+
+  test("the Z\u00fcrich layer keeps its own chain", async ({ page }) => {
+    await open(page);
+    await page.getByRole("button", { name: "Colorize Vehicle Flows" }).click();
+    const step = page.locator('[data-slot="panel-step"][data-depth="1"]');
+    await expect(step).toBeVisible();
+    await step.getByRole("button", { name: "Preset" }).click();
+    await expect(page.locator('[data-slot="panel-step"][data-depth="2"]')).toBeVisible();
   });
 });
 
