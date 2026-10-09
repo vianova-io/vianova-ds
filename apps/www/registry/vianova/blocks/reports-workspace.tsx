@@ -964,6 +964,8 @@ const compact = new Intl.NumberFormat("en", {
   notation: "compact",
   maximumFractionDigits: 1,
 });
+/** For chart props that must not change from one render to the next. */
+const formatCompact = (v: unknown) => compact.format(Number(v));
 /**
  * A moment in the viewer's own time zone. The page is rendered ahead of time
  * in UTC, so the text differs once it reaches a browser in Lisbon or New York;
@@ -1552,6 +1554,26 @@ function SeriesBody({
     return both ? `${text} (${formatPercent(Number(row[`p${k}`]))})` : text;
   };
 
+  const visible = series.filter((s) => !hidden.has(s.key));
+  const topKey = visible[visible.length - 1]?.key;
+  // Above the table's early return: hooks must run on every render.
+  // Each stack's total, for the labels over the bars, read by name. A
+  // function as the LabelList's dataKey loops: Recharts files it in its store,
+  // filing it renders the chart, and that hands it a new function to file --
+  // endless as soon as anything re-renders the chart, as resizing a card does.
+  const shownKeys = visible.map((v) => v.key).join();
+  const barRows = React.useMemo(() => {
+    const keys = shownKeys.split(",");
+    return rows.map((r) => ({
+      ...r,
+      // Of the series shown, unlike `total`, which the tooltip reads.
+      shownTotal: keys.reduce(
+        (t, k) => t + Number((r as Record<string, unknown>)[k] ?? 0),
+        0,
+      ),
+    }));
+  }, [rows, shownKeys]);
+
   if (w.style === "table") {
     const columns: Column[] = [
       {
@@ -1577,8 +1599,6 @@ function SeriesBody({
   const short = !preview && box.height > 0 && box.height < 150;
   const showLegend = multi && !preview && !short;
   const showY = !short;
-  const visible = series.filter((s) => !hidden.has(s.key));
-  const topKey = visible[visible.length - 1]?.key;
   const plotWidth = Math.max(0, box.width - 48);
   const labelsFit =
     !preview && !percent && rows.length > 0 && plotWidth / rows.length >= 26;
@@ -1710,7 +1730,7 @@ function SeriesBody({
   const chart =
     w.style === "bar" ? (
       <BarChart
-        data={rows}
+        data={barRows}
         margin={{ top: labelsFit ? 18 : 6, right: 4, left: 0, bottom: 0 }}
         barCategoryGap="18%"
       >
@@ -1733,13 +1753,11 @@ function SeriesBody({
           >
             {s.key === topKey && labelsFit ? (
               <LabelList
-                dataKey={(r: Record<string, number>) =>
-                  visible.reduce((t, v) => t + Number(r[v.key] ?? 0), 0)
-                }
+                dataKey="shownTotal"
                 position="top"
                 className="fill-muted-foreground"
                 fontSize={10}
-                formatter={(v: unknown) => compact.format(Number(v))}
+                formatter={formatCompact}
               />
             ) : null}
           </Bar>
@@ -2888,10 +2906,23 @@ function ReportCanvas({
   // Rows the widgets a drag pushes down reach, so the canvas grows to hold them.
   const [pushedRows, setPushedRows] = React.useState(0);
   // The drag or resize under way, and the layout from before it began.
+  // Listeners a drag sets up, removed when it ends or the canvas unmounts.
+  // Up here with the other hooks: the stacked layout returns early below.
+  const stopFollowing = React.useRef<(() => void) | null>(null);
+  const stopWatchingDrop = React.useRef<(() => void) | null>(null);
+  React.useEffect(
+    () => () => {
+      stopFollowing.current?.();
+      stopWatchingDrop.current?.();
+    },
+    [],
+  );
   const gesture = React.useRef<{
     id: string;
     origin: Layout;
     swap: boolean;
+    /** Set as the button comes up, before the grid handles the drop. */
+    dropping?: boolean;
   } | null>(null);
   /**
    * Collisions settled by resolveMove -- a swap, or a chain of pushes down --
@@ -2909,10 +2940,16 @@ function ReportCanvas({
         const g = gesture.current;
         const live = g && layout.find((l) => l.i === g.id);
         if (!g || !live) return layout.map((l) => ({ ...l }));
-        const resolved = resolveMove(g.origin, g.id, live, {
+        const held = resolveMove(g.origin, g.id, live, {
           swap: g.swap,
           compact: true,
         });
+        // On the drop, the grid keeps what this returns as its own state, so
+        // the settled layout -- the dropped widget risen too -- is returned
+        // here. Settled only afterwards, a drop that ended where it began
+        // would change nothing the grid could see, and it would keep showing
+        // the layout from mid-drag.
+        const resolved = g.dropping ? compactUp(held) : held;
         const by = new Map(resolved.map((r) => [r.i, r]));
         return layout.map((l) => {
           const r = by.get(l.i);
@@ -3178,9 +3215,21 @@ function ReportCanvas({
    * this the widget drifts by however far the panel scrolled and lands rows
    * away from where it was dropped.
    */
-  const stopFollowing = React.useRef<(() => void) | null>(null);
   const followScroll = (start: MouseEvent | undefined) => {
     stopFollowing.current?.();
+    stopWatchingDrop.current?.();
+    // Captured on the window, so it runs before react-draggable's own
+    // listener on the document ends the gesture and the grid settles it.
+    const onUp = () => {
+      if (gesture.current) gesture.current.dropping = true;
+    };
+    window.addEventListener("mouseup", onUp, true);
+    window.addEventListener("touchend", onUp, true);
+    stopWatchingDrop.current = () => {
+      window.removeEventListener("mouseup", onUp, true);
+      window.removeEventListener("touchend", onUp, true);
+      stopWatchingDrop.current = null;
+    };
     let el: HTMLElement | null = gridRef.current;
     while (el) {
       const { overflowY } = getComputedStyle(el);
@@ -3216,7 +3265,6 @@ function ReportCanvas({
       stopFollowing.current = null;
     };
   };
-  React.useEffect(() => () => stopFollowing.current?.(), []);
 
   const startGesture = (
     layout: Layout,
@@ -3249,6 +3297,7 @@ function ReportCanvas({
   };
   const endGesture = (next: Layout) => {
     stopFollowing.current?.();
+    stopWatchingDrop.current?.();
     gesture.current = null;
     setMoving(null);
     setFrozenRows(null);
