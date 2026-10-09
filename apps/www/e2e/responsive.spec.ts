@@ -659,8 +659,12 @@ for (const block of NON_MAP_BLOCKS) {
 
         for (const view of ["list", "dataset"] as const) {
           // A card in the data hub, a name in the reports table.
-          if (view === "dataset")
-            await root.locator("ul button, [data-slot=report-link]").first().click();
+          if (view === "dataset") {
+            // The data hub's cards arrive after the page does.
+            const first = root.locator("ul button, [data-slot=report-link]").first();
+            await first.waitFor();
+            await first.click();
+          }
           const m = await measure();
           expect(m.right, `${view}: the block runs past the viewport`).toBeLessThanOrEqual(m.vw);
           expect(m.overflow, `${view}: the block scrolls sideways inside itself`).toBeLessThanOrEqual(1);

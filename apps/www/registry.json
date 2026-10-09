@@ -269,6 +269,21 @@
       ]
     },
     {
+      "name": "use-category-shape-layer",
+      "type": "registry:hook",
+      "title": "Use Category Shape Layer",
+      "description": "Use Category Shape Layer hook.",
+      "files": [
+        {
+          "path": "registry/vianova/hooks/use-category-shape-layer.ts",
+          "type": "registry:hook"
+        }
+      ],
+      "dependencies": [
+        "maplibre-gl"
+      ]
+    },
+    {
       "name": "use-color-scheme",
       "type": "registry:hook",
       "title": "Use Color Scheme",
@@ -337,6 +352,7 @@
         "@vianova/tabs",
         "@vianova/textarea",
         "@vianova/use-category-point-layer",
+        "@vianova/use-category-shape-layer",
         "@vianova/utils"
       ],
       "files": [
