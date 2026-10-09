@@ -2559,7 +2559,6 @@ function ReportCanvas({
   const [hover, setHover] = React.useState<{ x: number; y: number } | null>(
     null,
   );
-  const [hoverKind, setHoverKind] = React.useState<"chart" | "text">("chart");
   const [draw, setDraw] = React.useState<{
     from: { x: number; y: number };
     to: { x: number; y: number };
@@ -2622,14 +2621,6 @@ function ReportCanvas({
     );
   };
 
-  /** The cells a chart or text would take from a cell, for the hover outline. */
-  const footprint = (c: { x: number; y: number }, kind: "chart" | "text") =>
-    roomAt(
-      c.x,
-      c.y,
-      kind === "text" ? { w: GRID_COLUMNS - c.x, h: 1 } : DEFAULT_CHART,
-      layouts,
-    );
 
   const place = (t: Target | null, p: Placement) => {
     const min = minCells(p.spec);
@@ -2786,7 +2777,6 @@ function ReportCanvas({
   const current = active && !taken(active.x, active.y) ? active : free[0];
   const showHover =
     hover && !target && !draw && !moving && !taken(hover.x, hover.y);
-  const hoverRect = showHover ? footprint(hover, hoverKind) : null;
   const landing = previewRect ?? target?.rect ?? null;
   // Every cell the outline could cover while charts are pointed at. The picker
   // opens beside this, not beside the cell, so it never hides where a chart
@@ -2832,7 +2822,6 @@ function ReportCanvas({
             }
             if (!c || (hover && c.x === hover.x && c.y === hover.y)) return;
             setHover(c);
-            setHoverKind("chart");
           }}
           onPointerLeave={() => {
             if (!draw) setHover(null);
@@ -2898,7 +2887,9 @@ function ReportCanvas({
                 className={cn(
                   "@container relative rounded-lg transition-colors duration-150 focus-visible:outline-none",
                   "bg-muted/40 focus-visible:ring-ring focus-visible:ring-2",
-                  isHover && "bg-muted",
+                  // Only the cell under the pointer lights up; where a chart
+                  // would land is shown once the picker is open.
+                  isHover && "bg-primary/10 ring-primary/50 ring-1",
                 )}
               >
                 {isHover ? (
@@ -2910,11 +2901,13 @@ function ReportCanvas({
                       aria-label="Create a chart here"
                       title="Create a chart"
                       className="bg-background hover:border-primary hover:text-primary w-full min-w-0 shadow-xs"
-                      onMouseEnter={() => setHoverKind("chart")}
-                      onFocus={() => setHoverKind("chart")}
                       onClick={() =>
                         setTarget({
-                          rect: hoverRect ?? { ...c, ...DEFAULT_CHART },
+                          rect: roomAt(c.x, c.y, DEFAULT_CHART, layouts) ?? {
+                            ...c,
+                            w: 1,
+                            h: 1,
+                          },
                           drawn: false,
                           mode: "chart",
                         })
@@ -2932,8 +2925,6 @@ function ReportCanvas({
                       aria-label="Create text here"
                       title="Create text"
                       className="bg-background hover:border-primary hover:text-primary w-full min-w-0 shadow-xs"
-                      onMouseEnter={() => setHoverKind("text")}
-                      onFocus={() => setHoverKind("text")}
                       onClick={() =>
                         placeText({
                           rect: { ...c, w: 1, h: 1 },
@@ -2953,14 +2944,7 @@ function ReportCanvas({
             );
           })}
 
-          {/* Where it will land: the hover footprint, a drawn area, or the open picker's target. */}
-          {hoverRect ? (
-            <div
-              aria-hidden
-              style={cellSpan(hoverRect)}
-              className="border-primary/50 bg-primary/5 pointer-events-none z-10 rounded-xl border-2 border-dashed transition-all duration-150"
-            />
-          ) : null}
+          {/* Where it will land: a drawn area, or the open picker's target. */}
           {drawRect && !(drawRect.w === 1 && drawRect.h === 1) ? (
             <div
               aria-hidden
