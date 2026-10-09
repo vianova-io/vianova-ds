@@ -223,8 +223,31 @@ export const STYLE_STORAGE_KEY = STORAGE_KEY;
 
 export const LOGO_SIZE = 128;
 
-/** Share of pixels that must be see-through before a logo counts as transparent. */
-const TRANSPARENT_SHARE = 0.02;
+/**
+ * How much of a logo's outer edge must be visible for the logo to count as
+ * having its own background.
+ *
+ * The edge, not the whole picture: an app-icon style logo has transparent
+ * corners and a circle on white has anti-aliased seams where its shapes meet,
+ * and counting those would call both "transparent". What a logo with a
+ * background has is an edge that is filled all the way round; a transparent one
+ * leaves its edge empty, because its mark floats in the middle.
+ */
+export const SOLID_EDGE_SHARE = 0.9;
+
+/**
+ * The band of the downscaled logo that is judged, in pixels in from its edge.
+ *
+ * Starts one pixel in, not at the edge itself: a logo drawn from coordinate 1
+ * in a 447-wide box (Gira's is) leaves its outermost pixel partly empty, and
+ * that one hairline would otherwise outvote the rest of the edge.
+ */
+const EDGE_FROM = 1;
+const EDGE_TO = 3;
+
+export function kindFromEdge(visibleShare: number): LogoKind {
+  return visibleShare >= SOLID_EDGE_SHARE ? "solid" : "transparent";
+}
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -267,25 +290,31 @@ export async function prepareLogo(file: File, size = LOGO_SIZE): Promise<
     ctx.drawImage(img, Math.round((size - dw) / 2), Math.round((size - dh) / 2), dw, dh);
 
     const { data } = ctx.getImageData(0, 0, size, size);
-    let seeThrough = 0;
+    const x0 = Math.round((size - dw) / 2);
+    const y0 = Math.round((size - dh) / 2);
+
     let visible = 0;
     let lum = 0;
     for (let i = 0; i < data.length; i += 4) {
-      const alpha = data[i + 3]!;
-      if (alpha < 250) seeThrough++;
-      if (alpha >= 128) {
+      if (data[i + 3]! >= 128) {
         visible++;
         lum += luminance([data[i]!, data[i + 1]!, data[i + 2]!]);
       }
     }
 
-    // A logo that is not square is letterboxed by the contain above, which adds
-    // transparent margin. Judge transparency inside the image's own box, or
-    // every wide logo would read as transparent.
-    const boxPixels = dw * dh;
-    const marginPixels = size * size - boxPixels;
-    const inside = Math.max(0, seeThrough - marginPixels);
-    const kind: LogoKind = inside / boxPixels > TRANSPARENT_SHARE ? "transparent" : "solid";
+    // Judged inside the image's own box: contain letterboxes a wide logo with
+    // transparent margin of our making, which says nothing about the logo.
+    let edge = 0;
+    let edgeVisible = 0;
+    for (let y = y0; y < y0 + dh; y++) {
+      for (let x = x0; x < x0 + dw; x++) {
+        const depth = Math.min(x - x0, x0 + dw - 1 - x, y - y0, y0 + dh - 1 - y);
+        if (depth < EDGE_FROM || depth > EDGE_TO) continue;
+        edge++;
+        if (data[(y * size + x) * 4 + 3]! >= 128) edgeVisible++;
+      }
+    }
+    const kind = kindFromEdge(edge ? edgeVisible / edge : 0);
 
     return {
       logo: canvas.toDataURL("image/png"),

@@ -5,6 +5,8 @@ import {
   CATEGORY_PALETTE,
   adviseLogo,
   contrastBetween,
+  kindFromEdge,
+  SOLID_EDGE_SHARE,
   luminance,
   parseHex,
   readStyleSet,
@@ -116,4 +118,20 @@ test("a light transparent logo on a light colour is offered the dark badge", () 
 test("a colour that is not a hex cannot be compared, so it is not warned about", () => {
   const advice = adviseLogo({ color: "var(--chart-1)", logo: "x", logoKind: "transparent", logoLuminance: 0.02 });
   assert.deepEqual(advice.map((a) => a.kind), ["info"]);
+});
+
+test("a logo whose edge is filled has its own background; one with an empty edge floats", () => {
+  assert.equal(kindFromEdge(1), "solid");
+  assert.equal(kindFromEdge(SOLID_EDGE_SHARE), "solid");
+  assert.equal(kindFromEdge(0), "transparent");
+});
+
+test("a few see-through seams on the edge do not make a logo transparent", () => {
+  // Gira: a circle on white corners, with anti-aliased gaps where they meet.
+  assert.equal(kindFromEdge(0.96), "solid");
+});
+
+test("a mark that only touches its box at a few points is transparent", () => {
+  // Lime: a circle in a square, touching each side once.
+  assert.equal(kindFromEdge(0.05), "transparent");
 });
