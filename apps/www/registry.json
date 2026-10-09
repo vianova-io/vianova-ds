@@ -313,12 +313,15 @@
         "@vianova/inline-edit",
         "@vianova/input",
         "@vianova/input-group",
+        "@vianova/legend-categorical",
+        "@vianova/map-canvas",
         "@vianova/popover",
         "@vianova/select",
         "@vianova/skeleton",
         "@vianova/table",
         "@vianova/tabs",
         "@vianova/textarea",
+        "@vianova/use-category-point-layer",
         "@vianova/utils"
       ],
       "files": [
