@@ -2476,7 +2476,8 @@ function WidgetSettings({
 /**
  * Which filters a chart is under, from its header: a count, and the list on
  * click. The date leads, since it always applies; then the overall filters,
- * then the dataset's own.
+ * then the dataset's own. Nothing at all when only the date applies: the bar
+ * already says it, and a "0" on every card is noise.
  */
 function CardFilters({
   filters,
@@ -2486,6 +2487,7 @@ function CardFilters({
   dataset: DatasetId;
 }) {
   const applied = appliedFilters(filters, dataset);
+  if (applied.length === 0) return null;
   const period = PERIODS[filters.period];
   const prev = previousPeriod({ from: period.from, to: period.to });
   const rows = [
@@ -2507,11 +2509,7 @@ function CardFilters({
         render={
           <button
             type="button"
-            aria-label={
-              applied.length === 0
-                ? "No filters on this chart"
-                : `${applied.length} ${applied.length === 1 ? "filter" : "filters"} on this chart`
-            }
+            aria-label={`${applied.length} ${applied.length === 1 ? "filter" : "filters"} on this chart`}
             title="Filters on this chart"
             className="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex shrink-0 items-center gap-1 rounded-sm text-xs focus-visible:ring-2 focus-visible:outline-none"
           />
@@ -2531,11 +2529,6 @@ function CardFilters({
             </div>
           ))}
         </dl>
-        {applied.length === 0 ? (
-          <p className="text-muted-foreground text-xs">
-            Only the date applies. Add filters from the bar above the report.
-          </p>
-        ) : null}
       </PopoverContent>
     </Popover>
   );
@@ -2604,7 +2597,7 @@ function WidgetCard({
               <Database className="size-3.5 shrink-0" aria-hidden />
               <span className="truncate">{data.dataset.label}</span>
             </span>
-            <span className="draggable-cancel">
+            <span className="draggable-cancel empty:hidden">
               <CardFilters filters={filters} dataset={data.dataset.id} />
             </span>
           </div>
