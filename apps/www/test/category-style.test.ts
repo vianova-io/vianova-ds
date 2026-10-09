@@ -6,6 +6,7 @@ import {
   adviseLogo,
   badgeColor,
   contrastBetween,
+  dominantColor,
   kindFromEdge,
   SOLID_EDGE_SHARE,
   luminance,
@@ -183,4 +184,46 @@ test("a mark that fills the picture is its own bounds", () => {
   const all: [number, number][] = [];
   for (let y = 0; y < 4; y++) for (let x = 0; x < 5; x++) all.push([x, y]);
   assert.deepEqual(visibleBounds(picture(5, 4, all), 5, 4), { x: 0, y: 0, width: 5, height: 4 });
+});
+
+/** An RGBA buffer filled from [count, r, g, b, a] runs. */
+const pixels = (runs: [number, number, number, number, number][]) => {
+  const total = runs.reduce((n, [count]) => n + count, 0);
+  const data = new Uint8ClampedArray(total * 4);
+  let at = 0;
+  for (const [count, r, g, b, a] of runs)
+    for (let i = 0; i < count; i++) data.set([r, g, b, a], at++ * 4);
+  return data;
+};
+
+test("the dominant colour is the flat fill, not the white around it", () => {
+  const data = pixels([[400, 255, 255, 255, 255], [300, 0, 160, 120, 255]]);
+  assert.equal(dominantColor(data), "#00a078");
+});
+
+test("transparent pixels do not vote", () => {
+  const data = pixels([[900, 255, 0, 0, 0], [50, 220, 40, 90, 255]]);
+  assert.equal(dominantColor(data), "#dc285a");
+});
+
+test("a logo of only black, white and grey has no dominant colour", () => {
+  const data = pixels([[100, 0, 0, 0, 255], [100, 255, 255, 255, 255], [100, 128, 128, 128, 255]]);
+  assert.equal(dominantColor(data), null);
+});
+
+test("a blurred fringe does not outvote the fill it surrounds", () => {
+  // 200 pixels of fill, against 60 each of five different in-between shades.
+  const data = pixels([
+    [200, 30, 100, 220, 255],
+    [60, 90, 120, 200, 255],
+    [60, 120, 130, 190, 255],
+    [60, 60, 110, 210, 255],
+    [60, 150, 140, 180, 255],
+    [60, 200, 150, 160, 255],
+  ]);
+  assert.equal(dominantColor(data), "#1e64dc");
+});
+
+test("an empty picture has no dominant colour", () => {
+  assert.equal(dominantColor(new Uint8ClampedArray(0)), null);
 });

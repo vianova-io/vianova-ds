@@ -41,7 +41,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/registry/vianova/ui/empty";
-import { Input } from "@/registry/vianova/ui/input";
 import {
   InputGroup,
   InputGroupAddon,
@@ -725,7 +724,19 @@ function CategoryStylePicker({
     setBusy(true);
     setError(null);
     try {
-      onChange({ ...style, ...(await prepareLogo(file)) });
+      const { logoColor, ...logo } = await prepareLogo(file);
+      // The dot takes the logo's own colour, so the dot and the logo that
+      // replaces it read as the same thing. The badge is cleared first, then
+      // given a white or dark disc if the logo would be lost on its own colour,
+      // which is the usual case: a logo in its own colour on a disc of that colour.
+      const next: CategoryStyle = {
+        ...style,
+        ...logo,
+        badge: undefined,
+        color: logoColor ?? style.color,
+      };
+      const fix = adviseLogo(next).find((a) => a.kind === "warning")?.suggestion;
+      onChange(fix ? { ...next, badge: fix } : next);
     } catch (e) {
       setError(e instanceof Error ? e.message : "That file could not be used.");
     } finally {
@@ -898,47 +909,6 @@ function CategoryStylePicker({
   );
 }
 
-/** The zoom a map switches from colour dots to logos, committed on blur or Enter. */
-function LogoZoomField({
-  id,
-  value,
-  onChange,
-}: {
-  id: string;
-  value: number;
-  onChange: (next: number) => void;
-}) {
-  const [draft, setDraft] = React.useState(String(value));
-  React.useEffect(() => setDraft(String(value)), [value]);
-
-  const commit = () => {
-    const n = Math.round(Number(draft));
-    if (draft.trim() === "" || !Number.isFinite(n)) {
-      setDraft(String(value));
-      return;
-    }
-    const next = Math.min(22, Math.max(0, n));
-    setDraft(String(next));
-    if (next !== value) onChange(next);
-  };
-
-  return (
-    <Input
-      id={id}
-      type="number"
-      inputMode="numeric"
-      min={0}
-      max={22}
-      step={1}
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => e.key === "Enter" && commit()}
-      className="h-8 w-16"
-    />
-  );
-}
-
 /* -------------------------------------------------------------------------- */
 /* Detail                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -1018,23 +988,6 @@ function ColumnRow({
       </TableRow>
       {open && expandable ? (
         <>
-          <TableRow className="bg-muted/30">
-            <TableCell colSpan={4} className="py-2 pl-10">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                <label htmlFor={`${column.name}-logo-zoom`} className="text-muted-foreground">
-                  Show logos from zoom
-                </label>
-                <LogoZoomField
-                  id={`${column.name}-logo-zoom`}
-                  value={logoZoom}
-                  onChange={(next) => onChange({ ...column, logoZoom: next })}
-                />
-                <span className="text-muted-foreground text-xs">
-                  Zoomed out, each value is a colour dot.
-                </span>
-              </div>
-            </TableCell>
-          </TableRow>
           {column.values!.map((value) => (
             <TableRow key={value} className="bg-muted/30">
               <TableCell colSpan={4} className="py-1 pl-10">

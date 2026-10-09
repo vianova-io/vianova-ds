@@ -327,7 +327,6 @@
         "@vianova/csv",
         "@vianova/empty",
         "@vianova/inline-edit",
-        "@vianova/input",
         "@vianova/input-group",
         "@vianova/legend-categorical",
         "@vianova/map-canvas",

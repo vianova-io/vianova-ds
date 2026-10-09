@@ -330,8 +330,54 @@ export function visibleBounds(
  * is a small mark on a 1200 by 800 canvas) would otherwise sit tiny in its
  * badge, since the badge already supplies the breathing room.
  */
+/** Below this saturation a pixel is white, black or grey: no one's brand colour. */
+const MIN_BRAND_SATURATION = 0.25;
+
+/**
+ * The colour a logo is mostly made of, as a hex -- or null if it has none, being
+ * only white, black and grey.
+ *
+ * Counts visible pixels into coarse colour buckets and takes the fullest, so the
+ * anti-aliased fringe, which is a smear of in-between shades, never outvotes the
+ * flat fill it surrounds. Greys are ignored on purpose: a logo on a white tile
+ * is not "white", and a black wordmark has no colour worth painting a dot.
+ * More saturated pixels count for a little more, so a vivid mark wins over a
+ * pale tint of about the same size.
+ */
+export function dominantColor(data: Uint8ClampedArray): string | null {
+  const buckets = new Map<number, { score: number; r: number; g: number; b: number; n: number }>();
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3]! < 128) continue;
+    const r = data[i]!;
+    const g = data[i + 1]!;
+    const b = data[i + 2]!;
+    const max = Math.max(r, g, b);
+    const saturation = max === 0 ? 0 : (max - Math.min(r, g, b)) / max;
+    if (saturation < MIN_BRAND_SATURATION) continue;
+    const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+    const bucket = buckets.get(key) ?? { score: 0, r: 0, g: 0, b: 0, n: 0 };
+    bucket.score += 0.5 + saturation;
+    bucket.r += r;
+    bucket.g += g;
+    bucket.b += b;
+    bucket.n += 1;
+    buckets.set(key, bucket);
+  }
+  let best: { score: number; r: number; g: number; b: number; n: number } | null = null;
+  for (const bucket of buckets.values()) if (!best || bucket.score > best.score) best = bucket;
+  if (!best) return null;
+  const hex = (sum: number) =>
+    Math.round(sum / best!.n)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${hex(best.r)}${hex(best.g)}${hex(best.b)}`;
+}
+
 export async function prepareLogo(file: File, size = LOGO_SIZE): Promise<
-  Required<Pick<CategoryStyle, "logo" | "logoKind" | "logoLuminance">>
+  Required<Pick<CategoryStyle, "logo" | "logoKind" | "logoLuminance">> & {
+    /** The colour the logo is mostly made of, or null if it is only black, white and grey. */
+    logoColor: string | null;
+  }
 > {
   if (!file.type.startsWith("image/")) throw new Error("That file is not an image.");
 
@@ -403,6 +449,7 @@ export async function prepareLogo(file: File, size = LOGO_SIZE): Promise<
       logo: canvas.toDataURL("image/png"),
       logoKind: kind,
       logoLuminance: visible ? lum / visible : 0.5,
+      logoColor: dominantColor(data),
     };
   } finally {
     URL.revokeObjectURL(url);
