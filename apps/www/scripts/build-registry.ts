@@ -60,6 +60,22 @@ const CATEGORY: Record<string, string> = {
   bubble: "AI", message: "AI", "message-scroller": "AI",
 };
 
+/**
+ * Blocks whose generated title is not what the thing is called.
+ *
+ * `titleCase` turns a filename into a label, which is right for a hundred
+ * components and wrong for these: they are the product's workspaces, and
+ * "Datahub Workspace" is neither how Data Hub is spelled nor how the rail
+ * lists it. Overriding at the generator keeps ONE source of truth -- the page
+ * heading, the side rail, registry.json and `shadcn add` all read this, so a
+ * rename cannot leave the rail and the heading disagreeing.
+ */
+const BLOCK_TITLES: Record<string, string> = {
+  "map-workspace": "Map workspace",
+  "datahub-workspace": "Data Hub workspace",
+  "reports-workspace": "Reports workspace",
+};
+
 const titleCase = (name: string) =>
   name
     .split("-")
@@ -180,10 +196,11 @@ const blockNames = existsSync(BLOCKS)
 
 const blocks = blockNames.map((name) => {
   const source = readFileSync(join(BLOCKS, `${name}.tsx`), "utf8");
+  const title = BLOCK_TITLES[name] ?? titleCase(name);
   return {
     name,
-    title: titleCase(name),
-    description: `${titleCase(name)} layout, composed from Vianova components.`,
+    title,
+    description: `${title} layout, composed from Vianova components.`,
     dependencies: externalDeps(source),
     registryDependencies: registryDeps(source),
   };

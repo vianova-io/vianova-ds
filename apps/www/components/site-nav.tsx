@@ -22,7 +22,10 @@ import {
 /** One list, rendered twice: the desktop row and the sheet. */
 const LINKS = [
   { href: "/showcase", label: "Showcase" },
-  { href: "/blocks", label: "Blocks" },
+  // Labelled Workspaces, route still /blocks: the path is public and the
+  // registry docs link to it, so renaming the URL would break links that are
+  // already out there for the sake of a word.
+  { href: "/blocks", label: "Workspaces" },
   { href: "/components", label: "Components" },
   { href: "/foundations", label: "Foundations" },
   { href: "/changelog", label: "Changelog" },

@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { isActiveRoute } from "@/lib/active-route";
 import { groupByCategory, type SearchableComponent } from "@/lib/search";
 import { useScrollActivity } from "@/registry/vianova/hooks/use-scroll-activity";
 import { cn } from "@/registry/vianova/lib/utils";
@@ -60,7 +61,7 @@ export function ComponentRail({
           </p>
           {items.map((c) => {
             const href = `/components/${c.name}`;
-            const active = pathname === href;
+            const active = isActiveRoute(pathname, href);
             return (
               <Link
                 key={c.name}
