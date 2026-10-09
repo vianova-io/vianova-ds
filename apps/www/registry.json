@@ -492,6 +492,7 @@
         "@vianova/export-menu",
         "@vianova/field",
         "@vianova/infringement-report",
+        "@vianova/inline-edit",
         "@vianova/input",
         "@vianova/input-group",
         "@vianova/markdown-editor",
