@@ -135,6 +135,7 @@ import {
   ToggleGroupItem,
 } from "@/registry/vianova/ui/toggle-group";
 import { ConfirmDialog } from "@/registry/vianova/patterns/confirm-dialog";
+import { InlineEdit } from "@/registry/vianova/patterns/inline-edit";
 import { ActivityHeatmap } from "@/registry/vianova/product/activity-heatmap";
 import { downloadFile, toCsv } from "@/registry/vianova/product/export-menu";
 import {
@@ -4385,9 +4386,6 @@ function ReportView({
   );
   const [exporting, setExporting] = React.useState(false);
   const [exported, setExported] = React.useState<string | null>(null);
-  // Committed on blur, so every keystroke is not a save.
-  const [title, setTitle] = React.useState(report.title);
-  React.useEffect(() => setTitle(report.title), [report.title]);
 
   // The text placed last, focused with its heading selected once it mounts.
   const [autoSelectId, setAutoSelectId] = React.useState<string | null>(null);
@@ -4404,25 +4402,28 @@ function ReportView({
         >
           <ArrowLeft />
         </Button>
-        <Input
-          aria-label="Report name"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => {
-            const next = title.trim();
-            if (next && next !== report.title)
-              onChange({ ...report, title: next });
-            else setTitle(report.title);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") e.currentTarget.blur();
-            if (e.key === "Escape") {
-              setTitle(report.title);
-              e.currentTarget.blur();
-            }
-          }}
-          className="h-9 max-w-md min-w-40 flex-1 text-base font-medium"
-        />
+        {/* The page's heading, renamed in place: text until it is clicked.
+            A role rather than an <h2>, which may not hold the edit's block
+            elements. An emptied name keeps the old one. */}
+        <div
+          role="heading"
+          // As the list's "Reports": one level under the page's own title.
+          aria-level={2}
+          className="min-w-0 flex-1 text-xl font-semibold tracking-tight"
+        >
+          <InlineEdit
+            variant="title"
+            label="report name"
+            value={report.title}
+            placeholder="Untitled report"
+            onValueChange={(next) => {
+              if (next) onChange({ ...report, title: next });
+            }}
+            // Not pulled left into the back button's gap, as it would be at
+            // the start of a line, so the hover box clears the button.
+            className="ml-0 max-w-xl"
+          />
+        </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Button onClick={() => setExporting(true)}>
             <WandSparkles data-icon="inline-start" />

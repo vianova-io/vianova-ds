@@ -15,6 +15,14 @@ import { cn } from "@/registry/vianova/lib/utils";
  *
  * The read state is a real button so it is tab-reachable and announced as
  * activatable -- a click handler on a span is invisible to a screen reader.
+ *
+ * `variant="title"` is for a page or document name, as Notion, Linear and
+ * Figma treat theirs: it reads as plain heading text, takes its type from the
+ * parent (wrap it in the heading), shows a soft background and a pencil only
+ * on hover or focus, and opens into an input of the same type in the same
+ * place, sized to the text, so nothing moves. It drops Confirm and Cancel --
+ * Enter and blur commit, Escape reverts -- since a title has no row of
+ * neighbours to tell a stray click from a decision.
  */
 export function InlineEdit({
   value,
@@ -23,6 +31,7 @@ export function InlineEdit({
   label,
   disabled,
   validate,
+  variant = "default",
   className,
   ...props
 }: Omit<React.ComponentProps<"div">, "onChange" | "children"> & {
@@ -34,6 +43,8 @@ export function InlineEdit({
   disabled?: boolean;
   /** Return an error message to reject the commit, or null to accept. */
   validate?: (next: string) => string | null;
+  /** "title": heading text that edits in place, for a page or document name. */
+  variant?: "default" | "title";
 }) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(value);
@@ -68,16 +79,112 @@ export function InlineEdit({
     if (editing) inputRef.current?.select();
   }, [editing]);
 
+  // The same box in both states -- padding, border, radius, type -- so the
+  // input lands exactly where the text was.
+  const titleBox =
+    "rounded-md border px-1.5 py-0.5 text-[length:inherit] leading-[inherit] font-[inherit] tracking-[inherit]";
+
+  if (variant === "title") {
+    if (!editing)
+      return (
+        <div
+          data-slot="inline-edit"
+          data-variant="title"
+          className={cn("flex min-w-0 -mx-1.5", className)}
+          {...props}
+        >
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={open}
+            // A description, not part of the name: the button sits in a
+            // heading, whose name should be the title alone.
+            title={label ? `Rename ${label}` : "Rename"}
+            className={cn(
+              titleBox,
+              "group hover:bg-muted focus-visible:ring-ring inline-flex max-w-full cursor-text items-center gap-2 border-transparent text-left transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:pointer-events-none",
+            )}
+          >
+            <span className={cn("truncate", !value && "text-muted-foreground")}>
+              {value || placeholder}
+            </span>
+            <PencilLine
+              aria-hidden
+              className="text-muted-foreground size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+            />
+          </button>
+        </div>
+      );
+    return (
+      <div
+        data-slot="inline-edit"
+        data-variant="title"
+        className={cn(
+          // items-start, so the input keeps the width of its text.
+          "-mx-1.5 flex min-w-0 flex-col items-start gap-1",
+          className,
+        )}
+        {...props}
+      >
+        {/* Sized to the text: an invisible copy of it sets the width, and the
+            input sits in the same grid cell on top. */}
+        <span
+          data-value={draft || placeholder}
+          className={cn(
+            "inline-grid max-w-full text-[length:inherit] leading-[inherit] font-[inherit] tracking-[inherit]",
+            // The copy has the input's padding and border, plus room for the caret.
+            "after:invisible after:col-start-1 after:row-start-1 after:min-w-24 after:overflow-hidden after:rounded-md after:border after:border-transparent after:py-0.5 after:pr-2.5 after:pl-1.5 after:whitespace-pre after:content-[attr(data-value)]",
+          )}
+        >
+          <input
+            ref={inputRef}
+            autoFocus
+            aria-label={label}
+            aria-invalid={error ? true : undefined}
+            value={draft}
+            placeholder={placeholder}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                cancel();
+              }
+            }}
+            className={cn(
+              titleBox,
+              "border-input bg-background placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 col-start-1 row-start-1 w-full min-w-0 shadow-xs focus-visible:ring-3 focus-visible:outline-none",
+              error && "border-destructive focus-visible:border-destructive",
+            )}
+          />
+        </span>
+        {error ? (
+          <p className="text-destructive px-1.5 text-xs">{error}</p>
+        ) : null}
+      </div>
+    );
+  }
+
   if (!editing) {
     return (
-      <div data-slot="inline-edit" className={cn("inline-flex", className)} {...props}>
+      <div
+        data-slot="inline-edit"
+        className={cn("inline-flex", className)}
+        {...props}
+      >
         <button
           type="button"
           disabled={disabled}
           onClick={open}
           className="group hover:bg-muted focus-visible:ring-ring inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left text-sm focus-visible:ring-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
         >
-          <span className={cn("truncate", !value && "text-muted-foreground italic")}>
+          <span
+            className={cn("truncate", !value && "text-muted-foreground italic")}
+          >
             {value || placeholder}
           </span>
           <PencilLine
@@ -91,7 +198,11 @@ export function InlineEdit({
   }
 
   return (
-    <div data-slot="inline-edit" className={cn("inline-flex flex-col gap-1", className)} {...props}>
+    <div
+      data-slot="inline-edit"
+      className={cn("inline-flex flex-col gap-1", className)}
+      {...props}
+    >
       <div className="flex items-center gap-1">
         <input
           ref={inputRef}
