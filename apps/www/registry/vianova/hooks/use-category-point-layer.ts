@@ -86,8 +86,12 @@ export function useCategoryPointLayer({
 
     const build = async () => {
       if (!hasStyle()) return;
+      // The dots' outline and the badges' ring are one colour, so a category
+      // looks the same at either zoom. Read now, not once: a theme switch
+      // rebuilds this, and the border is a different colour in the new theme.
+      const stroke = strokeColor ?? resolveCssColor("--border") ?? "#ffffff";
       const badges = await Promise.all(
-        entries.map(async ([value, style]) => [value, await composeBadge(style, 64)] as const),
+        entries.map(async ([value, style]) => [value, await composeBadge(style, 64, stroke)] as const),
       );
       // Superseded while the logos were decoding: a newer build owns the map.
       if (cancelled || !hasStyle()) return;
@@ -108,7 +112,6 @@ export function useCategoryPointLayer({
       });
 
       const fallback = "#888888";
-      const stroke = strokeColor ?? resolveCssColor("--border") ?? "#ffffff";
       map.addLayer({
         id: dots,
         type: "circle",
