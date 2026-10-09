@@ -337,8 +337,8 @@
     {
       "name": "datahub-workspace",
       "type": "registry:block",
-      "title": "Datahub Workspace",
-      "description": "Datahub Workspace layout, composed from Vianova components.",
+      "title": "Data Hub workspace",
+      "description": "Data Hub workspace layout, composed from Vianova components.",
       "dependencies": [
         "lucide-react",
         "maplibre-gl"
@@ -381,43 +381,10 @@
       }
     },
     {
-      "name": "explore-map",
-      "type": "registry:block",
-      "title": "Explore Map",
-      "description": "Explore Map layout, composed from Vianova components.",
-      "dependencies": [
-        "lucide-react"
-      ],
-      "registryDependencies": [
-        "@vianova/activity-heatmap",
-        "@vianova/button",
-        "@vianova/chart-card",
-        "@vianova/data-layer-card",
-        "@vianova/floating-panel",
-        "@vianova/input-group",
-        "@vianova/legend-ramp",
-        "@vianova/map-canvas",
-        "@vianova/map-controls",
-        "@vianova/ranked-bars",
-        "@vianova/select",
-        "@vianova/tabs",
-        "@vianova/utils"
-      ],
-      "files": [
-        {
-          "path": "registry/vianova/blocks/explore-map.tsx",
-          "type": "registry:block"
-        }
-      ],
-      "meta": {
-        "status": "stable"
-      }
-    },
-    {
       "name": "map-workspace",
       "type": "registry:block",
-      "title": "Map Workspace",
-      "description": "Map Workspace layout, composed from Vianova components.",
+      "title": "Map workspace",
+      "description": "Map workspace layout, composed from Vianova components.",
       "dependencies": [
         "lucide-react",
         "maplibre-gl",
@@ -469,8 +436,8 @@
     {
       "name": "reports-workspace",
       "type": "registry:block",
-      "title": "Reports Workspace",
-      "description": "Reports Workspace layout, composed from Vianova components.",
+      "title": "Reports workspace",
+      "description": "Reports workspace layout, composed from Vianova components.",
       "dependencies": [
         "lucide-react",
         "react-grid-layout",

@@ -37,7 +37,7 @@ const PREFIX = new URL(BASE).pathname.replace(/\/+$/, "");
 const ROUTES = [
   "/",
   "/foundations/",
-  "/blocks/explore-map/",
+  "/blocks/datahub-workspace/",
   "/blocks/map-workspace/",
   "/preview/map-canvas-default/",
   "/preview/avatar-default/",
