@@ -115,6 +115,71 @@ export function resizeTo(
   return fits(next, others, cols) ? next : null;
 }
 
+/**
+ * Where everything goes when one widget is dragged or resized to `target`.
+ *
+ * Always worked out from `origin`, the layout before the gesture began, never
+ * from the last frame's answer: a widget pushed aside by a passing drag goes
+ * back once the drag moves on, rather than staying wherever it was shoved.
+ *
+ * - Swap: dropped onto exactly one widget, that widget takes the dragged one's
+ *   old place, if it fits there.
+ * - Otherwise everything in the way moves down, and whatever that lands on
+ *   moves down in turn, so no widget can end up under another.
+ *
+ * Widgets keep their order and their gaps; nothing is pulled up.
+ */
+export function resolveMove<T extends Rect & { i: string }>(
+  origin: readonly T[],
+  id: string,
+  target: Rect,
+  { swap = true, cols = GRID_COLUMNS }: { swap?: boolean; cols?: number } = {},
+): T[] {
+  const from = origin.find((r) => r.i === id);
+  if (!from) return origin.map((r) => ({ ...r }));
+  const moved = {
+    ...from,
+    x: Math.max(0, Math.min(target.x, cols - target.w)),
+    y: Math.max(0, target.y),
+    w: Math.min(target.w, cols),
+    h: target.h,
+  };
+  const others = origin.filter((r) => r.i !== id);
+
+  if (swap) {
+    const hit = others.filter((r) => overlaps(r, moved));
+    const only = hit.length === 1 ? hit[0]! : null;
+    if (only) {
+      const back = {
+        ...only,
+        x: Math.max(0, Math.min(from.x, cols - only.w)),
+        y: from.y,
+      };
+      const rest = others.filter((r) => r !== only);
+      if (fits(back, [...rest, moved], cols))
+        return origin.map((r) =>
+          r.i === id ? moved : r.i === only.i ? back : { ...r },
+        );
+    }
+  }
+
+  // Top to bottom, so a widget pushed down is settled before anything below it.
+  const queue = [...others].sort((a, b) => a.y - b.y || a.x - b.x);
+  const settled: Rect[] = [moved];
+  const placed = new Map<string, T>([[id, moved]]);
+  for (const r of queue) {
+    const next = { ...r };
+    for (;;) {
+      const below = settled.filter((s) => overlaps(s, next));
+      if (!below.length) break;
+      next.y = Math.max(...below.map((s) => s.y + s.h));
+    }
+    settled.push(next);
+    placed.set(r.i, next);
+  }
+  return origin.map((r) => placed.get(r.i)!);
+}
+
 /** Reading order, for narrow screens where the grid collapses to one column. */
 export const readingOrder = <T extends { layout: Rect }>(items: T[]) =>
   [...items].sort((a, b) => a.layout.y - b.layout.y || a.layout.x - b.layout.x);

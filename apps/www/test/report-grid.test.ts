@@ -9,6 +9,7 @@ import {
   pack,
   readingOrder,
   resizeTo,
+  resolveMove,
   roomAt,
   rowCount,
 } from "../registry/vianova/lib/report-grid.ts";
@@ -106,5 +107,99 @@ test("narrow screens read widgets top to bottom, then left to right", () => {
   assert.deepEqual(
     readingOrder(items).map((i) => i.id),
     ["a", "b", "c"],
+  );
+});
+
+const at = (i: string, x: number, y: number, w: number, h: number) => ({
+  i,
+  x,
+  y,
+  w,
+  h,
+});
+const noOverlaps = (
+  rs: Array<{ x: number; y: number; w: number; h: number }>,
+) => rs.every((a, i) => rs.every((b, j) => i === j || !overlaps(a, b)));
+
+test("dropped onto a chart of its size, the two swap", () => {
+  const origin = [
+    at("a", 0, 2, 4, 2),
+    at("b", 4, 2, 4, 2),
+    at("c", 0, 4, 12, 2),
+  ];
+  const out = resolveMove(origin, "a", { x: 4, y: 2, w: 4, h: 2 });
+  assert.deepEqual(
+    out.find((r) => r.i === "a"),
+    at("a", 4, 2, 4, 2),
+  );
+  assert.deepEqual(
+    out.find((r) => r.i === "b"),
+    at("b", 0, 2, 4, 2),
+  );
+  assert.deepEqual(
+    out.find((r) => r.i === "c"),
+    at("c", 0, 4, 12, 2),
+  );
+});
+
+test("what a pushed chart lands on is pushed too, so nothing hides under another", () => {
+  // The bug: b was pushed onto c, and stayed hidden beneath it.
+  const origin = [
+    at("a", 0, 0, 12, 2),
+    at("b", 0, 2, 12, 2),
+    at("c", 0, 4, 12, 2),
+  ];
+  const out = resolveMove(
+    origin,
+    "a",
+    { x: 0, y: 1, w: 12, h: 2 },
+    { swap: false },
+  );
+  assert.ok(noOverlaps(out));
+  assert.deepEqual(
+    out.map((r) => r.y),
+    [1, 3, 5],
+  );
+});
+
+test("a chart pushed by a passing drag goes back when the drag moves on", () => {
+  const origin = [
+    at("a", 0, 0, 4, 2),
+    at("b", 4, 0, 8, 2),
+    at("c", 0, 2, 12, 2),
+  ];
+  resolveMove(origin, "a", { x: 6, y: 0, w: 4, h: 2 });
+  const back = resolveMove(origin, "a", { x: 0, y: 0, w: 4, h: 2 });
+  assert.deepEqual(back, origin);
+});
+
+test("a swap that would not fit falls back to pushing down", () => {
+  // b is wider than a's old place next to d.
+  const origin = [
+    at("a", 0, 0, 4, 2),
+    at("d", 4, 0, 8, 2),
+    at("b", 0, 2, 12, 2),
+  ];
+  const out = resolveMove(origin, "a", { x: 0, y: 2, w: 4, h: 2 });
+  assert.ok(noOverlaps(out));
+  assert.equal(out.find((r) => r.i === "b")!.y, 4);
+});
+
+test("growing a chart pushes what is below it down", () => {
+  const origin = [
+    at("a", 0, 0, 4, 2),
+    at("b", 0, 2, 4, 2),
+    at("c", 0, 4, 12, 1),
+  ];
+  const out = resolveMove(
+    origin,
+    "a",
+    { x: 0, y: 0, w: 4, h: 3 },
+    { swap: false },
+  );
+  assert.ok(noOverlaps(out));
+  assert.deepEqual(
+    out.map((r) => r.y),
+    [0, 3, 5],
   );
 });

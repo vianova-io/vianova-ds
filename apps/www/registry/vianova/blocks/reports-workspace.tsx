@@ -54,8 +54,8 @@ import {
 } from "recharts";
 import {
   GridLayout,
-  getCompactor,
   useContainerWidth,
+  type Compactor,
   type Layout,
 } from "react-grid-layout";
 
@@ -180,6 +180,7 @@ import {
   readingOrder,
   resizeTo,
   roomAt,
+  resolveMove,
   rowCount,
   type Rect,
 } from "@/registry/vianova/lib/report-grid";
@@ -2786,12 +2787,6 @@ const GAP_PX = 16;
 /** Below this the grid would make cells too small to use, so it stacks. */
 const STACK_BELOW_PX = 560;
 
-/**
- * Free placement, as in the product: no gravity pulling widgets to the top,
- * and a widget dragged onto another pushes it out of the way.
- */
-const FREE_LAYOUT = getCompactor(null, false, false);
-
 const cellSpan = (r: Rect) => ({
   gridColumn: `${r.x + 1} / span ${r.w}`,
   gridRow: `${r.y + 1} / span ${r.h}`,
@@ -2889,6 +2884,39 @@ function ReportCanvas({
   // pointer makes the browser scroll, which reads as more drag, which grows the
   // canvas again: a card dragged past the bottom edge would never stop growing.
   const [frozenRows, setFrozenRows] = React.useState<number | null>(null);
+  // Rows the widgets a drag pushes down reach, so the canvas grows to hold them.
+  const [pushedRows, setPushedRows] = React.useState(0);
+  // The drag or resize under way, and the layout from before it began.
+  const gesture = React.useRef<{
+    id: string;
+    origin: Layout;
+    swap: boolean;
+  } | null>(null);
+  /**
+   * Free placement, as in the product -- no gravity pulling widgets up -- with
+   * collisions settled by resolveMove: a swap, or a chain of pushes down. The
+   * grid's own free mode pushed only the widget it hit, which could land on
+   * the next one and stay hidden under it.
+   */
+  const compactor = React.useMemo<Compactor>(
+    () => ({
+      type: null,
+      // So the grid places the dragged widget and leaves the rest to compact().
+      allowOverlap: true,
+      compact(layout) {
+        const g = gesture.current;
+        const live = g && layout.find((l) => l.i === g.id);
+        if (!g || !live) return layout.map((l) => ({ ...l }));
+        const resolved = resolveMove(g.origin, g.id, live, { swap: g.swap });
+        const by = new Map(resolved.map((r) => [r.i, r]));
+        return layout.map((l) => {
+          const r = by.get(l.i);
+          return r ? { ...l, x: r.x, y: r.y, w: r.w, h: r.h } : { ...l };
+        });
+      },
+    }),
+    [],
+  );
   const [flash, setFlash] = React.useState<string | null>(null);
   // Where the Add charts dialog was opened from: a cell or a drawn area, or
   // null for "anywhere" (the stacked layout). Undefined while it is closed.
@@ -2904,7 +2932,7 @@ function ReportCanvas({
     ? !layouts.some((r) => overlapsRect(r, drawRect))
     : false;
   const rows =
-    frozenRows ??
+    (frozenRows !== null ? Math.max(frozenRows, pushedRows) : null) ??
     rowCount([
       ...layouts,
       ...(target ? [target.rect] : []),
@@ -3138,6 +3166,88 @@ function ReportCanvas({
     hover && !target && !draw && !moving && !taken(hover.x, hover.y);
   const landing = target?.rect ?? null;
 
+  /**
+   * Keeps a dragged or resized widget under the pointer while its scroll
+   * container scrolls. The grid scrolls a panel on its own when the pointer
+   * nears an edge, but moves the widget only on pointer events, so without
+   * this the widget drifts by however far the panel scrolled and lands rows
+   * away from where it was dropped.
+   */
+  const stopFollowing = React.useRef<(() => void) | null>(null);
+  const followScroll = (start: MouseEvent | undefined) => {
+    stopFollowing.current?.();
+    let el: HTMLElement | null = gridRef.current;
+    while (el) {
+      const { overflowY } = getComputedStyle(el);
+      if (
+        (overflowY === "auto" || overflowY === "scroll") &&
+        el.scrollHeight > el.clientHeight
+      )
+        break;
+      el = el.parentElement;
+    }
+    const scroller = el;
+    if (!scroller) return;
+    let last = start ? { x: start.clientX, y: start.clientY } : null;
+    const onMove = (e: MouseEvent) => {
+      // Only the user's own moves: the one sent below must not be re-read.
+      if (e.isTrusted) last = { x: e.clientX, y: e.clientY };
+    };
+    const onScroll = () => {
+      if (last)
+        document.dispatchEvent(
+          new MouseEvent("mousemove", {
+            clientX: last.x,
+            clientY: last.y,
+            bubbles: true,
+          }),
+        );
+    };
+    window.addEventListener("mousemove", onMove, true);
+    scroller.addEventListener("scroll", onScroll);
+    stopFollowing.current = () => {
+      window.removeEventListener("mousemove", onMove, true);
+      scroller.removeEventListener("scroll", onScroll);
+      stopFollowing.current = null;
+    };
+  };
+  React.useEffect(() => () => stopFollowing.current?.(), []);
+
+  const startGesture = (
+    layout: Layout,
+    item: Layout[number] | null | undefined,
+    swap: boolean,
+    e?: Event,
+  ) => {
+    setHover(null);
+    followScroll(e instanceof MouseEvent ? e : undefined);
+    setFrozenRows(rowCount(layouts) + 3);
+    setPushedRows(0);
+    if (!item) return;
+    gesture.current = {
+      id: item.i,
+      origin: layout.map((l) => ({ ...l })),
+      swap,
+    };
+    setMoving({ x: item.x, y: item.y, w: item.w, h: item.h });
+  };
+  const followGesture = (item: Layout[number] | null | undefined) => {
+    const g = gesture.current;
+    if (!item || !g) return;
+    setMoving({ x: item.x, y: item.y, w: item.w, h: item.h });
+    setPushedRows(
+      rowCount(resolveMove(g.origin, g.id, item, { swap: g.swap }), 1),
+    );
+  };
+  const endGesture = (next: Layout) => {
+    stopFollowing.current?.();
+    gesture.current = null;
+    setMoving(null);
+    setFrozenRows(null);
+    setPushedRows(0);
+    commitLayout(next);
+  };
+
   const rglLayout: Layout = widgets.map((w) => {
     const min = minCells(w);
     return { i: w.id, ...w.layout, minW: min.w, minH: min.h };
@@ -3353,39 +3463,17 @@ function ReportCanvas({
                 />
               ),
             }}
-            compactor={FREE_LAYOUT}
+            compactor={compactor}
             autoSize={false}
             style={{ height, position: "absolute", inset: 0 }}
-            onDragStart={(_l, item) => {
-              setHover(null);
-              setFrozenRows(rowCount(layouts) + 3);
-              if (item)
-                setMoving({ x: item.x, y: item.y, w: item.w, h: item.h });
-            }}
-            onDrag={(_l, _o, item) => {
-              if (item)
-                setMoving({ x: item.x, y: item.y, w: item.w, h: item.h });
-            }}
-            onDragStop={(next) => {
-              setMoving(null);
-              setFrozenRows(null);
-              commitLayout(next);
-            }}
-            onResizeStart={(_l, item) => {
-              setHover(null);
-              setFrozenRows(rowCount(layouts) + 3);
-              if (item)
-                setMoving({ x: item.x, y: item.y, w: item.w, h: item.h });
-            }}
-            onResize={(_l, _o, item) => {
-              if (item)
-                setMoving({ x: item.x, y: item.y, w: item.w, h: item.h });
-            }}
-            onResizeStop={(next) => {
-              setMoving(null);
-              setFrozenRows(null);
-              commitLayout(next);
-            }}
+            onDragStart={(l, item, _n, _p, e) => startGesture(l, item, true, e)}
+            onDrag={(_l, _o, item) => followGesture(item)}
+            onDragStop={(next) => endGesture(next)}
+            onResizeStart={(l, item, _n, _p, e) =>
+              startGesture(l, item, false, e)
+            }
+            onResize={(_l, _o, item) => followGesture(item)}
+            onResizeStop={(next) => endGesture(next)}
           >
             {widgets.map((w) => (
               <div
