@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import type { Map as MapLibreMap } from "maplibre-gl";
 import {
   ArrowDown,
   ArrowLeft,
@@ -503,6 +504,102 @@ function Thumbnail({ seed, className }: { seed: number; className?: string }) {
   );
 }
 
+
+/* -------------------------------------------------------------------------- */
+/* Map thumbnails                                                              */
+/* -------------------------------------------------------------------------- */
+
+const THUMB_KEY = "vianova:dataset-thumb:v1:";
+const THUMB_WIDTH = 360;
+/** A card's picture is a wide, short strip; the map is taller, so its middle is kept. */
+const THUMB_HEIGHT = 120;
+
+/** The last picture of this dataset's map, as a data URL, if there is one. */
+function readThumb(dataset: Dataset): string | null {
+  try {
+    return window.localStorage.getItem(THUMB_KEY + storageKeyOf(dataset));
+  } catch {
+    return null;
+  }
+}
+
+function writeThumb(dataset: Dataset, url: string) {
+  try {
+    window.localStorage.setItem(THUMB_KEY + storageKeyOf(dataset), url);
+  } catch {
+    /* storage is full or blocked: the card keeps its drawn stand-in */
+  }
+}
+
+/**
+ * Keeps the dataset's card thumbnail up to date with what its map shows.
+ *
+ * Whenever the map has settled after the reader moved it, or changed a colour
+ * or logo, it takes a small picture of itself. The list then shows the map as
+ * it was last seen, not a drawing of one.
+ *
+ * A WebGL canvas can only be read in the same task that drew it, so the picture
+ * is taken from inside a render forced for the purpose rather than at an idle
+ * moment, when the buffer has already been cleared.
+ */
+function useMapThumbnail(map: MapLibreMap | null, dataset: Dataset, layerId: string, stale: unknown) {
+  const datasetRef = React.useRef(dataset);
+  datasetRef.current = dataset;
+  const dirty = React.useRef(true);
+
+  // A change of colours, logos or points means the picture is out of date.
+  React.useEffect(() => {
+    dirty.current = true;
+  }, [stale]);
+
+  React.useEffect(() => {
+    if (!map) return;
+    const markDirty = () => {
+      dirty.current = true;
+    };
+    const onIdle = () => {
+      // Idle can arrive before the layer has been built; wait for the next one.
+      if (!dirty.current || !map.getLayer(layerId)) return;
+      dirty.current = false;
+      map.once("render", () => {
+        try {
+          const source = map.getCanvas();
+          if (!source.width || !source.height) return;
+          const out = document.createElement("canvas");
+          out.width = THUMB_WIDTH;
+          out.height = THUMB_HEIGHT;
+          const keep = Math.min(source.height, (source.width * THUMB_HEIGHT) / THUMB_WIDTH);
+          out
+            .getContext("2d")
+            ?.drawImage(
+              source,
+              0,
+              (source.height - keep) / 2,
+              source.width,
+              keep,
+              0,
+              0,
+              THUMB_WIDTH,
+              THUMB_HEIGHT,
+            );
+          writeThumb(datasetRef.current, out.toDataURL("image/jpeg", 0.72));
+        } catch {
+          /* a canvas the browser will not let us read */
+        }
+      });
+      map.triggerRepaint();
+    };
+    map.on("moveend", markDirty);
+    map.on("style.load", markDirty);
+    map.on("idle", onIdle);
+    return () => {
+      map.off("moveend", markDirty);
+      map.off("style.load", markDirty);
+      map.off("idle", onIdle);
+    };
+  }, [map, layerId]);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Dataset card                                                                */
 /* -------------------------------------------------------------------------- */
@@ -517,6 +614,10 @@ function DatasetCard({
   // A VIP stream with no rows yet has nothing to draw, which is the one case
   // the platform shows its broken-image placeholder for.
   const noPreview = dataset.rows === 0;
+  // Read after mount: the server has no localStorage, so reading it while
+  // hydrating would put the two out of step.
+  const [thumb, setThumb] = React.useState<string | null>(null);
+  React.useEffect(() => setThumb(readThumb(dataset)), [dataset]);
 
   return (
     <button
@@ -530,6 +631,9 @@ function DatasetCard({
             <ImageOff className="size-5" aria-hidden />
             <span className="sr-only">No preview available</span>
           </div>
+        ) : thumb ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={thumb} alt="" className="bg-muted h-24 w-full object-cover" />
         ) : (
           <Thumbnail seed={dataset.seed} className="h-24" />
         )}
@@ -1213,7 +1317,7 @@ const MAX_MAP_POINTS = 20_000;
 function DatasetMap({ dataset }: { dataset: Dataset }) {
   const points = dataset.mapPoints;
   const column = dataset.columns.find((c) => c.name === dataset.mapColumn);
-  const [map, setMap] = React.useState<import("maplibre-gl").Map | null>(null);
+  const [map, setMap] = React.useState<MapLibreMap | null>(null);
   const fitted = React.useRef(false);
 
   const values = column?.values ?? [];
@@ -1249,6 +1353,8 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
     }
     map.fitBounds([[w, s], [e, n]], { padding: 24, duration: 0, maxZoom: 15 });
   }, [map, points]);
+
+  useMapThumbnail(map, dataset, "datahub-points-dots", styles);
 
   const [logosShown, setLogosShown] = React.useState(false);
   React.useEffect(() => {

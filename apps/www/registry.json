@@ -298,7 +298,8 @@
       "title": "Datahub Workspace",
       "description": "Datahub Workspace layout, composed from Vianova components.",
       "dependencies": [
-        "lucide-react"
+        "lucide-react",
+        "maplibre-gl"
       ],
       "registryDependencies": [
         "@vianova/alert",
