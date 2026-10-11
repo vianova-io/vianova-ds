@@ -5,10 +5,10 @@
 
 | | |
 |---|---|
-| Generated | 2026-10-08 |
-| DS repo | `65889c3 (public-main)` |
-| Input | `dist/tokens.json`, sha256 `ac0b58bb65cb9280…` |
-| Observed | 63 semantic roles × 6 modes · 42 of 63 light roles are code-only · 76 tokens carry `a11yFix` |
+| Generated | 2026-10-11 |
+| DS repo | `5dafa05 (public-main)` |
+| Input | `dist/tokens.json`, sha256 `a26072220422d0e5…` |
+| Observed | 71 semantic roles × 6 modes · 50 of 71 light roles are code-only · 76 tokens carry `a11yFix` |
 
 Light and dark, which is what nearly every task needs. The four white-label
 themes and the primitive index are in `agent-digest.full.md`.
@@ -88,6 +88,14 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `chart-3` | `--chart-3` | `#115e59` | `#2dd4bf` | Cp! | — |
 | `chart-4` | `--chart-4` | `#134e4a` | `#14b8a6` | Cp! | — |
 | `chart-5` | `--chart-5` | `#042f2e` | `#0d9488` | Cp! | — |
+| `chart-categorical-1` | `--chart-categorical-1` | `#0f766e` | `#0f766e` | C | — |
+| `chart-categorical-2` | `--chart-categorical-2` | `#2c63ec` | `#2c63ec` | C | — |
+| `chart-categorical-3` | `--chart-categorical-3` | `#dc7702` | `#dc7702` | C | — |
+| `chart-categorical-4` | `--chart-categorical-4` | `#dc0075` | `#dc0075` | C | — |
+| `chart-categorical-5` | `--chart-categorical-5` | `#8339b0` | `#8339b0` | C | — |
+| `chart-categorical-6` | `--chart-categorical-6` | `#76a151` | `#76a151` | C | — |
+| `chart-categorical-7` | `--chart-categorical-7` | `#dd2824` | `#dd2824` | C | — |
+| `chart-categorical-8` | `--chart-categorical-8` | `#0f91b2` | `#0f91b2` | C | — |
 
 ## Foundations
 

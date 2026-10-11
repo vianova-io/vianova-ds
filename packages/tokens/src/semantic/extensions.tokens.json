@@ -1,5 +1,5 @@
 {
-  "$description": "CODE-ONLY semantic tokens. These do NOT exist in the Figma library -- they are required by shadcn (sidebar-*, chart-*) or by the OD surfaces (origin/destination/selected/dimmed). Every entry is stamped figma:null. Push these into the Figma library and then fold them into color.tokens.json.",
+  "$description": "CODE-ONLY semantic tokens. These do NOT exist in the Figma library -- they are required by shadcn (sidebar-*, chart-*), the categorical chart series (chart-categorical-*) or by the OD surfaces (origin/destination/selected/dimmed). Every entry is stamped figma:null. Push these into the Figma library and then fold them into color.tokens.json.",
   "semantic": {
     "light": {
       "success": {
@@ -301,6 +301,102 @@
             "cssVar": "--chart-5",
             "preset": "b5cRaL9Zg",
             "a11yFix": true
+          }
+        }
+      },
+      "chart-categorical-1": {
+        "$value": "#0f766e",
+        "$type": "color",
+        "$description": "Categorical series 1 (teal (the product primary)).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-1"
+          }
+        }
+      },
+      "chart-categorical-2": {
+        "$value": "#2c63ec",
+        "$type": "color",
+        "$description": "Categorical series 2 (blue).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-2"
+          }
+        }
+      },
+      "chart-categorical-3": {
+        "$value": "#dc7702",
+        "$type": "color",
+        "$description": "Categorical series 3 (amber).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-3"
+          }
+        }
+      },
+      "chart-categorical-4": {
+        "$value": "#dc0075",
+        "$type": "color",
+        "$description": "Categorical series 4 (pink).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-4"
+          }
+        }
+      },
+      "chart-categorical-5": {
+        "$value": "#8339b0",
+        "$type": "color",
+        "$description": "Categorical series 5 (violet).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-5"
+          }
+        }
+      },
+      "chart-categorical-6": {
+        "$value": "#76a151",
+        "$type": "color",
+        "$description": "Categorical series 6 (green).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-6"
+          }
+        }
+      },
+      "chart-categorical-7": {
+        "$value": "#dd2824",
+        "$type": "color",
+        "$description": "Categorical series 7 (red).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-7"
+          }
+        }
+      },
+      "chart-categorical-8": {
+        "$value": "#0f91b2",
+        "$type": "color",
+        "$description": "Categorical series 8 (cyan).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-8"
           }
         }
       }
@@ -607,6 +703,102 @@
             "a11yFix": true
           }
         }
+      },
+      "chart-categorical-1": {
+        "$value": "#0f766e",
+        "$type": "color",
+        "$description": "Categorical series 1 (teal (the product primary)).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-1"
+          }
+        }
+      },
+      "chart-categorical-2": {
+        "$value": "#2c63ec",
+        "$type": "color",
+        "$description": "Categorical series 2 (blue).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-2"
+          }
+        }
+      },
+      "chart-categorical-3": {
+        "$value": "#dc7702",
+        "$type": "color",
+        "$description": "Categorical series 3 (amber).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-3"
+          }
+        }
+      },
+      "chart-categorical-4": {
+        "$value": "#dc0075",
+        "$type": "color",
+        "$description": "Categorical series 4 (pink).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-4"
+          }
+        }
+      },
+      "chart-categorical-5": {
+        "$value": "#8339b0",
+        "$type": "color",
+        "$description": "Categorical series 5 (violet).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-5"
+          }
+        }
+      },
+      "chart-categorical-6": {
+        "$value": "#76a151",
+        "$type": "color",
+        "$description": "Categorical series 6 (green).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-6"
+          }
+        }
+      },
+      "chart-categorical-7": {
+        "$value": "#dd2824",
+        "$type": "color",
+        "$description": "Categorical series 7 (red).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-7"
+          }
+        }
+      },
+      "chart-categorical-8": {
+        "$value": "#0f91b2",
+        "$type": "color",
+        "$description": "Categorical series 8 (cyan).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-8"
+          }
+        }
       }
     },
     "darkStone": {
@@ -903,6 +1095,102 @@
             "cssVar": "--chart-5",
             "preset": "b5cRaL9Zg",
             "a11yFix": true
+          }
+        }
+      },
+      "chart-categorical-1": {
+        "$value": "#217e76",
+        "$type": "color",
+        "$description": "Categorical series 1 (teal (the product primary)).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-1"
+          }
+        }
+      },
+      "chart-categorical-2": {
+        "$value": "#2f67f0",
+        "$type": "color",
+        "$description": "Categorical series 2 (blue).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-2"
+          }
+        }
+      },
+      "chart-categorical-3": {
+        "$value": "#dc7702",
+        "$type": "color",
+        "$description": "Categorical series 3 (amber).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-3"
+          }
+        }
+      },
+      "chart-categorical-4": {
+        "$value": "#e00d78",
+        "$type": "color",
+        "$description": "Categorical series 4 (pink).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-4"
+          }
+        }
+      },
+      "chart-categorical-5": {
+        "$value": "#9758b4",
+        "$type": "color",
+        "$description": "Categorical series 5 (violet).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-5"
+          }
+        }
+      },
+      "chart-categorical-6": {
+        "$value": "#78a94c",
+        "$type": "color",
+        "$description": "Categorical series 6 (green).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-6"
+          }
+        }
+      },
+      "chart-categorical-7": {
+        "$value": "#dd2824",
+        "$type": "color",
+        "$description": "Categorical series 7 (red).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-7"
+          }
+        }
+      },
+      "chart-categorical-8": {
+        "$value": "#489bb6",
+        "$type": "color",
+        "$description": "Categorical series 8 (cyan).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-8"
           }
         }
       }
@@ -1203,6 +1491,102 @@
             "a11yFix": true
           }
         }
+      },
+      "chart-categorical-1": {
+        "$value": "#217e76",
+        "$type": "color",
+        "$description": "Categorical series 1 (teal (the product primary)).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-1"
+          }
+        }
+      },
+      "chart-categorical-2": {
+        "$value": "#2f67f0",
+        "$type": "color",
+        "$description": "Categorical series 2 (blue).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-2"
+          }
+        }
+      },
+      "chart-categorical-3": {
+        "$value": "#dc7702",
+        "$type": "color",
+        "$description": "Categorical series 3 (amber).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-3"
+          }
+        }
+      },
+      "chart-categorical-4": {
+        "$value": "#e00d78",
+        "$type": "color",
+        "$description": "Categorical series 4 (pink).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-4"
+          }
+        }
+      },
+      "chart-categorical-5": {
+        "$value": "#9758b4",
+        "$type": "color",
+        "$description": "Categorical series 5 (violet).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-5"
+          }
+        }
+      },
+      "chart-categorical-6": {
+        "$value": "#78a94c",
+        "$type": "color",
+        "$description": "Categorical series 6 (green).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-6"
+          }
+        }
+      },
+      "chart-categorical-7": {
+        "$value": "#dd2824",
+        "$type": "color",
+        "$description": "Categorical series 7 (red).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-7"
+          }
+        }
+      },
+      "chart-categorical-8": {
+        "$value": "#489bb6",
+        "$type": "color",
+        "$description": "Categorical series 8 (cyan).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-8"
+          }
+        }
       }
     },
     "fuchsia": {
@@ -1501,6 +1885,102 @@
             "a11yFix": true
           }
         }
+      },
+      "chart-categorical-1": {
+        "$value": "#217e76",
+        "$type": "color",
+        "$description": "Categorical series 1 (teal (the product primary)).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-1"
+          }
+        }
+      },
+      "chart-categorical-2": {
+        "$value": "#2f67f0",
+        "$type": "color",
+        "$description": "Categorical series 2 (blue).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-2"
+          }
+        }
+      },
+      "chart-categorical-3": {
+        "$value": "#dc7702",
+        "$type": "color",
+        "$description": "Categorical series 3 (amber).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-3"
+          }
+        }
+      },
+      "chart-categorical-4": {
+        "$value": "#e00d78",
+        "$type": "color",
+        "$description": "Categorical series 4 (pink).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-4"
+          }
+        }
+      },
+      "chart-categorical-5": {
+        "$value": "#9758b4",
+        "$type": "color",
+        "$description": "Categorical series 5 (violet).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-5"
+          }
+        }
+      },
+      "chart-categorical-6": {
+        "$value": "#78a94c",
+        "$type": "color",
+        "$description": "Categorical series 6 (green).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-6"
+          }
+        }
+      },
+      "chart-categorical-7": {
+        "$value": "#dd2824",
+        "$type": "color",
+        "$description": "Categorical series 7 (red).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-7"
+          }
+        }
+      },
+      "chart-categorical-8": {
+        "$value": "#489bb6",
+        "$type": "color",
+        "$description": "Categorical series 8 (cyan).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-8"
+          }
+        }
       }
     },
     "gray": {
@@ -1797,6 +2277,102 @@
             "cssVar": "--chart-5",
             "preset": "b5cRaL9Zg",
             "a11yFix": true
+          }
+        }
+      },
+      "chart-categorical-1": {
+        "$value": "#217e76",
+        "$type": "color",
+        "$description": "Categorical series 1 (teal (the product primary)).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-1"
+          }
+        }
+      },
+      "chart-categorical-2": {
+        "$value": "#2f67f0",
+        "$type": "color",
+        "$description": "Categorical series 2 (blue).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-2"
+          }
+        }
+      },
+      "chart-categorical-3": {
+        "$value": "#dc7702",
+        "$type": "color",
+        "$description": "Categorical series 3 (amber).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-3"
+          }
+        }
+      },
+      "chart-categorical-4": {
+        "$value": "#e00d78",
+        "$type": "color",
+        "$description": "Categorical series 4 (pink).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-4"
+          }
+        }
+      },
+      "chart-categorical-5": {
+        "$value": "#9758b4",
+        "$type": "color",
+        "$description": "Categorical series 5 (violet).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-5"
+          }
+        }
+      },
+      "chart-categorical-6": {
+        "$value": "#78a94c",
+        "$type": "color",
+        "$description": "Categorical series 6 (green).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-6"
+          }
+        }
+      },
+      "chart-categorical-7": {
+        "$value": "#dd2824",
+        "$type": "color",
+        "$description": "Categorical series 7 (red).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-7"
+          }
+        }
+      },
+      "chart-categorical-8": {
+        "$value": "#489bb6",
+        "$type": "color",
+        "$description": "Categorical series 8 (cyan).",
+        "$extensions": {
+          "io.vianova.tokens": {
+            "figma": null,
+            "aliasOf": null,
+            "cssVar": "--chart-categorical-8"
           }
         }
       }

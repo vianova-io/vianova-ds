@@ -50,16 +50,32 @@ export const badgeColor = (style: CategoryStyle): string => style.badge ?? style
  * Distinct from one another rather than from a theme: a category's colour is
  * data the author assigns and the map paints with, not UI chrome. The first
  * stop is the product primary.
+ *
+ * These are the `--chart-categorical-*` tokens, as literals.
+ *
+ * Literals and not `var(--chart-categorical-1)` because of where they are
+ * spent: deck.gl and MapLibre want an actual colour, not something only a
+ * browser can resolve, and a stored CategoryStyle has to survive being written
+ * to a database. The token is still the source of truth -- the token test in
+ * packages/tokens pins the separation, and these values are copied from it.
+ *
+ * The same eight paint the Sankey and every categorical chart, which is the
+ * point: a district is one colour on the map and the same colour in the chart
+ * beside it. Verified at the directly-labelled floors (normal dE2000 >= 15,
+ * colour-deficient >= 8) under BOTH the Machado and Vienot simulations, on
+ * every one of the six theme surfaces. The pair that forced the change was
+ * blue vs violet, which the old palette put 0.9 apart under deuteranopia --
+ * the same colour, to roughly one man in twelve.
  */
 export const CATEGORY_PALETTE = [
   "#0f766e",
-  "#2563eb",
-  "#d97706",
-  "#db2777",
-  "#7c3aed",
-  "#65a30d",
-  "#dc2626",
-  "#0891b2",
+  "#2c63ec",
+  "#dc7702",
+  "#dc0075",
+  "#8339b0",
+  "#76a151",
+  "#dd2824",
+  "#0f91b2",
 ] as const;
 
 /**

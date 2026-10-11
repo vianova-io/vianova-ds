@@ -77,7 +77,15 @@
           "chart-2": "#0f766e",
           "chart-3": "#115e59",
           "chart-4": "#134e4a",
-          "chart-5": "#042f2e"
+          "chart-5": "#042f2e",
+          "chart-categorical-1": "#0f766e",
+          "chart-categorical-2": "#2c63ec",
+          "chart-categorical-3": "#dc7702",
+          "chart-categorical-4": "#dc0075",
+          "chart-categorical-5": "#8339b0",
+          "chart-categorical-6": "#76a151",
+          "chart-categorical-7": "#dd2824",
+          "chart-categorical-8": "#0f91b2"
         },
         "dark": {
           "background": "oklch(0.141 0.005 285.823)",
@@ -142,7 +150,15 @@
           "chart-2": "#5eead4",
           "chart-3": "#2dd4bf",
           "chart-4": "#14b8a6",
-          "chart-5": "#0d9488"
+          "chart-5": "#0d9488",
+          "chart-categorical-1": "#0f766e",
+          "chart-categorical-2": "#2c63ec",
+          "chart-categorical-3": "#dc7702",
+          "chart-categorical-4": "#dc0075",
+          "chart-categorical-5": "#8339b0",
+          "chart-categorical-6": "#76a151",
+          "chart-categorical-7": "#dd2824",
+          "chart-categorical-8": "#0f91b2"
         }
       },
       "files": []
@@ -2719,6 +2735,32 @@
       "files": [
         {
           "path": "registry/vianova/product/sample-map-layer.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "sankey-flow",
+      "type": "registry:ui",
+      "title": "Sankey Flow",
+      "description": "Sankey Flow — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "recharts"
+      ],
+      "registryDependencies": [
+        "@vianova/category-style",
+        "@vianova/chart",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/sankey-flow.tsx",
           "type": "registry:ui"
         }
       ],

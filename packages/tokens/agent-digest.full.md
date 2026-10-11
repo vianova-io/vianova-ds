@@ -5,10 +5,10 @@
 
 | | |
 |---|---|
-| Generated | 2026-10-08 |
-| DS repo | `65889c3 (public-main)` |
-| Input | `dist/tokens.json`, sha256 `ac0b58bb65cb9280…` |
-| Observed | 63 semantic roles × 6 modes · 42 of 63 light roles are code-only · 76 tokens carry `a11yFix` |
+| Generated | 2026-10-11 |
+| DS repo | `5dafa05 (public-main)` |
+| Input | `dist/tokens.json`, sha256 `a26072220422d0e5…` |
+| Observed | 71 semantic roles × 6 modes · 50 of 71 light roles are code-only · 76 tokens carry `a11yFix` |
 
 The four white-label themes, emitted **diff-only against `dark`** because they
 are re-accents rather than separate palettes — a dozen rows each, not 63.
@@ -22,7 +22,7 @@ contrast, so it no longer matches Figma.
 Colour values below are **resolved to hex**. The source is often `oklch()`; if you
 need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 
-## darkStone — differs from `dark` in 31 of 63 roles
+## darkStone — differs from `dark` in 37 of 71 roles
 
 | Role | dark | darkStone | P |
 |---|---|---|---|
@@ -57,8 +57,14 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `sidebar-accent-foreground` | `#fafafa` | `#d4d4d8` | C |
 | `sidebar-border` | `#ffffff1a` | `#57534e` | C |
 | `sidebar-ring` | `#71717b` | `#d4d4d8` | C |
+| `chart-categorical-1` | `#0f766e` | `#217e76` | C |
+| `chart-categorical-2` | `#2c63ec` | `#2f67f0` | C |
+| `chart-categorical-4` | `#dc0075` | `#e00d78` | C |
+| `chart-categorical-5` | `#8339b0` | `#9758b4` | C |
+| `chart-categorical-6` | `#76a151` | `#78a94c` | C |
+| `chart-categorical-8` | `#0f91b2` | `#489bb6` | C |
 
-## darkSlate — differs from `dark` in 36 of 63 roles
+## darkSlate — differs from `dark` in 42 of 71 roles
 
 | Role | dark | darkSlate | P |
 |---|---|---|---|
@@ -98,8 +104,14 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `sidebar-accent-foreground` | `#fafafa` | `#e5e5e5` | C |
 | `sidebar-border` | `#ffffff1a` | `#475569` | C |
 | `sidebar-ring` | `#71717b` | `#d4d4d8` | C |
+| `chart-categorical-1` | `#0f766e` | `#217e76` | C |
+| `chart-categorical-2` | `#2c63ec` | `#2f67f0` | C |
+| `chart-categorical-4` | `#dc0075` | `#e00d78` | C |
+| `chart-categorical-5` | `#8339b0` | `#9758b4` | C |
+| `chart-categorical-6` | `#76a151` | `#78a94c` | C |
+| `chart-categorical-8` | `#0f91b2` | `#489bb6` | C |
 
-## fuchsia — differs from `dark` in 30 of 63 roles
+## fuchsia — differs from `dark` in 36 of 71 roles
 
 | Role | dark | fuchsia | P |
 |---|---|---|---|
@@ -133,8 +145,14 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `sidebar-accent-foreground` | `#fafafa` | `#d4d4d8` | C |
 | `sidebar-border` | `#ffffff1a` | `#52525b` | C |
 | `sidebar-ring` | `#71717b` | `#d4d4d8` | C |
+| `chart-categorical-1` | `#0f766e` | `#217e76` | C |
+| `chart-categorical-2` | `#2c63ec` | `#2f67f0` | C |
+| `chart-categorical-4` | `#dc0075` | `#e00d78` | C |
+| `chart-categorical-5` | `#8339b0` | `#9758b4` | C |
+| `chart-categorical-6` | `#76a151` | `#78a94c` | C |
+| `chart-categorical-8` | `#0f91b2` | `#489bb6` | C |
 
-## gray — differs from `dark` in 39 of 63 roles
+## gray — differs from `dark` in 45 of 71 roles
 
 | Role | dark | gray | P |
 |---|---|---|---|
@@ -177,6 +195,12 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `sidebar-accent-foreground` | `#fafafa` | `#f1f5f9` | C |
 | `sidebar-border` | `#ffffff1a` | `#4b5563` | C |
 | `sidebar-ring` | `#71717b` | `#5eead4` | C |
+| `chart-categorical-1` | `#0f766e` | `#217e76` | C |
+| `chart-categorical-2` | `#2c63ec` | `#2f67f0` | C |
+| `chart-categorical-4` | `#dc0075` | `#e00d78` | C |
+| `chart-categorical-5` | `#8339b0` | `#9758b4` | C |
+| `chart-categorical-6` | `#76a151` | `#78a94c` | C |
+| `chart-categorical-8` | `#0f91b2` | `#489bb6` | C |
 
 ## Primitive index
 

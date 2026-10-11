@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { wcagContrast, differenceCiede2000, converter } from "culori";
+import {
+  wcagContrast,
+  differenceCiede2000,
+  converter,
+  formatHex,
+  parse,
+  filterDeficiencyProt,
+  filterDeficiencyDeuter,
+} from "culori";
 
 import { themes } from "../dist/tokens.js";
 import { provenanceOf } from "./provenance.ts";
@@ -272,4 +280,99 @@ test("the chart palette is sequential, not categorical (documented limitation)",
       `If that is intentional, restore the categorical assertions (pairwise dE >= 20 plus ` +
       `deuteranopia/protanopia >= 12) instead of this test.`,
   );
+});
+
+
+/**
+ * The categorical series, which is the set the sequential ramp above says to
+ * add rather than stretch: `chart-categorical-1..8`, shared by charts and by
+ * the map's category styles so one district is one colour on both.
+ *
+ * Thresholds are the DIRECTLY-LABELLED ones -- normal dE2000 >= 15, colour
+ * deficiency >= 8 -- not the >= 20 / >= 12 a colour-only legend needs. Every
+ * surface that spends this palette puts the name beside the mark (a Sankey
+ * node, a legend row, a map badge), so colour traces a flow and the label
+ * carries the identity. That is the documented "secondary encoding" case.
+ *
+ * Both simulation models, deliberately. They disagree, and not by a little:
+ * for green vs red, Machado (culori's) scored 8+ while Vienot scored 3.2 --
+ * the canonical deuteranopia confusion, called safe by one model and unusable
+ * by the other. A safety property must not depend on which one someone picks,
+ * so a pair counts as separable only when BOTH agree. Deriving the palette
+ * under Machado alone kept a vivid lime that Vienot rejects.
+ */
+const CATEGORICAL = Array.from({ length: 8 }, (_, i) => `chart-categorical-${i + 1}`);
+
+/** Vienot 1999 dichromat simulation; culori ships Machado, not this one. */
+function vienot(hex: string, kind: "protan" | "deutan"): string {
+  const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const unlin = (c: number) => (c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055);
+  const RGB2LMS = [
+    [0.31399022, 0.63951294, 0.04649755],
+    [0.15537241, 0.75789446, 0.08670142],
+    [0.01775239, 0.10944209, 0.87256922],
+  ];
+  const LMS2RGB = [
+    [5.47221206, -4.6419601, 0.16963708],
+    [-1.1252419, 2.29317094, -0.1678952],
+    [0.02980165, -0.19318073, 1.16364789],
+  ];
+  const PLANES = {
+    protan: [[0, 1.05118294, -0.05116099], [0, 1, 0], [0, 0, 1]],
+    deutan: [[1, 0, 0], [0.9513092, 0, 0.04866992], [0, 0, 1]],
+  } as const;
+  const mul = (M: readonly (readonly number[])[], v: number[]) =>
+    M.map((r) => r[0]! * v[0]! + r[1]! * v[1]! + r[2]! * v[2]!);
+  const clamp = (x: number) => Math.min(1, Math.max(0, x));
+  const rgb = converter("rgb")(parse(hex)!)!;
+  const out = mul(LMS2RGB, mul(PLANES[kind], mul(RGB2LMS, [lin(rgb.r), lin(rgb.g), lin(rgb.b)])));
+  return formatHex({ mode: "rgb", r: clamp(unlin(out[0]!)), g: clamp(unlin(out[1]!)), b: clamp(unlin(out[2]!)) });
+}
+
+const machadoProt = filterDeficiencyProt(1);
+const machadoDeut = filterDeficiencyDeuter(1);
+const deficiencyGap = (a: string, b: string) =>
+  Math.min(
+    deltaE(formatHex(machadoProt(a)), formatHex(machadoProt(b))),
+    deltaE(formatHex(machadoDeut(a)), formatHex(machadoDeut(b))),
+    deltaE(vienot(a, "protan"), vienot(b, "protan")),
+    deltaE(vienot(a, "deutan"), vienot(b, "deutan")),
+  );
+
+for (const mode of MODES) {
+  test(`${mode}: every categorical pair is separable, to both CVD models`, () => {
+    const t = themes[mode] as unknown as Record<string, string>;
+    const failures: string[] = [];
+    for (let i = 0; i < CATEGORICAL.length; i++) {
+      for (let j = i + 1; j < CATEGORICAL.length; j++) {
+        const a = t[CATEGORICAL[i]!]!;
+        const b = t[CATEGORICAL[j]!]!;
+        const normal = deltaE(a, b);
+        const cvd = deficiencyGap(a, b);
+        if (normal < 15)
+          failures.push(`  ${CATEGORICAL[i]} vs ${CATEGORICAL[j]}: dE2000 ${normal.toFixed(1)} (need 15)`);
+        if (cvd < 8)
+          failures.push(`  ${CATEGORICAL[i]} vs ${CATEGORICAL[j]}: colour-deficient dE2000 ${cvd.toFixed(1)} (need 8)`);
+      }
+    }
+    assert.equal(failures.length, 0, `\n${failures.join("\n")}\n`);
+  });
+
+  test(`${mode}: every categorical stop clears 3:1 on the page`, () => {
+    const t = themes[mode] as unknown as Record<string, string>;
+    const failures: string[] = [];
+    for (const name of CATEGORICAL) {
+      const ratio = wcagContrast(t[name]!, t.background!);
+      // 3:1 is the WCAG 1.4.11 bar for a graphical object, which is what a
+      // Sankey node or a map dot is.
+      if (ratio < 3) failures.push(`  ${name}: ${ratio.toFixed(2)}:1 on background (need 3)`);
+    }
+    assert.equal(failures.length, 0, `\n${failures.join("\n")}\n`);
+  });
+}
+
+/** The first stop is the product primary, and that is a promise, not a default. */
+test("categorical stop 1 is the product primary", () => {
+  const t = themes.light as unknown as Record<string, string>;
+  assert.equal(t["chart-categorical-1"]!.toLowerCase(), "#0f766e");
 });
