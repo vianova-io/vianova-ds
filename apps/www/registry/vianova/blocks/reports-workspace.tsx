@@ -2606,13 +2606,32 @@ function WidgetCard({
       ) : null}
       <div className="flex shrink-0 items-start justify-between gap-2 px-3 pt-3">
         <div className="min-w-0 space-y-1">
-          <h3 className="flex items-center gap-2 text-sm font-medium">
+          {/* Renamed in place, as the report's own title is. A role rather
+              than an <h3>, which may not hold the edit's block elements. */}
+          <div
+            role="heading"
+            aria-level={3}
+            // gap-0.5 plus the title's own padding puts its text where the
+            // plain title's was, 8px past the icon.
+            className="flex min-w-0 items-center gap-0.5 text-sm font-medium"
+          >
             <Icon
               className="text-muted-foreground size-4 shrink-0"
               aria-hidden
             />
-            <span className="truncate">{name}</span>
-          </h3>
+            <InlineEdit
+              variant="title"
+              label="chart title"
+              value={widget.title}
+              placeholder="Untitled chart"
+              onValueChange={(next) => {
+                if (next) onChange({ ...widget, title: next });
+              }}
+              // Not pulled left into the icon's gap, and clear of the drag
+              // grip: a click here renames, it never starts a drag.
+              className="draggable-cancel ml-0 min-w-0"
+            />
+          </div>
           <div className="text-muted-foreground flex min-w-0 items-center gap-3 text-xs">
             <span className="flex min-w-0 items-center gap-1.5">
               <Database className="size-3.5 shrink-0" aria-hidden />

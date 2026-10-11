@@ -110,7 +110,8 @@ export function InlineEdit({
             </span>
             <PencilLine
               aria-hidden
-              className="text-muted-foreground size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+              // Sized to the text, so it suits a page title and a card title.
+              className="text-muted-foreground size-[0.85em] shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
             />
           </button>
         </div>
