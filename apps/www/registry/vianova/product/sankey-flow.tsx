@@ -4,6 +4,11 @@ import * as React from "react";
 import { Sankey, Tooltip } from "recharts";
 
 import { CATEGORY_PALETTE } from "@/registry/vianova/lib/category-style";
+import {
+  ChartTooltipSurface,
+  ChartTooltipTitle,
+  ChartTooltipValue,
+} from "@/registry/vianova/product/chart-tooltip";
 import { ChartContainer, type ChartConfig } from "@/registry/vianova/ui/chart";
 import { cn } from "@/registry/vianova/lib/utils";
 
@@ -376,32 +381,27 @@ function FlowTooltip({
   const isLink = typeof raw.source === "object" && typeof raw.target === "object";
 
   return (
-    <div
-      data-slot="sankey-tooltip"
-      className="grid min-w-[9rem] gap-1 rounded-lg border border-border bg-popover px-2.5 py-1.5 text-xs shadow-md"
-    >
+    <ChartTooltipSurface>
       {isLink ? (
         <>
-          <div className="flex items-center gap-1.5 font-medium text-popover-foreground">
+          <ChartTooltipTitle className="flex items-center gap-1.5">
             <span>{named(raw.source?.name)}</span>
             <span aria-hidden className="text-muted-foreground">
               &rarr;
             </span>
             <span>{named(raw.target?.name)}</span>
-          </div>
-          <div className="text-muted-foreground">
-            <span className="font-medium tabular-nums text-foreground">{value}</span> trips
-          </div>
+          </ChartTooltipTitle>
+          <ChartTooltipValue value={value} unit="trips" />
         </>
       ) : (
         <>
-          <div className="font-medium text-popover-foreground">{named(raw.name)}</div>
-          <div className="text-muted-foreground">
-            <span className="font-medium tabular-nums text-foreground">{value}</span>{" "}
-            {raw.depth === 0 ? "leaving" : "arriving"}
-          </div>
+          <ChartTooltipTitle>{named(raw.name)}</ChartTooltipTitle>
+          <ChartTooltipValue
+            value={value}
+            unit={raw.depth === 0 ? "leaving" : "arriving"}
+          />
         </>
       )}
-    </div>
+    </ChartTooltipSurface>
   );
 }

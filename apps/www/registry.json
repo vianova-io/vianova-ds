@@ -2082,6 +2082,7 @@
         "Product"
       ],
       "registryDependencies": [
+        "@vianova/chart-tooltip",
         "@vianova/utils"
       ],
       "files": [
@@ -2186,6 +2187,27 @@
       "files": [
         {
           "path": "registry/vianova/product/chart-card.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "chart-tooltip",
+      "type": "registry:ui",
+      "title": "Chart Tooltip",
+      "description": "Chart Tooltip — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "registryDependencies": [
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/chart-tooltip.tsx",
           "type": "registry:ui"
         }
       ],
@@ -2684,6 +2706,7 @@
         "Product"
       ],
       "registryDependencies": [
+        "@vianova/chart-tooltip",
         "@vianova/progress",
         "@vianova/utils"
       ],
@@ -2756,6 +2779,7 @@
       "registryDependencies": [
         "@vianova/category-style",
         "@vianova/chart",
+        "@vianova/chart-tooltip",
         "@vianova/utils"
       ],
       "files": [
