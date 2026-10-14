@@ -9,6 +9,13 @@ import {
 } from "maplibre-gl";
 
 import { useColorScheme } from "@/registry/vianova/hooks/use-color-scheme";
+import {
+  BASEMAP_BY_ID,
+  applyBasemapOverlays,
+  resolveBasemapStyle,
+  type Basemap,
+  type BasemapId,
+} from "@/registry/vianova/lib/basemaps";
 import { cn } from "@/registry/vianova/lib/utils";
 
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -41,6 +48,14 @@ type StyleLike = string | StyleSpecification;
 export type MapCanvasProps = Omit<React.ComponentProps<"div">, "onLoad"> & {
   /** One style for both schemes, or one per scheme. Defaults follow the theme. */
   mapStyle?: StyleLike | { light: StyleLike; dark: StyleLike };
+  /**
+   * A named basemap -- "muted", "plan", "satellite", "terrain", "blank".
+   *
+   * Sugar over `mapStyle`, which still wins if both are given. Prefer this:
+   * it also decides the scrim and the hillshade, which a bare style URL
+   * cannot, and it is the only form that carries the right attribution.
+   */
+  basemap?: BasemapId | Basemap;
   /** Required only for `mapbox://` styles and tiles. */
   mapboxToken?: string;
   /** Overrides theme detection. Omit to follow the `dark` class on <html>. */
@@ -106,6 +121,7 @@ function whenStyleReady(map: MapLibreMap, fn: (map: MapLibreMap) => void) {
 
 export function MapCanvas({
   mapStyle,
+  basemap,
   mapboxToken,
   colorScheme,
   center = [-1.6778, 48.1173], // Rennes, matching the design
@@ -140,13 +156,29 @@ export function MapCanvas({
   // gates creation without causing a rebuild on later theme changes.
   const canInit = colorScheme !== undefined || detected !== null;
 
+  const basemapId = typeof basemap === "string" ? basemap : basemap?.id;
+  const resolvedBasemap = basemapId ? BASEMAP_BY_ID[basemapId] : undefined;
+
+  // Read by the style-ready paths without putting the basemap in their deps,
+  // which would rebuild the map rather than swap its style.
+  const overlayRef = React.useRef<{ basemap?: Basemap; scheme: "light" | "dark" }>({
+    basemap: resolvedBasemap,
+    scheme,
+  });
+  overlayRef.current = { basemap: resolvedBasemap, scheme };
+
+  // Keyed on the basemap ID, never on the resolved style. `resolveBasemapStyle`
+  // returns a fresh object for satellite and blank, and the swap effect below
+  // compares styles by identity -- depending on the object would call setStyle
+  // on every single render, re-fetching the style and re-firing onStyleReady.
   const style = React.useMemo<StyleLike>(() => {
     if (mapStyle && typeof mapStyle === "object" && "light" in mapStyle && "dark" in mapStyle) {
       return mapStyle[scheme];
     }
     if (mapStyle) return mapStyle;
+    if (basemapId) return resolveBasemapStyle(basemapId, scheme);
     return mapboxToken ? MAPBOX_STYLES[scheme] : BASEMAP_STYLES[scheme];
-  }, [mapStyle, mapboxToken, scheme]);
+  }, [mapStyle, basemapId, mapboxToken, scheme]);
 
   // MapLibre v6 loads its worker from a sibling ESM file. Some bundlers
   // (notably Next's webpack dev server) fail to resolve that URL and serve an
@@ -208,7 +240,12 @@ export function MapCanvas({
     appliedStyleRef.current = style;
     map.on("load", () => {
       onLoadRef.current?.(map);
-      whenStyleReady(map, (ready) => onStyleReadyRef.current?.(ready));
+      whenStyleReady(map, (ready) => {
+        // Before the caller's hook, so a hillshade is already in place under
+        // whatever they add next and neither has to know about the other.
+        applyBasemapOverlays(ready, overlayRef.current.basemap, overlayRef.current.scheme);
+        onStyleReadyRef.current?.(ready);
+      });
     });
     map.on("error", (e) => {
       if ((e as { error?: { status?: number } }).error?.status === 401) setFailed(true);
@@ -227,7 +264,7 @@ export function MapCanvas({
     const map = mapRef.current;
     if (!map || appliedStyleRef.current === style) return;
     appliedStyleRef.current = style;
-    map.setStyle(style as string);
+    map.setStyle(style);
     // setStyle discards every custom source and layer, so whoever added them
     // has to add them again once the replacement style is ready.
     //
@@ -237,7 +274,10 @@ export function MapCanvas({
     // to the style that is about to be thrown away, and leaves the new one
     // empty with nothing left to trigger a retry.
     map.once("styledata", () => {
-      whenStyleReady(map, (ready) => onStyleReadyRef.current?.(ready));
+      whenStyleReady(map, (ready) => {
+        applyBasemapOverlays(ready, overlayRef.current.basemap, overlayRef.current.scheme);
+        onStyleReadyRef.current?.(ready);
+      });
     });
   }, [style]);
 

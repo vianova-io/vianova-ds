@@ -11,15 +11,26 @@ import { cn } from "@/registry/vianova/lib/utils";
  */
 export function MapControls({
   basemapLabel = "Plan",
+  basemap,
   onZoomIn,
   onZoomOut,
   onBasemapClick,
   className,
   ...props
 }: Omit<React.ComponentProps<"div">, "onClick"> & {
+  /**
+   * Replaces the built-in tile, e.g. with a <BasemapSwitcher />.
+   *
+   * A slot rather than more props on this component: a real switcher owns a
+   * popover, a selected value and five previews, none of which this zoom
+   * stepper should know about. Given one, `basemapLabel` and `onBasemapClick`
+   * are ignored.
+   */
+  basemap?: React.ReactNode;
   basemapLabel?: string;
   onZoomIn?: () => void;
   onZoomOut?: () => void;
+  /** @deprecated Pass a `basemap` slot instead; a lone click cannot express five options. */
   onBasemapClick?: () => void;
 }) {
   return (
@@ -28,13 +39,19 @@ export function MapControls({
       className={cn("flex items-end gap-2", className)}
       {...props}
     >
-      <button
-        type="button"
-        onClick={onBasemapClick}
-        className="flex size-14 items-center justify-center rounded-lg border border-border bg-card/95 text-[10px] text-muted-foreground backdrop-blur transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-      >
-        {basemapLabel}
-      </button>
+      {basemap ?? (
+        <button
+          type="button"
+          onClick={onBasemapClick}
+          // The accessible name this never had: without it the button is
+          // announced as whatever its label happens to say, which in the map
+          // workspace was "Satellite" over a map that was not one.
+          aria-label={`Basemap: ${basemapLabel}`}
+          className="flex size-14 items-center justify-center rounded-lg border border-border bg-card/95 text-[10px] text-muted-foreground backdrop-blur transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+        >
+          {basemapLabel}
+        </button>
+      )}
       {/*
         No overflow-hidden here, deliberately.
 

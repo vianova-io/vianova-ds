@@ -107,6 +107,15 @@ jobs:
       - name: "Map blocks lay out at phone and tablet widths"
         run: pnpm --filter @vianova/www test:responsive
 
+      # The basemap switcher, and the contract that the data ramp follows it.
+      # No pixels and no tiles: it asserts the `data-map-scheme` the block
+      # resolves to, and the attribution MapLibre derives from the style's
+      # sources -- which is also the one legal obligation that comes with using
+      # Esri's imagery and AWS's elevation for free. Both tile backends are
+      # stubbed in the spec so CI never depends on them.
+      - name: "Basemaps switch, and the data ramp follows"
+        run: pnpm --filter @vianova/www test:basemap
+
       # Foundations is the only page the crawls above never reach: they go
       # through /preview and /blocks, and this is a docs route. That is how its
       # colour swatches once shipped 170 contrast failures without anything

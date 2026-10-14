@@ -13,6 +13,7 @@ import {
   PanelLeft,
   Plus,
   Search,
+  Map as MapIcon,
   Sparkles,
 } from "lucide-react";
 import type {
@@ -70,7 +71,15 @@ import {
 import { LegendCategorical } from "@/registry/vianova/product/legend-categorical";
 import { LegendRamp, RAMP_STOPS } from "@/registry/vianova/product/legend-ramp";
 import { MapCanvas } from "@/registry/vianova/product/map-canvas";
+import { BasemapSwitcher } from "@/registry/vianova/product/basemap-switcher";
 import { MapControls } from "@/registry/vianova/product/map-controls";
+import {
+  BASEMAP_BY_ID,
+  DEFAULT_BASEMAP_ID,
+  MAP_SCHEME_LABELS,
+  mapSchemeFor,
+  type BasemapId,
+} from "@/registry/vianova/lib/basemaps";
 import {
   PanelStep,
   PanelStepBody,
@@ -444,11 +453,12 @@ type LayerTab = "data" | "zones";
 const tabOf = (section: string): LayerTab =>
   section === "data" ? "data" : "zones";
 
-/** Names the scheme's own ramp in the Preset row, before one is chosen. */
-const MAP_SCHEME_LABELS: Record<string, string> = {
-  viridis: "Viridis",
-  brand: "Brand",
-};
+/*
+ * MAP_SCHEME_LABELS is imported from lib/basemaps now. The copy that lived here
+ * listed only viridis and brand, which was true while the scheme was derived
+ * from light/dark. The basemap picks it now, so warm and blue are reachable for
+ * the first time and a two-entry record would hand the Preset row undefined.
+ */
 
 /** The one layer with data behind it, named once so the card, the colorize
  *  step's title and the chart selector cannot drift apart. */
@@ -629,16 +639,22 @@ export function MapWorkspace({
   const dataPaneId = `${uid}-data`;
   const chartsPaneId = `${uid}-charts`;
 
-  /**
-   * Brand and Blue run light to dark, so their loudest colour is their
-   * darkest -- which is the one that disappears into a dark basemap, leaving
-   * the quietest streets the most visible thing on the map. Viridis runs the
-   * other way, dark blue to bright yellow, so volume and prominence agree.
-   * Set per block rather than globally: it is a property of this map's
-   * basemap, not of the reader's whole theme.
-   */
   const scheme = useColorScheme() ?? "dark";
-  const mapScheme = scheme === "dark" ? "viridis" : "brand";
+  const [basemapId, setBasemapId] = React.useState<BasemapId>(DEFAULT_BASEMAP_ID);
+
+  /**
+   * The ramp is a property of the basemap, which this used to claim and not do.
+   *
+   * It was `scheme === "dark" ? "viridis" : "brand"` -- a reading of the
+   * reader's theme, with a comment explaining that the basemap was what really
+   * mattered. Now the basemap decides: Satellite takes warm because a
+   * photograph is neither light nor dark and warm is the ramp that survives
+   * being laid over one; Terrain takes blue in light because hillshade is
+   * grey-brown and blue is furthest from it. Brand and Blue run light to dark,
+   * so their loudest colour is their darkest -- the one that disappears into a
+   * dark basemap -- which is why the dark rungs are viridis.
+   */
+  const mapScheme = mapSchemeFor(basemapId, scheme);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -796,8 +812,19 @@ export function MapWorkspace({
    * scheme IS picking a ramp, so letting edits survive it would leave the
    * block showing colours from a scheme that is no longer selected.
    */
+  // Read rather than depended on: this effect fires when the SCHEME changes,
+  // and adding the flag to its deps would make editing the ramp re-run the
+  // reset that the flag exists to prevent.
+  const rampCustomRef = React.useRef(rampCustom);
+  rampCustomRef.current = rampCustom;
+
   React.useEffect(() => {
     setThemeRamp(readRamp(rootRef.current));
+    // A hand-edited ramp survives. The scheme used to change only when the
+    // reader switched theme, where discarding their stops was defensible;
+    // it now changes when they switch basemap, and throwing away their work
+    // for looking at the same data on a photograph would not be.
+    if (rampCustomRef.current) return;
     setStops(null);
     setRampPreset(null);
     setRampCustom(false);
@@ -1232,6 +1259,7 @@ export function MapWorkspace({
     >
       <MapCanvas
         className="absolute inset-0"
+        basemap={basemapId}
         mapboxToken={mapboxToken}
         workerUrl={WORKER_URL}
         center={[8.5417, 47.3769]} // Zürich, the extent of the flow export
@@ -1375,7 +1403,35 @@ export function MapWorkspace({
               <Icon />
             </Button>
           ))}
+
         </div>
+
+        {/* The basemap's phone home, a sibling of the panel switcher rather
+            than a member of it -- that slot means the two panel disclosures,
+            and the responsive suite counts them.
+            MapControls is desktop-only, which was free while its buttons did
+            nothing. One of them does now, so it needs somewhere below lg, and
+            the bottom-right corner is not it: the data panel docks there and
+            MapLibre's attribution owns what is left. On a toolbar row it must
+            be a 36px icon button -- control-size.spec pins that ladder -- so it
+            takes the same hit-slop trick as its neighbours. */}
+        <BasemapSwitcher
+          className="lg:hidden"
+          value={basemapId}
+          onValueChange={setBasemapId}
+          side="bottom"
+          align="end"
+          trigger={
+            <Button
+              variant="secondary"
+              size="icon"
+              aria-label={`Basemap: ${BASEMAP_BY_ID[basemapId]?.label ?? ""}`}
+              className="relative after:absolute after:-inset-2 after:content-['']"
+            >
+              <MapIcon />
+            </Button>
+          }
+        />
 
         {/* The one control here that is not decorative, so it survives on a
             phone -- as an icon until there is room for its label. */}
@@ -1880,15 +1936,25 @@ export function MapWorkspace({
       {/* bottom-12, not bottom-4: the basemap attribution is a 24px bar pinned
           to the bottom-right of the canvas, and at bottom-4 it covers the
           zoom-out button completely. */}
-      {/* Desktop only. These controls are decorative in this block -- no
-          onZoomIn, onZoomOut or onBasemapClick is passed -- so hiding them
-          below lg removes no behaviour, frees the right-hand strip that the
-          docked panel needs, and drops two no-op buttons from a phone's tab
-          order. Pinch and double-tap are MapLibre's own handlers and are
-          untouched, which is the affordance a touch user reaches for anyway. */}
+      {/* Desktop only, and now for a different reason than before: these used
+          to be decorative -- no handlers at all, and a tile labelled
+          "Satellite" over a map that was not -- so hiding them below lg cost
+          nothing. They do something now, which is why the basemap moved into
+          the toolbar above rather than disappearing with them. The zoom pair
+          stays desktop-only: pinch and double-tap are MapLibre's own handlers
+          and are what a thumb reaches for. */}
       <MapControls
         className="absolute bottom-12 right-4 hidden lg:flex"
-        basemapLabel="Satellite"
+        onZoomIn={() => mapRef.current?.zoomIn()}
+        onZoomOut={() => mapRef.current?.zoomOut()}
+        basemap={
+          <BasemapSwitcher
+            value={basemapId}
+            onValueChange={setBasemapId}
+            side="top"
+            align="end"
+          />
+        }
       />
     </div>
   );

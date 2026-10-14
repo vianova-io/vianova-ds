@@ -164,6 +164,24 @@
       "files": []
     },
     {
+      "name": "basemaps",
+      "type": "registry:lib",
+      "title": "Basemaps",
+      "description": "Basemaps helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/basemaps.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "dependencies": [
+        "maplibre-gl"
+      ],
+      "registryDependencies": [
+        "@vianova/css-color"
+      ]
+    },
+    {
       "name": "category-style",
       "type": "registry:lib",
       "title": "Category Style",
@@ -453,6 +471,8 @@
         "recharts"
       ],
       "registryDependencies": [
+        "@vianova/basemap-switcher",
+        "@vianova/basemaps",
         "@vianova/button",
         "@vianova/button-group",
         "@vianova/category-style",
@@ -2096,6 +2116,32 @@
       }
     },
     {
+      "name": "basemap-switcher",
+      "type": "registry:ui",
+      "title": "Basemap Switcher",
+      "description": "Basemap Switcher — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/basemaps",
+        "@vianova/popover",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/basemap-switcher.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "category-badge",
       "type": "registry:ui",
       "title": "Category Badge",
@@ -2575,6 +2621,7 @@
         "maplibre-gl"
       ],
       "registryDependencies": [
+        "@vianova/basemaps",
         "@vianova/use-color-scheme",
         "@vianova/utils"
       ],
