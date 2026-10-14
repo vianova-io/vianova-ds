@@ -14,6 +14,7 @@
     "test:a11y": "playwright test e2e/a11y.spec.ts",
     "test:visual": "playwright test e2e/visual.spec.ts",
     "test:visual:update": "playwright test e2e/visual.spec.ts --update-snapshots",
+    "test:visual:refresh": "playwright test e2e/visual.spec.ts --update-snapshots=all",
     "changelog": "tsx scripts/build-changelog.ts",
     "test:rings": "playwright test e2e/focus-ring.spec.ts",
     "test:sizes": "playwright test e2e/control-size.spec.ts",

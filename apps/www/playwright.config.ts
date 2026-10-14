@@ -20,6 +20,17 @@ export default defineConfig({
     toHaveScreenshot: {
       // Anti-aliasing differs subtly even on one machine; a hard zero would
       // make the suite flap without catching anything real.
+      //
+      // What this number costs, measured rather than guessed: the ranked-bars
+      // rewrite moved 0.65% of its example's pixels -- a real, visible change
+      // -- and passed here untouched. Anything under 1% is invisible both to
+      // this suite and to `--update-snapshots`, which refuses to rewrite a
+      // baseline it considers passing. Use test:visual:refresh for those.
+      //
+      // Judge a diff with Playwright's own rules, not a channel comparison.
+      // pixelmatch applies a per-pixel YIQ tolerance (`threshold`, 0.2 by
+      // default) before counting a pixel as different, so a faint shift across
+      // a whole frame can read as 17% raw and 0% here.
       maxDiffPixelRatio: 0.01,
       animations: "disabled",
     },
