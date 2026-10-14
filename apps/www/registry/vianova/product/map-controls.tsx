@@ -47,7 +47,10 @@ export function MapControls({
           // announced as whatever its label happens to say, which in the map
           // workspace was "Satellite" over a map that was not one.
           aria-label={`Basemap: ${basemapLabel}`}
-          className="flex size-14 items-center justify-center rounded-lg border border-border bg-card/95 text-[10px] text-muted-foreground backdrop-blur transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          // Kept in step with BasemapSwitcher's own trigger: a 32px pill on the
+          // zoom stack's height, rather than the 56px tile this was. Two
+          // shapes for one control in one corner was the loud part.
+          className="flex h-8 items-center rounded-lg border border-border bg-card/95 px-2.5 text-[11px] text-muted-foreground backdrop-blur transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           {basemapLabel}
         </button>

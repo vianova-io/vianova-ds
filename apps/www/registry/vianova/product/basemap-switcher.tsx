@@ -75,9 +75,13 @@ export function BasemapSwitcher({
             trigger ?? (
               <button
                 type="button"
-                // Matches the zoom stack's tile: same size, same surface, same
-                // focus treatment, so the two read as one control cluster.
-                className="flex size-14 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-border bg-card/95 text-[10px] text-muted-foreground backdrop-blur transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                // A 32px pill, matching the zoom stack's button height so the
+                // two stack into one quiet column. It was a 56px tile with the
+                // name set large underneath a 24px thumbnail, which made the
+                // least-used control in the corner the loudest thing in it.
+                // The name stays -- it is the one piece of state here, and an
+                // icon alone would put it back to guessing.
+                className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-card/95 pr-2 pl-1.5 text-[11px] text-muted-foreground backdrop-blur transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               />
             )
           }
@@ -87,7 +91,7 @@ export function BasemapSwitcher({
         >
           {trigger ? null : (
             <>
-              <BasemapPreview id={current.id} className="h-6 w-9 rounded-[3px]" />
+              <BasemapPreview id={current.id} className="h-5 w-7 rounded-[3px]" />
               {current.label}
             </>
           )}
@@ -96,15 +100,21 @@ export function BasemapSwitcher({
         {/* No overflow-hidden anywhere below: a focus ring reaches 3px past its
             box, and clipping it is the bug map-controls.tsx carries a comment
             about. The previews round themselves instead. */}
-        <PopoverContent side={side} align={align} className="w-[260px] p-2">
-          <PopoverTitle id={labelId} className="px-1 pb-2 text-xs text-muted-foreground">
+        {/* shadow-lg, where the rest of the surface is shadow-md: this opens
+            over a floating panel as often as over the map, and at the same
+            elevation as the cards underneath the two merge into one object. */}
+        <PopoverContent side={side} align={align} className="w-[224px] p-1.5 shadow-lg">
+          <PopoverTitle
+            id={labelId}
+            className="px-1.5 pt-0.5 pb-1.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
+          >
             Basemap
           </PopoverTitle>
           <div
             data-slot="basemap-options"
             role="radiogroup"
             aria-labelledby={labelId}
-            className="grid gap-1"
+            className="grid gap-px"
           >
             {BASEMAPS.map((basemap) => {
               const selected = basemap.id === value;
@@ -119,20 +129,28 @@ export function BasemapSwitcher({
                     setOpen(false);
                   }}
                   className={cn(
-                    "flex cursor-pointer items-center gap-2.5 rounded-md p-1.5 text-left transition-colors",
+                    "flex cursor-pointer items-center gap-2 rounded-md p-1 text-left transition-colors",
                     "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-                    selected ? "bg-accent" : "hover:bg-muted",
+                    // One fill, not two. The selected row used to carry a solid
+                    // bg-accent AND a 2px primary ring AND a check, so the open
+                    // menu read as five rows with one of them shouting.
+                    selected ? "bg-muted/60" : "hover:bg-muted/60",
                   )}
                 >
                   <BasemapPreview
                     id={basemap.id}
                     className={cn(
-                      "h-9 w-12 shrink-0 rounded-[3px] ring-1 ring-border",
-                      selected && "ring-2 ring-primary",
+                      "h-7 w-10 shrink-0 rounded-[3px] ring-1",
+                      selected ? "ring-primary" : "ring-border",
                     )}
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-medium text-foreground">
+                    <span
+                      className={cn(
+                        "block truncate text-xs",
+                        selected ? "font-medium text-foreground" : "text-foreground/90",
+                      )}
+                    >
                       {basemap.label}
                     </span>
                     <span className="block truncate text-[10px] text-muted-foreground">

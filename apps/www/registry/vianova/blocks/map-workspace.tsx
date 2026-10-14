@@ -1935,7 +1935,23 @@ export function MapWorkspace({
 
       {/* bottom-12, not bottom-4: the basemap attribution is a 24px bar pinned
           to the bottom-right of the canvas, and at bottom-4 it covers the
-          zoom-out button completely. */}
+          zoom-out button completely.
+
+          xl:right-[372px], not right-4 throughout: the charts panel is
+          `right-4 w-[340px]` and reaches down to `100% - 6rem`, so a
+          corner-pinned cluster sits in its shadow with 8px of clearance -- and
+          the basemap menu, which opens upward, landed squarely on the panel
+          every time. 340 + its 16 + a 16 gutter moves the cluster to the inner
+          edge of the panel, which is the right edge of the map the reader can
+          actually see.
+
+          Only from xl, because below it there is no map to move into. Measured
+          overlap of the open menu with a panel: 86% of the menu at 1024, 54% at
+          1152, 5% at 1280, 0 from 1440. At 1024 the canvas is 728px wide and
+          the two 340px panels plus their insets take 712 of it -- 16px of free
+          map -- so an offset there only trades the charts panel for the data
+          panel. Below xl the menu overlaps a panel and has to read as a layer
+          instead, which is what its elevation is for. */}
       {/* Desktop only, and now for a different reason than before: these used
           to be decorative -- no handlers at all, and a tile labelled
           "Satellite" over a map that was not -- so hiding them below lg cost
@@ -1944,7 +1960,7 @@ export function MapWorkspace({
           stays desktop-only: pinch and double-tap are MapLibre's own handlers
           and are what a thumb reaches for. */}
       <MapControls
-        className="absolute bottom-12 right-4 hidden lg:flex"
+        className="absolute bottom-12 right-4 hidden lg:flex xl:right-[372px]"
         onZoomIn={() => mapRef.current?.zoomIn()}
         onZoomOut={() => mapRef.current?.zoomOut()}
         basemap={
