@@ -190,10 +190,11 @@ test.describe("basemap switcher", () => {
   });
 
   test("a basemap sharing another's style still gets its own overlays", async ({ page }) => {
-    // Plan and Terrain resolve to the SAME CARTO style in dark -- both are Dark
-    // Matter -- and differ only by the hillshade laid over it. That makes this
-    // the one pair that exercises the swap path where `setStyle` is correctly
-    // skipped and the overlays still have to be reconciled, in both directions.
+    // Plan and Terrain resolve to the SAME CARTO style in BOTH schemes -- the
+    // neutral pair, Positron or Dark Matter -- and differ only by the hillshade
+    // laid over it. That makes this the pair that exercises the swap path where
+    // `setStyle` is correctly skipped and the overlays still have to be
+    // reconciled, in both directions.
     //
     // It is not hypothetical: with `style` alone in the swap effect's deps, the
     // effect never ran for this pair, and Terrain silently had no hillshade.

@@ -90,11 +90,29 @@ const CARTO_GLYPHS =
 const FONT_REGULAR = "Open Sans Regular";
 const FONT_BOLD = "Open Sans Bold";
 
+/**
+ * Positron and Dark Matter -- CARTO's neutral pair, and the only pair where the
+ * basemap is the same map in both schemes and only its luminance moves.
+ *
+ * Plan held Voyager in the light slot, which made it a different map by theme
+ * rather than a lighter one: Voyager is the colourful street style, with green
+ * landuse and tinted roads, against a neutral grey in dark. Over a data layer
+ * that is itself carrying colour, the base has no business bringing its own.
+ *
+ * Plan and Terrain therefore resolve to the SAME style in both schemes, and
+ * differ only by the hillshade over it -- which is the honest description of
+ * what Terrain is. That makes the shared-style swap path in map-canvas the
+ * normal case rather than a dark-mode edge case: no setStyle, overlays
+ * reconciled in both directions. See the `appliedStyleRef` guard there.
+ */
+const NEUTRAL_STYLE = {
+  light: `${CARTO}/positron-gl-style/style.json`,
+  dark: `${CARTO}/dark-matter-gl-style/style.json`,
+} as const;
+
 const STYLE_URLS = {
-  plan: { light: `${CARTO}/voyager-gl-style/style.json`, dark: `${CARTO}/dark-matter-gl-style/style.json` },
-  // Positron rather than Voyager under the hillshade: relief wants a base that
-  // is already quiet, and Voyager's landuse fights the shading.
-  terrain: { light: `${CARTO}/positron-gl-style/style.json`, dark: `${CARTO}/dark-matter-gl-style/style.json` },
+  plan: NEUTRAL_STYLE,
+  terrain: NEUTRAL_STYLE,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -114,7 +132,7 @@ export const BASEMAPS: readonly Basemap[] = [
   {
     id: "plan",
     label: "Plan",
-    hint: "Streets, labels and landuse",
+    hint: "Neutral street map, light or dark with the theme",
     mapScheme: { light: "brand", dark: "viridis" },
   },
   {
