@@ -1175,10 +1175,31 @@ export function MapWorkspace({
     ],
   );
 
+  /**
+   * syncLayer, plus a record of what actually landed.
+   *
+   * syncLayer opens with `if (!map.isStyleLoaded()) return` -- correct, since
+   * addSource throws against a half-built style, but it means a sync can do
+   * nothing at all and say nothing about it. That is exactly how the data
+   * layer vanished on Satellite -> Terrain and nowhere else: MapCanvas handed
+   * over a style that applying the hillshade had just un-readied, this bailed,
+   * and no error was raised anywhere. The attribute is read by
+   * map-workspace-basemap.spec, which is the only way that failure is visible
+   * from outside the WebGL canvas.
+   */
+  const [dataLayerPainted, setDataLayerPainted] = React.useState(false);
+  const syncAndReport = React.useCallback(
+    (map: MapLibreMap) => {
+      syncLayer(map);
+      setDataLayerPainted(LAYERS.some((id) => !!map.getLayer(id)));
+    },
+    [syncLayer],
+  );
+
   React.useEffect(() => {
     const map = mapRef.current;
-    if (map) syncLayer(map);
-  }, [syncLayer]);
+    if (map) syncAndReport(map);
+  }, [syncAndReport]);
 
   const stats = React.useMemo(() => {
     let total = 0;
@@ -1244,6 +1265,7 @@ export function MapWorkspace({
     <div
       ref={rootRef}
       data-map-scheme={mapScheme}
+      data-map-layer={dataLayerPainted ? "on" : "off"}
       className={cn(
         // svh, not dvh. dvh tracks the mobile address bar as it hides and
         // shows, so every scroll gesture would resize this box -- and MapLibre
@@ -1271,7 +1293,7 @@ export function MapWorkspace({
         onStyleReady={(ready) => {
           mapRef.current = ready;
           setMap(ready);
-          syncLayer(ready);
+          syncAndReport(ready);
         }}
       />
 
@@ -1937,21 +1959,19 @@ export function MapWorkspace({
           to the bottom-right of the canvas, and at bottom-4 it covers the
           zoom-out button completely.
 
-          xl:right-[372px], not right-4 throughout: the charts panel is
-          `right-4 w-[340px]` and reaches down to `100% - 6rem`, so a
-          corner-pinned cluster sits in its shadow with 8px of clearance -- and
-          the basemap menu, which opens upward, landed squarely on the panel
-          every time. 340 + its 16 + a 16 gutter moves the cluster to the inner
-          edge of the panel, which is the right edge of the map the reader can
-          actually see.
+          right-4 at every width: map controls belong in the corner, and a
+          cluster floating mid-canvas to dodge the charts panel looked like a
+          mistake even when it dodged successfully.
 
-          Only from xl, because below it there is no map to move into. Measured
-          overlap of the open menu with a panel: 86% of the menu at 1024, 54% at
-          1152, 5% at 1280, 0 from 1440. At 1024 the canvas is 728px wide and
-          the two 340px panels plus their insets take 712 of it -- 16px of free
-          map -- so an offset there only trades the charts panel for the data
-          panel. Below xl the menu overlaps a panel and has to read as a layer
-          instead, which is what its elevation is for. */}
+          This did briefly sit at `xl:right-[372px]`, against the inner edge of
+          the charts panel, because the basemap menu opens upward and landed on
+          that panel. What made the corner workable again is the menu itself:
+          as a stacked list of five it was 224x290 and swallowed the panel, and
+          as a row of three squares it is 192x114 -- a small popover over a
+          panel, which is what a popover is supposed to look like. Below xl the
+          offset never helped anyway: at 1024 the canvas is 728px and the two
+          340px panels plus insets take 712 of it, so it only traded the charts
+          panel for the data panel. Its elevation is what carries it now. */}
       {/* Desktop only, and now for a different reason than before: these used
           to be decorative -- no handlers at all, and a tile labelled
           "Satellite" over a map that was not -- so hiding them below lg cost
@@ -1960,7 +1980,7 @@ export function MapWorkspace({
           stays desktop-only: pinch and double-tap are MapLibre's own handlers
           and are what a thumb reaches for. */}
       <MapControls
-        className="absolute bottom-12 right-4 hidden lg:flex xl:right-[372px]"
+        className="absolute bottom-12 right-4 hidden lg:flex"
         onZoomIn={() => mapRef.current?.zoomIn()}
         onZoomOut={() => mapRef.current?.zoomOut()}
         basemap={

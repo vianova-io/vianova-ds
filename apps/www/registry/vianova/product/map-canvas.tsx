@@ -111,6 +111,24 @@ export type MapCanvasProps = Omit<React.ComponentProps<"div">, "onLoad"> & {
  * announcing into that one and giving up is exactly how custom layers vanish
  * on a theme change and never come back.
  */
+/*
+ * Applying overlays un-readies the style, so the caller's hook needs its own
+ * gate after them.
+ *
+ * Measured, with `isStyleLoaded()` sampled either side of applyBasemapOverlays:
+ *
+ *   Plan -> Satellite     before=true  after=true
+ *   Satellite -> Plan     before=true  after=true
+ *   Satellite -> Terrain  before=true  after=FALSE
+ *
+ * Only Terrain carries an overlay, and adding its raster-dem source flips the
+ * style back to not-loaded. Firing onStyleReady straight afterwards handed the
+ * caller a style that was not done, its addSource was dropped on the floor
+ * without throwing, and the data layer simply never came back -- on exactly
+ * one of the six transitions, which is what made it look like a Terrain bug
+ * rather than an ordering one. Plan -> Terrain was unaffected because that
+ * pair shares a style and never re-adds anything.
+ */
 function whenStyleReady(map: MapLibreMap, fn: (map: MapLibreMap) => void) {
   const attempt = () => {
     if (map.isStyleLoaded()) fn(map);
@@ -244,7 +262,7 @@ export function MapCanvas({
         // Before the caller's hook, so a hillshade is already in place under
         // whatever they add next and neither has to know about the other.
         applyBasemapOverlays(ready, overlayRef.current.basemap, overlayRef.current.scheme);
-        onStyleReadyRef.current?.(ready);
+        whenStyleReady(ready, (settled) => onStyleReadyRef.current?.(settled));
       });
     });
     map.on("error", (e) => {
@@ -297,7 +315,8 @@ export function MapCanvas({
     map.once("styledata", () => {
       whenStyleReady(map, (ready) => {
         applyBasemapOverlays(ready, overlayRef.current.basemap, overlayRef.current.scheme);
-        onStyleReadyRef.current?.(ready);
+        // Gate AGAIN before handing the map over -- see notifyStyleReady.
+        whenStyleReady(ready, (settled) => onStyleReadyRef.current?.(settled));
       });
     });
   }, [style, basemapId]);

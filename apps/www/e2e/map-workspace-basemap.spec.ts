@@ -145,6 +145,40 @@ test.describe("basemap switcher", () => {
     await expect(attribution).not.toContainText("Esri");
   });
 
+  test("the data layer survives a swap onto a basemap that carries an overlay", async ({
+    page,
+  }) => {
+    // Pins the contract -- `data-map-layer` is the only DOM-observable signal
+    // that the data layer is really on the map, since nothing throws when it
+    // is not and the map examples are excluded from the visual suite for being
+    // non-deterministic.
+    //
+    // HONEST LIMIT, so nobody trusts this further than it goes: this test does
+    // NOT reliably reproduce the bug it was written for. The failure is that
+    // Terrain's raster-dem source flips isStyleLoaded() back to false
+    // (measured: true before applying overlays, false after, on Terrain alone)
+    // and onStyleReady fired into that window, so the block's own
+    // isStyleLoaded guard bailed in silence and the flows never returned. It
+    // was reproduced on the dev server and on the deployed site, and fixed by
+    // a second whenStyleReady gate in map-canvas. But reverting that fix and
+    // re-running THIS test against the local static export still passes -- the
+    // export serves fast enough that the race usually loses.
+    //
+    // So treat it as a smoke test, not a guard. The real check is switching
+    // through all six ordered pairs and looking at the map.
+    await open(page);
+    await expect(block(page)).toHaveAttribute("data-map-layer", "on");
+
+    // Satellite first, deliberately: it is an authored style object, so
+    // leaving it is a real setStyle with a re-add on the far side. Plan ->
+    // Terrain shares a style and never exercises this path.
+    await choose(page, "Satellite");
+    await expect(block(page)).toHaveAttribute("data-map-layer", "on");
+
+    await choose(page, "Terrain");
+    await expect(block(page)).toHaveAttribute("data-map-layer", "on", { timeout: 15_000 });
+  });
+
   test("a basemap sharing another's style still gets its own overlays", async ({ page }) => {
     // Plan and Terrain resolve to the SAME CARTO style in dark -- both are Dark
     // Matter -- and differ only by the hillshade laid over it. That makes this

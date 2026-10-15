@@ -35,10 +35,10 @@ import { cn } from "@/registry/vianova/lib/utils";
  *
  * ## Shape
  *
- * The trigger is a 32px square -- the zoom buttons' size exactly, so the three
- * stack into one column with no ragged edge -- and shows only the current
- * basemap's thumbnail. The name is the accessible name and the tooltip; the
- * thumbnail is the glance.
+ * The trigger is a 64px square showing only the current basemap's thumbnail.
+ * 64 and not 32: it sits beside the zoom STACK, which is two 32px buttons, so
+ * a single-button square read as undersized next to it. The name is the
+ * accessible name and the tooltip; the thumbnail is the glance.
  *
  * The menu is a row of three rather than a stacked list. Three is small enough
  * to lay out side by side, which costs about a third of the height a list needs
@@ -97,7 +97,7 @@ export function BasemapSwitcher({
                 // size-8 and rounded-lg are the zoom buttons' own values. p-px
                 // leaves a hairline of card around the thumbnail so the square
                 // reads as a control rather than a floating image.
-                className="size-8 cursor-pointer rounded-lg border border-border bg-card/95 p-px backdrop-blur transition-colors hover:border-foreground/25 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                className="size-16 cursor-pointer rounded-lg border border-border bg-card/95 p-px backdrop-blur transition-colors hover:border-foreground/25 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               />
             )
           }
@@ -106,7 +106,7 @@ export function BasemapSwitcher({
           aria-label={`Basemap: ${current.label}`}
         >
           {trigger ? null : (
-            <BasemapPreview id={current.id} className="size-[30px] rounded-[7px]" />
+            <BasemapPreview id={current.id} className="size-[62px] rounded-[7px]" />
           )}
         </PopoverTrigger>
 
