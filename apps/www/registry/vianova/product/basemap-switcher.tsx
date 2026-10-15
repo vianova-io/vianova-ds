@@ -42,11 +42,10 @@ import { cn } from "@/registry/vianova/lib/utils";
  *
  * The menu is a row of three rather than a stacked list, and exactly as tall as
  * the trigger -- 64px, three 56px thumbnails on 4px of padding -- so the open
- * control reads as one band rather than a panel hung off a button. Nothing is
- * written in it: at this height there is no room for a name under a thumbnail,
- * so each option carries its name as `aria-label` and name plus description as
- * its tooltip. The cost is real and worth naming: identity rests on three
- * drawn thumbnails, so they have to stay visually distinct from one another.
+ * control reads as one band rather than a panel hung off a button. There is no
+ * room for a name under a thumbnail at that height, so each name sits inside
+ * its own thumbnail on a gradient scrim, and the tooltip carries the longer
+ * description.
  *
  * As a stacked list this had a layout bug worth remembering. Each row was a
  * grid item, and a grid item is `min-width: auto`, so it would not shrink below
@@ -157,18 +156,33 @@ export function BasemapSwitcher({
                     setOpen(false);
                   }}
                   className={cn(
-                    "size-14 cursor-pointer rounded-[4px] transition-opacity",
+                    "relative size-14 cursor-pointer rounded-[4px] transition-opacity",
                     "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-                    !selected && "opacity-80 hover:opacity-100",
+                    selected ? "ring-2 ring-primary" : "ring-1 ring-border",
+                    !selected && "opacity-85 hover:opacity-100",
                   )}
                 >
-                  <BasemapPreview
-                    id={basemap.id}
-                    className={cn(
-                      "size-full rounded-[4px]",
-                      selected ? "ring-2 ring-primary" : "ring-1 ring-border",
-                    )}
-                  />
+                  <BasemapPreview id={basemap.id} className="size-full rounded-[4px]" />
+                  {/* The name, back inside the thumbnail now that the band is
+                      too short to carry it underneath.
+
+                      On a scrim rather than straight onto the artwork: these
+                      sit over a street grid, a photographic wash and contour
+                      bands, three backgrounds with nothing in common, and
+                      white text is only reliable over the first two. The
+                      gradient makes the bottom strip dark whatever is beneath
+                      it, which is the same reason the satellite basemap itself
+                      carries one.
+
+                      No overflow-hidden on the button, deliberately: that is
+                      the bug map-controls.tsx carries a comment about, since a
+                      focus ring reaches 3px past the box. The preview rounds
+                      itself and the scrim rounds its own two corners. */}
+                  <span
+                    className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-[4px] bg-linear-to-t from-black/85 via-black/60 to-transparent px-1 pt-2 pb-[3px] text-[9px] leading-none font-medium text-white"
+                  >
+                    {basemap.label}
+                  </span>
                 </button>
               );
             })}
