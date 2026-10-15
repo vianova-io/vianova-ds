@@ -69,8 +69,15 @@ async function choose(page: Page, name: string) {
  * layers, no glyphs. That difference is what pushed this file over 30s: the
  * two failures were timeouts at 30.2s and 30.5s, with the passes at 23.7s and
  * 29.6s, i.e. the whole file was already sitting on the limit.
+ *
+ * The inner assertions get 30s each for the same reason, and that is the
+ * number that actually bites: every test here holds a WebGL context and pulls
+ * real vector tiles, so running four at once is four maps competing. Measured
+ * on the Terrain attribution case -- 4/4 passes in isolation at 3.4-7.0s, and
+ * a 15s assertion timeout failing under four parallel workers while two
+ * sibling tests made the identical assertion and passed. Slow, not broken.
  */
-test.describe.configure({ timeout: 60_000 });
+test.describe.configure({ timeout: 90_000 });
 
 test.describe("basemap switcher", () => {
   test.use({ viewport: { width: 1280, height: 900 } });
@@ -138,10 +145,10 @@ test.describe("basemap switcher", () => {
     // switcher doing anything at all. Leaving and coming back is the only form
     // of this assertion that tests something.
     await choose(page, "Satellite");
-    await expect(attribution).toContainText("Esri", { timeout: 15_000 });
+    await expect(attribution).toContainText("Esri", { timeout: 30_000 });
 
     await choose(page, "Plan");
-    await expect(attribution).toContainText("CARTO", { timeout: 15_000 });
+    await expect(attribution).toContainText("CARTO", { timeout: 30_000 });
     await expect(attribution).not.toContainText("Esri");
   });
 
@@ -166,17 +173,20 @@ test.describe("basemap switcher", () => {
     //
     // So treat it as a smoke test, not a guard. The real check is switching
     // through all six ordered pairs and looking at the map.
+    // Every wait here is explicit. The attribute only turns on once the style
+    // has loaded and the block has synced onto it, which is well past the 5s
+    // default -- asserting it bare fails on a cold first paint, not on a bug.
     await open(page);
-    await expect(block(page)).toHaveAttribute("data-map-layer", "on");
+    await expect(block(page)).toHaveAttribute("data-map-layer", "on", { timeout: 30_000 });
 
     // Satellite first, deliberately: it is an authored style object, so
     // leaving it is a real setStyle with a re-add on the far side. Plan ->
     // Terrain shares a style and never exercises this path.
     await choose(page, "Satellite");
-    await expect(block(page)).toHaveAttribute("data-map-layer", "on");
+    await expect(block(page)).toHaveAttribute("data-map-layer", "on", { timeout: 30_000 });
 
     await choose(page, "Terrain");
-    await expect(block(page)).toHaveAttribute("data-map-layer", "on", { timeout: 15_000 });
+    await expect(block(page)).toHaveAttribute("data-map-layer", "on", { timeout: 30_000 });
   });
 
   test("a basemap sharing another's style still gets its own overlays", async ({ page }) => {
@@ -191,10 +201,10 @@ test.describe("basemap switcher", () => {
     const attribution = block(page).locator(".maplibregl-ctrl-attrib");
 
     await choose(page, "Terrain");
-    await expect(attribution).toContainText("Terrain Tiles", { timeout: 15_000 });
+    await expect(attribution).toContainText("Terrain Tiles", { timeout: 30_000 });
 
     await choose(page, "Plan");
-    await expect(attribution).not.toContainText("Terrain Tiles", { timeout: 15_000 });
+    await expect(attribution).not.toContainText("Terrain Tiles", { timeout: 30_000 });
     await expect(attribution).toContainText("CARTO");
   });
 

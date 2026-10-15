@@ -118,10 +118,12 @@ export function BasemapSwitcher({
             box, and clipping it is the bug map-controls.tsx carries a comment
             about. The thumbnails round themselves instead. */}
         <PopoverContent side={side} align={align} className="w-auto p-1.5 shadow-lg">
-          <PopoverTitle
-            id={labelId}
-            className="px-1 pt-0.5 pb-1.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
-          >
+          {/* sr-only, not deleted. Three labelled thumbnails say what this is
+              without a caption over them, and the caption was a third of the
+              panel's height. But the popover still needs an accessible name,
+              and the radiogroup below still points at this id -- drop the
+              element and both lose their name while looking identical. */}
+          <PopoverTitle id={labelId} className="sr-only">
             Basemap
           </PopoverTitle>
           <div

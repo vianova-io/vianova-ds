@@ -1967,8 +1967,8 @@ export function MapWorkspace({
           the charts panel, because the basemap menu opens upward and landed on
           that panel. What made the corner workable again is the menu itself:
           as a stacked list of five it was 224x290 and swallowed the panel, and
-          as a row of three squares it is 192x114 -- a small popover over a
-          panel, which is what a popover is supposed to look like. Below xl the
+          as a row of three squares with no title it is 192x82 -- a small
+          popover over a panel, which is what a popover should look like. Below xl the
           offset never helped anyway: at 1024 the canvas is 728px and the two
           340px panels plus insets take 712 of it, so it only traded the charts
           panel for the data panel. Its elevation is what carries it now. */}
@@ -1987,7 +1987,12 @@ export function MapWorkspace({
           <BasemapSwitcher
             value={basemapId}
             onValueChange={setBasemapId}
-            side="top"
+            // Left, not top. Opening upward from a corner trigger stacks the
+            // menu on the charts panel; opening leftward runs it along the
+            // free band under that panel instead, where a 192x82 row of three
+            // mostly fits. The mobile instance keeps `bottom`: its trigger is
+            // in the toolbar at the top, where leftward would leave the panel.
+            side="left"
             align="end"
           />
         }
