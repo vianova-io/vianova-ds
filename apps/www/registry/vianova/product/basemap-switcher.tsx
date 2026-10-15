@@ -40,14 +40,19 @@ import { cn } from "@/registry/vianova/lib/utils";
  * a single-button square read as undersized next to it. The name is the
  * accessible name and the tooltip; the thumbnail is the glance.
  *
- * The menu is a row of three rather than a stacked list. Three is small enough
- * to lay out side by side, which costs about a third of the height a list needs
- * and lets the thumbnails grow instead -- the thumbnail is the thing worth
- * looking at. It also ends a layout bug: as a list, each row was a grid item,
- * and a grid item is `min-width: auto`, so it would not shrink below its own
- * text. `truncate` never engaged, the longest hint set the width of every row,
- * and the rows and their check marks were drawn 70px outside the rounded panel
- * they belonged to.
+ * The menu is a row of three rather than a stacked list, and exactly as tall as
+ * the trigger -- 64px, three 56px thumbnails on 4px of padding -- so the open
+ * control reads as one band rather than a panel hung off a button. Nothing is
+ * written in it: at this height there is no room for a name under a thumbnail,
+ * so each option carries its name as `aria-label` and name plus description as
+ * its tooltip. The cost is real and worth naming: identity rests on three
+ * drawn thumbnails, so they have to stay visually distinct from one another.
+ *
+ * As a stacked list this had a layout bug worth remembering. Each row was a
+ * grid item, and a grid item is `min-width: auto`, so it would not shrink below
+ * its own text: `truncate` never engaged, the longest hint set the width of
+ * every row, and the rows and their check marks were drawn 70px outside the
+ * rounded panel they belonged to.
  *
  * ## Why a radiogroup
  *
@@ -117,7 +122,7 @@ export function BasemapSwitcher({
             No overflow-hidden anywhere below: a focus ring reaches 3px past its
             box, and clipping it is the bug map-controls.tsx carries a comment
             about. The thumbnails round themselves instead. */}
-        <PopoverContent side={side} align={align} className="w-auto p-1.5 shadow-lg">
+        <PopoverContent side={side} align={align} className="w-auto p-1 shadow-lg">
           {/* sr-only, not deleted. Three labelled thumbnails say what this is
               without a caption over them, and the caption was a third of the
               panel's height. But the popover still needs an accessible name,
@@ -130,7 +135,7 @@ export function BasemapSwitcher({
             data-slot="basemap-options"
             role="radiogroup"
             aria-labelledby={labelId}
-            className="flex gap-1.5"
+            className="flex gap-1"
           >
             {BASEMAPS.map((basemap) => {
               const selected = basemap.id === value;
@@ -140,34 +145,30 @@ export function BasemapSwitcher({
                   type="button"
                   role="radio"
                   aria-checked={selected}
-                  // The one-line description each row used to print. Worth
-                  // keeping, not worth the height, so it lives here.
-                  title={basemap.hint}
+                  // The name and the one-line description both live here now
+                  // that neither is printed. aria-label is load-bearing, not
+                  // decoration: with the caption gone there is no text in this
+                  // button at all, so without it the radio has no accessible
+                  // name and announces as "blank".
+                  aria-label={basemap.label}
+                  title={`${basemap.label} -- ${basemap.hint}`}
                   onClick={() => {
                     onValueChange(basemap.id);
                     setOpen(false);
                   }}
                   className={cn(
-                    "flex w-14 cursor-pointer flex-col items-center gap-1 rounded-md p-1 transition-colors",
+                    "size-14 cursor-pointer rounded-[4px] transition-opacity",
                     "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-                    !selected && "hover:bg-muted/60",
+                    !selected && "opacity-80 hover:opacity-100",
                   )}
                 >
                   <BasemapPreview
                     id={basemap.id}
                     className={cn(
-                      "size-12 rounded-[4px]",
+                      "size-full rounded-[4px]",
                       selected ? "ring-2 ring-primary" : "ring-1 ring-border",
                     )}
                   />
-                  <span
-                    className={cn(
-                      "text-[10px] leading-none",
-                      selected ? "font-medium text-foreground" : "text-muted-foreground",
-                    )}
-                  >
-                    {basemap.label}
-                  </span>
                 </button>
               );
             })}
