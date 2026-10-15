@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Minus, Plus } from "lucide-react";
+import { Layers, Minus, Plus } from "lucide-react";
 
 import { Button } from "@/registry/vianova/ui/button";
 import { Separator } from "@/registry/vianova/ui/separator";
@@ -47,12 +47,20 @@ export function MapControls({
           // announced as whatever its label happens to say, which in the map
           // workspace was "Satellite" over a map that was not one.
           aria-label={`Basemap: ${basemapLabel}`}
-          // Kept in step with BasemapSwitcher's own trigger: a 32px pill on the
-          // zoom stack's height, rather than the 56px tile this was. Two
-          // shapes for one control in one corner was the loud part.
-          className="flex h-8 items-center rounded-lg border border-border bg-card/95 px-2.5 text-[11px] text-muted-foreground backdrop-blur transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          title={`Basemap: ${basemapLabel}`}
+          // Kept in step with BasemapSwitcher's own trigger: a 32px square on
+          // the zoom stack's size, rather than the 56px tile with the name set
+          // inside it that this was. Two shapes for one control in one corner
+          // was the loud part.
+          //
+          // An icon and not the name, because 32px does not hold "Satellite".
+          // The real switcher shows the basemap's own thumbnail here; this
+          // fallback has no thumbnail to show, only a string, so it shows what
+          // the control is instead and leaves the name to the accessible name
+          // and the tooltip.
+          className="flex size-8 items-center justify-center rounded-lg border border-border bg-card/95 text-muted-foreground backdrop-blur transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
-          {basemapLabel}
+          <Layers className="size-4" aria-hidden />
         </button>
       )}
       {/*

@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Check } from "lucide-react";
 
 import {
   BASEMAPS,
   BASEMAP_BY_ID,
+  DEFAULT_BASEMAP_ID,
   type BasemapId,
 } from "@/registry/vianova/lib/basemaps";
 import {
@@ -21,24 +21,42 @@ import { cn } from "@/registry/vianova/lib/utils";
  *
  * ## The previews are drawn, not photographed
  *
- * The obvious build is five little live maps. It is also the wrong one: five
- * WebGL contexts and five tile streams, torn down and rebuilt every time a
+ * The obvious build is three little live maps. It is also the wrong one: three
+ * WebGL contexts and three tile streams, torn down and rebuilt every time a
  * popover opens, for a control that is shut almost always. Worse for this repo,
  * it would be non-deterministic, and the examples could then never be
  * pixel-pinned -- `map-canvas-default` is already excluded from the visual
  * suite for exactly that reason.
  *
- * So each option draws a 2-line SVG impression of what it is: a street grid, the
- * same grid gone quiet, a photographic wash, contour bands, nothing at all.
- * They cost no network, theme themselves from tokens, and are honest about
- * being a legend rather than a picture of your city.
+ * So each option draws a square impression of what it is: a street grid, a
+ * photographic wash, contour bands. They cost no network, theme themselves from
+ * tokens, and are honest about being a legend rather than a picture of your
+ * city.
+ *
+ * ## Shape
+ *
+ * The trigger is a 32px square -- the zoom buttons' size exactly, so the three
+ * stack into one column with no ragged edge -- and shows only the current
+ * basemap's thumbnail. The name is the accessible name and the tooltip; the
+ * thumbnail is the glance.
+ *
+ * The menu is a row of three rather than a stacked list. Three is small enough
+ * to lay out side by side, which costs about a third of the height a list needs
+ * and lets the thumbnails grow instead -- the thumbnail is the thing worth
+ * looking at. It also ends a layout bug: as a list, each row was a grid item,
+ * and a grid item is `min-width: auto`, so it would not shrink below its own
+ * text. `truncate` never engaged, the longest hint set the width of every row,
+ * and the rows and their check marks were drawn 70px outside the rounded panel
+ * they belonged to.
  *
  * ## Why a radiogroup
  *
- * Five options, exactly one chosen. `role="radio"` inside `role="radiogroup"`
- * gives arrow-key traversal and announces "3 of 5" without any of it being
- * written here. The selected option carries `aria-checked` AND a ring AND a
- * check glyph -- three signals, because colour alone is not one.
+ * Three options, exactly one chosen. `role="radio"` inside `role="radiogroup"`
+ * gives arrow-key traversal and announces "2 of 3" without any of it being
+ * written here. Selection is carried by `aria-checked`, by a ring present on
+ * one thumbnail and absent on the others, and by the weight of the name -- an
+ * outline appearing where there was none reads without colour vision, which a
+ * teal ring alone would not.
  */
 export function BasemapSwitcher({
   value,
@@ -56,12 +74,12 @@ export function BasemapSwitcher({
   align?: "start" | "center" | "end";
   defaultOpen?: boolean;
   /**
-   * Replaces the default 56px tile, e.g. with a toolbar-sized icon button.
+   * Replaces the default 32px tile, e.g. with a toolbar-sized icon button.
    * A single element, because Base UI merges its popover props onto it.
    */
   trigger?: React.ReactElement;
 }) {
-  const current = BASEMAP_BY_ID[value] ?? BASEMAP_BY_ID.muted;
+  const current = BASEMAP_BY_ID[value] ?? BASEMAP_BY_ID[DEFAULT_BASEMAP_ID];
   const labelId = React.useId();
   // Controlled so choosing dismisses. A picker that stays open after you have
   // picked leaves the thing you were comparing hidden behind itself.
@@ -75,13 +93,11 @@ export function BasemapSwitcher({
             trigger ?? (
               <button
                 type="button"
-                // A 32px pill, matching the zoom stack's button height so the
-                // two stack into one quiet column. It was a 56px tile with the
-                // name set large underneath a 24px thumbnail, which made the
-                // least-used control in the corner the loudest thing in it.
-                // The name stays -- it is the one piece of state here, and an
-                // icon alone would put it back to guessing.
-                className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-card/95 pr-2 pl-1.5 text-[11px] text-muted-foreground backdrop-blur transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                title={`Basemap: ${current.label}`}
+                // size-8 and rounded-lg are the zoom buttons' own values. p-px
+                // leaves a hairline of card around the thumbnail so the square
+                // reads as a control rather than a floating image.
+                className="size-8 cursor-pointer rounded-lg border border-border bg-card/95 p-px backdrop-blur transition-colors hover:border-foreground/25 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               />
             )
           }
@@ -90,23 +106,21 @@ export function BasemapSwitcher({
           aria-label={`Basemap: ${current.label}`}
         >
           {trigger ? null : (
-            <>
-              <BasemapPreview id={current.id} className="h-5 w-7 rounded-[3px]" />
-              {current.label}
-            </>
+            <BasemapPreview id={current.id} className="size-[30px] rounded-[7px]" />
           )}
         </PopoverTrigger>
 
-        {/* No overflow-hidden anywhere below: a focus ring reaches 3px past its
+        {/* shadow-lg, where the rest of the surface is shadow-md: below xl this
+            opens over a floating panel, and at the same elevation as the cards
+            underneath the two merge into one object.
+
+            No overflow-hidden anywhere below: a focus ring reaches 3px past its
             box, and clipping it is the bug map-controls.tsx carries a comment
-            about. The previews round themselves instead. */}
-        {/* shadow-lg, where the rest of the surface is shadow-md: this opens
-            over a floating panel as often as over the map, and at the same
-            elevation as the cards underneath the two merge into one object. */}
-        <PopoverContent side={side} align={align} className="w-[224px] p-1.5 shadow-lg">
+            about. The thumbnails round themselves instead. */}
+        <PopoverContent side={side} align={align} className="w-auto p-1.5 shadow-lg">
           <PopoverTitle
             id={labelId}
-            className="px-1.5 pt-0.5 pb-1.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
+            className="px-1 pt-0.5 pb-1.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
           >
             Basemap
           </PopoverTitle>
@@ -114,7 +128,7 @@ export function BasemapSwitcher({
             data-slot="basemap-options"
             role="radiogroup"
             aria-labelledby={labelId}
-            className="grid gap-px"
+            className="flex gap-1.5"
           >
             {BASEMAPS.map((basemap) => {
               const selected = basemap.id === value;
@@ -124,46 +138,34 @@ export function BasemapSwitcher({
                   type="button"
                   role="radio"
                   aria-checked={selected}
+                  // The one-line description each row used to print. Worth
+                  // keeping, not worth the height, so it lives here.
+                  title={basemap.hint}
                   onClick={() => {
                     onValueChange(basemap.id);
                     setOpen(false);
                   }}
                   className={cn(
-                    "flex cursor-pointer items-center gap-2 rounded-md p-1 text-left transition-colors",
+                    "flex w-14 cursor-pointer flex-col items-center gap-1 rounded-md p-1 transition-colors",
                     "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-                    // One fill, not two. The selected row used to carry a solid
-                    // bg-accent AND a 2px primary ring AND a check, so the open
-                    // menu read as five rows with one of them shouting.
-                    selected ? "bg-muted/60" : "hover:bg-muted/60",
+                    !selected && "hover:bg-muted/60",
                   )}
                 >
                   <BasemapPreview
                     id={basemap.id}
                     className={cn(
-                      "h-7 w-10 shrink-0 rounded-[3px] ring-1",
-                      selected ? "ring-primary" : "ring-border",
+                      "size-12 rounded-[4px]",
+                      selected ? "ring-2 ring-primary" : "ring-1 ring-border",
                     )}
                   />
-                  <span className="min-w-0 flex-1">
-                    <span
-                      className={cn(
-                        "block truncate text-xs",
-                        selected ? "font-medium text-foreground" : "text-foreground/90",
-                      )}
-                    >
-                      {basemap.label}
-                    </span>
-                    <span className="block truncate text-[10px] text-muted-foreground">
-                      {basemap.hint}
-                    </span>
-                  </span>
-                  <Check
-                    aria-hidden
+                  <span
                     className={cn(
-                      "size-3.5 shrink-0 text-primary",
-                      selected ? "opacity-100" : "opacity-0",
+                      "text-[10px] leading-none",
+                      selected ? "font-medium text-foreground" : "text-muted-foreground",
                     )}
-                  />
+                  >
+                    {basemap.label}
+                  </span>
                 </button>
               );
             })}
@@ -175,34 +177,33 @@ export function BasemapSwitcher({
 }
 
 /**
- * A drawn impression of a basemap.
+ * A drawn impression of a basemap, square.
  *
- * Deliberately schematic. A 48x36 photograph of anywhere is unreadable, and a
+ * Deliberately schematic. A 48px photograph of anywhere is unreadable, and a
  * photograph of the WRONG place is worse than a diagram -- it implies the map
  * will look like that, in a product whose maps are of the reader's own city.
- * Token colours throughout, so each one themes itself.
+ * Token colours wherever the thing drawn is UI; literal colours only for the
+ * satellite wash, which is a photograph and has no token.
  */
 function BasemapPreview({ id, className }: { id: BasemapId; className?: string }) {
-  const common = { viewBox: "0 0 48 36", "aria-hidden": true as const, className };
-
-  if (id === "blank") {
-    return (
-      <svg {...common}>
-        <rect width="48" height="36" className="fill-surface-sunken" />
-      </svg>
-    );
-  }
+  const common = { viewBox: "0 0 36 36", "aria-hidden": true as const, className };
 
   if (id === "satellite") {
     return (
       <svg {...common}>
-        <rect width="48" height="36" fill="#1f3326" />
-        <path d="M0 22 L14 15 L26 20 L38 11 L48 16 V36 H0Z" fill="#2f4a33" />
-        <path d="M0 30 L16 26 L30 31 L48 27 V36 H0Z" fill="#24402c" />
-        <circle cx="34" cy="8" r="6" fill="#3c5a3f" />
-        {/* The giveaway that it is a hybrid: roads and a label over the photo. */}
-        <path d="M2 26 L22 18 L46 22" stroke="#ffffff" strokeOpacity="0.55" strokeWidth="1.2" fill="none" />
-        <rect x="18" y="8" width="11" height="2" rx="1" fill="#ffffff" fillOpacity="0.75" />
+        <rect width="36" height="36" fill="#1f3326" />
+        <path d="M0 22 L10 15 L20 20 L28 11 L36 16 V36 H0Z" fill="#2f4a33" />
+        <path d="M0 30 L12 26 L22 31 L36 27 V36 H0Z" fill="#24402c" />
+        <circle cx="27" cy="7" r="5" fill="#3c5a3f" />
+        {/* The giveaway that it is a hybrid: a road and a label over the photo. */}
+        <path
+          d="M2 27 L16 18 L34 22"
+          stroke="#ffffff"
+          strokeOpacity="0.55"
+          strokeWidth="1.2"
+          fill="none"
+        />
+        <rect x="12" y="7" width="10" height="2" rx="1" fill="#ffffff" fillOpacity="0.75" />
       </svg>
     );
   }
@@ -210,46 +211,53 @@ function BasemapPreview({ id, className }: { id: BasemapId; className?: string }
   if (id === "terrain") {
     return (
       <svg {...common}>
-        <rect width="48" height="36" className="fill-surface-sunken" />
+        <rect width="36" height="36" className="fill-surface-sunken" />
         {[0.35, 0.28, 0.2, 0.12].map((opacity, i) => (
           <path
             key={i}
-            d={`M-2 ${30 - i * 5} Q 12 ${22 - i * 5} 24 ${27 - i * 5} T 50 ${23 - i * 5}`}
+            d={`M-2 ${30 - i * 6} Q 9 ${21 - i * 6} 18 ${26 - i * 6} T 38 ${22 - i * 6}`}
             className="stroke-foreground"
             strokeOpacity={opacity}
             strokeWidth="1.1"
             fill="none"
           />
         ))}
-        <path d="M4 34 L20 20 L30 26 L44 14" className="stroke-muted-foreground" strokeWidth="1" fill="none" />
+        <path
+          d="M3 34 L15 19 L23 26 L33 11"
+          className="stroke-muted-foreground"
+          strokeWidth="1"
+          fill="none"
+        />
       </svg>
     );
   }
 
-  // Plan and Muted share a street grid; Muted simply says it more quietly,
-  // which is the whole difference between them.
-  const quiet = id === "muted";
+  // Plan: a street grid with one landuse block and one route.
   return (
     <svg {...common}>
-      <rect width="48" height="36" className="fill-surface-sunken" />
-      {!quiet ? <path d="M0 24 L18 24 L18 36 L0 36Z" className="fill-primary" fillOpacity="0.12" /> : null}
+      <rect width="36" height="36" className="fill-surface-sunken" />
+      <path d="M0 22 L14 22 L14 36 L0 36Z" className="fill-primary" fillOpacity="0.12" />
       <path
-        d="M30 0 L30 36 M0 14 L48 14"
+        d="M22 0 L22 36 M0 11 L36 11"
         className="stroke-foreground"
-        strokeOpacity={quiet ? 0.18 : 0.34}
+        strokeOpacity="0.34"
         strokeWidth="1.6"
         fill="none"
       />
       <path
-        d="M12 0 L12 36 M0 27 L48 27 M40 0 L40 36"
+        d="M8 0 L8 36 M0 25 L36 25 M30 0 L30 36"
         className="stroke-foreground"
-        strokeOpacity={quiet ? 0.1 : 0.2}
+        strokeOpacity="0.2"
         strokeWidth="1"
         fill="none"
       />
-      {!quiet ? (
-        <path d="M0 6 Q 16 10 48 4" className="stroke-primary" strokeOpacity="0.5" strokeWidth="1.4" fill="none" />
-      ) : null}
+      <path
+        d="M0 5 Q 12 8 36 3"
+        className="stroke-primary"
+        strokeOpacity="0.5"
+        strokeWidth="1.4"
+        fill="none"
+      />
     </svg>
   );
 }

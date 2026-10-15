@@ -18,14 +18,14 @@ import { resolveCssColor } from "@/registry/vianova/lib/css-color";
  *   Plan, Muted      a CARTO style URL per scheme, nothing else
  *   Satellite        an authored StyleSpecification -- imagery needs to sit
  *                    UNDER labels, which only works if we own the layer list
- *   Terrain, Blank   a base style plus a layer injected at style-ready
+ *   Terrain          a base style plus a layer injected at style-ready
  *
  * The asymmetry is forced, not stylistic.
  */
 
 type StyleLike = string | StyleSpecification;
 
-export type BasemapId = "plan" | "muted" | "satellite" | "terrain" | "blank";
+export type BasemapId = "plan" | "satellite" | "terrain";
 
 /** The four data ramps the token pipeline emits as `[data-map-scheme]`. */
 export type MapScheme = "brand" | "warm" | "viridis" | "blue";
@@ -92,12 +92,8 @@ const FONT_BOLD = "Open Sans Bold";
 
 const STYLE_URLS = {
   plan: { light: `${CARTO}/voyager-gl-style/style.json`, dark: `${CARTO}/dark-matter-gl-style/style.json` },
-  // The no-labels variants, deliberately. With labels, Muted-dark and Plan-dark
-  // are both Dark Matter and the switcher would offer the same picture twice.
-  muted: {
-    light: `${CARTO}/positron-nolabels-gl-style/style.json`,
-    dark: `${CARTO}/dark-matter-nolabels-gl-style/style.json`,
-  },
+  // Positron rather than Voyager under the hillshade: relief wants a base that
+  // is already quiet, and Voyager's landuse fights the shading.
   terrain: { light: `${CARTO}/positron-gl-style/style.json`, dark: `${CARTO}/dark-matter-gl-style/style.json` },
 } as const;
 
@@ -105,13 +101,16 @@ const STYLE_URLS = {
 // The basemaps
 // ---------------------------------------------------------------------------
 
+/**
+ * Streets, imagery, relief -- the triad every GIS basemap gallery ships, and
+ * the three that answer different questions: what is there, what it looks
+ * like, what shape the ground is.
+ *
+ * Muted (a no-labels grey canvas) and Blank were here and are gone. Muted was
+ * the default, and dropping it means Plan is: the data now sits on a basemap
+ * that has colour of its own, which is the cost of the shorter list.
+ */
 export const BASEMAPS: readonly Basemap[] = [
-  {
-    id: "muted",
-    label: "Muted",
-    hint: "Quiet base, so the data carries the colour",
-    mapScheme: { light: "brand", dark: "viridis" },
-  },
   {
     id: "plan",
     label: "Plan",
@@ -136,12 +135,6 @@ export const BASEMAPS: readonly Basemap[] = [
     mapScheme: { light: "blue", dark: "viridis" },
     hillshade: true,
   },
-  {
-    id: "blank",
-    label: "Blank",
-    hint: "No basemap at all, for exports and print",
-    mapScheme: { light: "brand", dark: "viridis" },
-  },
 ] as const;
 
 export const BASEMAP_IDS: readonly BasemapId[] = BASEMAPS.map((b) => b.id);
@@ -150,8 +143,8 @@ export const BASEMAP_BY_ID: Record<BasemapId, Basemap> = Object.fromEntries(
   BASEMAPS.map((b) => [b.id, b]),
 ) as Record<BasemapId, Basemap>;
 
-/** Muted, which is what shipped before there was a choice. */
-export const DEFAULT_BASEMAP_ID: BasemapId = "muted";
+/** Plan. Muted held this until the gallery was cut to three. */
+export const DEFAULT_BASEMAP_ID: BasemapId = "plan";
 
 export const MAP_SCHEME_LABELS: Record<MapScheme, string> = {
   brand: "Brand",
@@ -299,32 +292,9 @@ function satelliteStyle(scheme: "light" | "dark"): StyleSpecification {
 }
 
 /**
- * One background layer and no sources, so nothing is fetched at all.
- *
- * Note for anyone reading the attribution control after switching to this:
- * MapLibre hides an empty credit line with the class `maplibregl-attrib-empty`
- * and does NOT clear its innerHTML, so the previous basemap's text is still in
- * the DOM while being invisible to a reader. Assert on visibility, not on
- * textContent, or you will chase a bug that is not there -- as this did.
- */
-function blankStyle(scheme: "light" | "dark"): StyleSpecification {
-  return {
-    version: 8,
-    sources: {},
-    layers: [
-      {
-        id: "background",
-        type: "background",
-        paint: { "background-color": surfaceSunken(scheme) },
-      },
-    ],
-  } satisfies StyleSpecification;
-}
-
-/**
  * The style for a basemap in a colour scheme.
  *
- * Returns a FRESH object for satellite and blank, which is why callers must
+ * Returns a FRESH object for satellite, which is why callers must
  * memoise on the basemap id and never on this return value -- MapCanvas's swap
  * guard compares by identity, and a new object every render means `setStyle` on
  * every render.
@@ -336,15 +306,11 @@ export function resolveBasemapStyle(
   switch (id) {
     case "satellite":
       return satelliteStyle(scheme);
-    case "blank":
-      return blankStyle(scheme);
     case "terrain":
       return STYLE_URLS.terrain[scheme];
     case "plan":
-      return STYLE_URLS.plan[scheme];
-    case "muted":
     default:
-      return STYLE_URLS.muted[scheme];
+      return STYLE_URLS.plan[scheme];
   }
 }
 

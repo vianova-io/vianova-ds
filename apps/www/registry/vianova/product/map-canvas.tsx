@@ -49,7 +49,7 @@ export type MapCanvasProps = Omit<React.ComponentProps<"div">, "onLoad"> & {
   /** One style for both schemes, or one per scheme. Defaults follow the theme. */
   mapStyle?: StyleLike | { light: StyleLike; dark: StyleLike };
   /**
-   * A named basemap -- "muted", "plan", "satellite", "terrain", "blank".
+   * A named basemap -- "plan", "satellite" or "terrain".
    *
    * Sugar over `mapStyle`, which still wins if both are given. Prefer this:
    * it also decides the scrim and the hillshade, which a bare style URL
@@ -259,10 +259,31 @@ export function MapCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapboxToken, interactive, canInit]);
 
-  // Swap the basemap in place when the theme changes, keeping the camera.
+  // Swap the basemap in place when the theme or the basemap changes, keeping
+  // the camera.
   React.useEffect(() => {
     const map = mapRef.current;
-    if (!map || appliedStyleRef.current === style) return;
+    if (!map) return;
+
+    // Two basemaps can resolve to the SAME style. In dark, Plan and Terrain are
+    // both CARTO Dark Matter, and the only difference between them is the
+    // hillshade laid on top. That is why `basemapId` is in this effect's deps:
+    // with `style` alone, React saw an unchanged string on Plan -> Terrain and
+    // never ran the effect at all, so the hillshade was never added. The
+    // attribution test is what caught it -- Terrain went on crediting CARTO and
+    // never "Terrain Tiles".
+    if (appliedStyleRef.current === style) {
+      // Deliberately no setStyle. Re-applying an identical style would discard
+      // every custom source and layer and refetch the whole thing to arrive
+      // back where it started. Only the overlays need reconciling, and
+      // applyBasemapOverlays removes as readily as it adds -- which is what
+      // makes the reverse, Terrain -> Plan, drop the hillshade.
+      whenStyleReady(map, (ready) => {
+        applyBasemapOverlays(ready, overlayRef.current.basemap, overlayRef.current.scheme);
+      });
+      return;
+    }
+
     appliedStyleRef.current = style;
     map.setStyle(style);
     // setStyle discards every custom source and layer, so whoever added them
@@ -279,7 +300,7 @@ export function MapCanvas({
         onStyleReadyRef.current?.(ready);
       });
     });
-  }, [style]);
+  }, [style, basemapId]);
 
   /**
    * Keep cooperative gestures in step with the viewport.

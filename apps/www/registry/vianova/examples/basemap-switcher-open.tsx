@@ -9,7 +9,7 @@ import { type BasemapId } from "@/registry/vianova/lib/basemaps";
 export default function BasemapSwitcherOpen() {
   const [basemap, setBasemap] = React.useState<BasemapId>("satellite");
   return (
-    <div className="flex h-[22rem] items-end justify-center rounded-lg bg-surface-sunken p-4">
+    <div className="flex h-56 items-end justify-center rounded-lg bg-surface-sunken p-4">
       <BasemapSwitcher defaultOpen value={basemap} onValueChange={setBasemap} side="top" align="center" />
     </div>
   );

@@ -2123,9 +2123,6 @@
       "categories": [
         "Product"
       ],
-      "dependencies": [
-        "lucide-react"
-      ],
       "registryDependencies": [
         "@vianova/basemaps",
         "@vianova/popover",
