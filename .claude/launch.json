@@ -21,6 +21,29 @@
         "3400"
       ],
       "port": 3400
+    },
+    {
+      "name": "vianova-ds-docs-isolated",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd apps/www && NEXT_DIST_DIR=.next exec pnpm exec next dev -p 3005"
+      ],
+      "port": 3005
+    },
+    {
+      "name": "vianova-ds-export-pages",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "apps/www/scripts/serve-static.mjs",
+        "--dir",
+        "apps/www/out",
+        "--port",
+        "3401",
+        "--prefix",
+        "/vianova-ds"
+      ],
+      "port": 3401
     }
   ]
 }
