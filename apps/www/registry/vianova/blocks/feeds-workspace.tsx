@@ -302,7 +302,13 @@ function Fact({
 /* List                                                                        */
 /* -------------------------------------------------------------------------- */
 
-/** A feed the organization has asked for: the whole row opens it. */
+/**
+ * A feed the organization has asked for: the whole row opens it.
+ *
+ * `scroll-my-1`: Tab scrolls a focused row flush with the workspace's edge,
+ * and its ring paints outside the row, so without a margin the scroll box cut
+ * the ring's bottom off.
+ */
 function FeedRow({ feed, onOpen }: { feed: Feed; onOpen: () => void }) {
   const health = feedHealth(feed);
   return (
@@ -310,7 +316,7 @@ function FeedRow({ feed, onOpen }: { feed: Feed; onOpen: () => void }) {
       type="button"
       data-slot="feed-row"
       onClick={onOpen}
-      className="group bg-card text-card-foreground focus-visible:ring-ring flex w-full min-w-0 items-center gap-3 rounded-xl border p-3 text-left transition-colors hover:border-foreground/25 focus-visible:ring-2 focus-visible:outline-none"
+      className="group scroll-my-1 bg-card text-card-foreground focus-visible:ring-ring flex w-full min-w-0 items-center gap-3 rounded-xl border p-3 text-left transition-colors hover:border-foreground/25 focus-visible:ring-2 focus-visible:outline-none"
     >
       <OperatorMark feed={feed} />
       <div className="min-w-0 flex-1">
