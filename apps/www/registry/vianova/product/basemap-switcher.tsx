@@ -33,10 +33,11 @@ import { cn } from "@/registry/vianova/lib/utils";
  *
  * ## Shape
  *
- * The trigger is a 64px square showing only the current basemap's thumbnail.
- * 64 and not 32: it sits beside the zoom STACK, which is two 32px buttons, so
- * a single-button square read as undersized next to it. The name is the
- * accessible name and the tooltip; the thumbnail is the glance.
+ * The trigger is a 64px square showing the current basemap's thumbnail, named
+ * across the bottom the same way the options are. 64 and not 32: it sits
+ * beside the zoom STACK, which is two 32px buttons, so a single-button square
+ * read as undersized next to it. The name is written because a thumbnail alone
+ * answers "which map is this" only for someone who already knows the three.
  *
  * The menu is a row of three rather than a stacked list, and exactly as tall as
  * the trigger -- 64px, three 56px thumbnails on 4px of padding -- so the open
@@ -99,7 +100,7 @@ export function BasemapSwitcher({
                 // size-8 and rounded-lg are the zoom buttons' own values. p-px
                 // leaves a hairline of card around the thumbnail so the square
                 // reads as a control rather than a floating image.
-                className="size-16 cursor-pointer rounded-lg border border-border bg-card/95 p-px backdrop-blur transition-colors hover:border-foreground/25 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                className="relative size-16 cursor-pointer rounded-lg border border-border bg-card/95 p-px backdrop-blur transition-colors hover:border-foreground/25 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               />
             )
           }
@@ -108,7 +109,15 @@ export function BasemapSwitcher({
           aria-label={`Basemap: ${current.label}`}
         >
           {trigger ? null : (
-            <BasemapPreview id={current.id} className="size-[62px] rounded-[7px]" />
+            <>
+              {/* size-full, not a hardcoded 62px. The button is border-box, so
+                  64 less a 1px border and 1px padding leaves a 60px content
+                  box; 62 overhung it and painted over the border on the right
+                  and bottom, leaving a square that looked bordered on two
+                  sides only. */}
+              <BasemapPreview id={current.id} className="size-full rounded-[6px]" />
+              <PreviewLabel className="rounded-b-[6px]">{current.label}</PreviewLabel>
+            </>
           )}
         </PopoverTrigger>
 
@@ -161,26 +170,7 @@ export function BasemapSwitcher({
                   )}
                 >
                   <BasemapPreview id={basemap.id} className="size-full rounded-[4px]" />
-                  {/* The name, back inside the thumbnail now that the band is
-                      too short to carry it underneath.
-
-                      On a scrim rather than straight onto the artwork: these
-                      sit over a street grid, a photographic wash and contour
-                      bands, three backgrounds with nothing in common, and
-                      white text is only reliable over the first two. The
-                      gradient makes the bottom strip dark whatever is beneath
-                      it, which is the same reason the satellite basemap itself
-                      carries one.
-
-                      No overflow-hidden on the button, deliberately: that is
-                      the bug map-controls.tsx carries a comment about, since a
-                      focus ring reaches 3px past the box. The preview rounds
-                      itself and the scrim rounds its own two corners. */}
-                  <span
-                    className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-[4px] bg-linear-to-t from-black/85 via-black/60 to-transparent px-1 pt-2 pb-[3px] text-[9px] leading-none font-medium text-white"
-                  >
-                    {basemap.label}
-                  </span>
+                  <PreviewLabel className="rounded-b-[4px]">{basemap.label}</PreviewLabel>
                 </button>
               );
             })}
@@ -188,6 +178,39 @@ export function BasemapSwitcher({
         </PopoverContent>
       </Popover>
     </div>
+  );
+}
+
+/**
+ * The basemap's name, over the bottom of its thumbnail.
+ *
+ * On a scrim rather than straight onto the artwork: these sit over a street
+ * grid, a photographic wash and contour bands, three backgrounds with nothing
+ * in common, and white text is only reliable over some of them. The gradient
+ * makes the bottom strip dark whatever is beneath it, which is the same reason
+ * the satellite basemap itself carries one.
+ *
+ * No overflow-hidden on the button that holds this, deliberately: that is the
+ * bug map-controls.tsx carries a comment about, since a focus ring reaches 3px
+ * past the box. The preview rounds itself and this rounds its own two corners,
+ * which is why the radius is passed in rather than fixed.
+ */
+function PreviewLabel({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "pointer-events-none absolute inset-x-0 bottom-0 bg-linear-to-t from-black/85 via-black/60 to-transparent px-1 pt-2 pb-[3px] text-[9px] leading-none font-medium text-white",
+        className,
+      )}
+    >
+      {children}
+    </span>
   );
 }
 
