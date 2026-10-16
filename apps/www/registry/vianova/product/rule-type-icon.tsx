@@ -1,19 +1,20 @@
 import * as React from "react";
+import type { LucideIcon } from "lucide-react";
+
 import {
-  ArrowDownToLine,
-  ArrowUpToLine,
-  ChevronsDown,
-  Euro,
-  FoldVertical,
-  Layers,
-  PackageX,
-  SquareParking,
-  SquareParkingOff,
-  Timer,
-  Wrench,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+  RegulationCap,
+  RegulationCapAndFloor,
+  RegulationFees,
+  RegulationFloor,
+  RegulationLowSpeed,
+  RegulationMaxParked,
+  RegulationMaxUnavailable,
+  RegulationMultiParking,
+  RegulationNoDeployment,
+  RegulationNoGo,
+  RegulationNoParking,
+  RegulationParking,
+} from "@/registry/vianova/product/regulation-type-icons";
 
 import { CATEGORY_PALETTE } from "@/registry/vianova/lib/category-style";
 import { cn } from "@/registry/vianova/lib/utils";
@@ -63,73 +64,73 @@ export const RULE_TYPES: Record<
     label: "Cap",
     description: "Maximum fleet size on the public right-of-way, citywide or in an area.",
     color: FLEET,
-    icon: ArrowUpToLine,
+    icon: RegulationCap,
   },
   cap_and_floor: {
     label: "Cap and floor",
     description: "Minimum and maximum fleet size, citywide or in an area.",
     color: FLEET,
-    icon: FoldVertical,
+    icon: RegulationCapAndFloor,
   },
   fees_subsidies: {
     label: "Fees and subsidies",
     description: "Subsidise the fees of trips that start in an area.",
     color: FLEET,
-    icon: Euro,
+    icon: RegulationFees,
   },
   floor: {
     label: "Floor",
     description: "Minimum fleet size on the public right-of-way, citywide or in an area.",
     color: FLEET,
-    icon: ArrowDownToLine,
+    icon: RegulationFloor,
   },
   low_speed: {
     label: "Low speed",
     description: "Riding is allowed, but the speed limit is lowered automatically.",
     color: SLOW,
-    icon: ChevronsDown,
+    icon: RegulationLowSpeed,
   },
   max_parked: {
     label: "Max parked",
     description: "How long, or how many, vehicles may stay parked or unavailable.",
     color: PARK,
-    icon: Timer,
+    icon: RegulationMaxParked,
   },
   max_unavailable: {
     label: "Max unavailable",
     description: "Maximum share of a fleet that may be broken or in maintenance.",
     color: FLEET,
-    icon: Wrench,
+    icon: RegulationMaxUnavailable,
   },
   no_go: {
     label: "No go",
     description: "Riding is not allowed, around the clock or at set times.",
     color: NO_GO,
-    icon: X,
+    icon: RegulationNoGo,
   },
   no_parking: {
     label: "No parking",
     description: "Ending a trip here is not allowed, always or at set times.",
     color: NO_PARK,
-    icon: SquareParkingOff,
+    icon: RegulationNoParking,
   },
   parking: {
     label: "Parking",
     description: "Ending a trip here is allowed; the area is meant for parking.",
     color: PARK,
-    icon: SquareParking,
+    icon: RegulationParking,
   },
   operator_no_deployment: {
     label: "No deployment",
     description: "Operators may not deploy vehicles here.",
     color: FLEET,
-    icon: PackageX,
+    icon: RegulationNoDeployment,
   },
   multi_parking: {
     label: "Multi-parking",
     description: "A set of parking and no-parking areas managed together.",
     color: MULTI,
-    icon: Layers,
+    icon: RegulationMultiParking,
   },
 };
 
@@ -154,10 +155,20 @@ export function ruleTypeColor(type: RuleType): string {
   return RULE_TYPES[type].color;
 }
 
+/*
+ * The glyph fills about two thirds of the badge, as production's does: at
+ * half, which is where this started, a 16px badge was mostly colour with a
+ * speck in it. `stroke` is in viewBox units and shrinks with the glyph, so it
+ * is tuned per size to land on roughly the same rendered line -- 1.15, 1.5 and
+ * 1.75px -- rather than thinning to a hairline at 16px.
+ *
+ * `top` centres the glyph on the shoulders (40% of the box), not the box: the
+ * point holds no area, so the box's true centre would sit the glyph low.
+ */
 const SIZES = {
-  sm: { box: 16, glyph: 9, stroke: 3 },
-  md: { box: 24, glyph: 13, stroke: 2.75 },
-  lg: { box: 32, glyph: 17, stroke: 2.5 },
+  sm: { box: 16, glyph: 11, stroke: 2.5, top: 0.9 },
+  md: { box: 24, glyph: 16, stroke: 2.25, top: 1.6 },
+  lg: { box: 32, glyph: 21, stroke: 2, top: 2.3 },
 } as const;
 
 /**
@@ -168,9 +179,12 @@ const SIZES = {
  *
  * The glyph is always white because the fill never changes with the theme --
  * it is the map's colour, not the UI's. White clears 3:1 (WCAG 1.4.11, a
- * graphic) on every colour used here; the tightest is green at 3.01:1. The
- * stroke is thickened at the small sizes because a 1.5px line at 9px is
- * antialiased into the fill and loses that margin.
+ * graphic) on every colour used here; the tightest is green at 3.01:1. That
+ * margin is why the stroke never renders under ~1.15px (see SIZES): a thinner
+ * line is antialiased into the fill and loses it.
+ *
+ * The glyphs are the DS's own custom regulation type icons
+ * (`regulation-type-icons`), shown on the Foundations page.
  *
  * Decorative unless given a `label`. Most uses sit next to the type's name,
  * and repeating it would only make a screen reader say it twice.
@@ -202,19 +216,22 @@ export function RuleTypeIcon({
       {...props}
     >
       <svg viewBox="0 0 24 24" className="absolute inset-0 size-full" aria-hidden>
-        {/* A banner with a pointed foot: square shoulders, so the glyph has
-            room, and a point that makes the silhouette its own at 16px. */}
+        {/* A banner with a pointed foot, as production's badge is: square
+            shoulders give the glyph room, and the point makes the silhouette
+            its own at 16px. Full width of the box, so the badge does not read
+            smaller than a 24px icon beside it. */}
         <path
-          d="M5 1.5h14a2.5 2.5 0 0 1 2.5 2.5v11.6a1.5 1.5 0 0 1-.66 1.24l-8 5.4a1.5 1.5 0 0 1-1.68 0l-8-5.4a1.5 1.5 0 0 1-.66-1.24V4a2.5 2.5 0 0 1 2.5-2.5Z"
+          d="M4.5 1h15A2.5 2.5 0 0 1 22 3.5v12.2a1.5 1.5 0 0 1-.68 1.26l-8.5 5.6a1.5 1.5 0 0 1-1.64 0l-8.5-5.6A1.5 1.5 0 0 1 2 15.7V3.5A2.5 2.5 0 0 1 4.5 1Z"
           fill={color}
         />
       </svg>
-      {/* Centred on the shield's shoulders rather than its full height: the
-          point holds no area, so the box's true centre would sit the glyph
-          visibly low. text-white rather than a token on purpose -- see above. */}
-      <span className="absolute inset-x-0 top-[8%] flex h-[64%] items-center justify-center text-white">
-        <Glyph aria-hidden style={{ width: s.glyph, height: s.glyph }} strokeWidth={s.stroke} />
-      </span>
+      {/* text-white rather than a token on purpose -- see above. */}
+      <Glyph
+        aria-hidden
+        className="absolute left-1/2 -translate-x-1/2 text-white"
+        style={{ top: s.top, width: s.glyph, height: s.glyph }}
+        strokeWidth={s.stroke}
+      />
     </span>
   );
 }

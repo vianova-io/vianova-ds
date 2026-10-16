@@ -2974,6 +2974,30 @@
       }
     },
     {
+      "name": "regulation-type-icons",
+      "type": "registry:ui",
+      "title": "Regulation Type Icons",
+      "description": "Regulation Type Icons — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/regulation-type-icons.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "rule-rail",
       "type": "registry:ui",
       "title": "Rule Rail",
@@ -3012,6 +3036,7 @@
       ],
       "registryDependencies": [
         "@vianova/category-style",
+        "@vianova/regulation-type-icons",
         "@vianova/utils"
       ],
       "files": [

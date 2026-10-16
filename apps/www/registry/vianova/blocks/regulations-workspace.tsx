@@ -661,10 +661,12 @@ function RegulationRow({
       <TableCell>
         {/* Production stacked one icon per rule, so four cap rules read as
             four identical glyphs. One per TYPE says the same thing in less
-            room, and the count lives in the editor. */}
+            room, and the count lives in the editor. 24px, as production's
+            list is: at 16px the glyph is the only thing that tells cap from
+            floor, and it was too small to. */}
         <span className="flex items-center gap-1">
           {types.slice(0, 3).map((t) => (
-            <RuleTypeIcon key={t} type={t} size="sm" label={RULE_TYPES[t].label} />
+            <RuleTypeIcon key={t} type={t} size="md" label={RULE_TYPES[t].label} />
           ))}
           {types.length > 3 ? (
             <span className="text-muted-foreground text-xs">+{types.length - 3}</span>
