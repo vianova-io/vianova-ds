@@ -5,6 +5,7 @@ import { Download } from "lucide-react";
 import { asset } from "@/lib/asset";
 import { CopyScope } from "@/components/copy-scope";
 import { FoundationsNav } from "@/components/foundations-nav";
+import { RegulationIconGrid } from "@/components/regulation-icon-grid";
 import tokens from "@vianova/tokens/tokens.json";
 
 /**
@@ -332,6 +333,7 @@ const SECTIONS = [
   { id: "radius", label: "Radius" },
   { id: "motion", label: "Motion" },
   { id: "icons", label: "Icons" },
+  { id: "regulation-type-icons", label: "Regulation type icons" },
 ];
 const RAMP_STOPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
@@ -900,6 +902,23 @@ export default function FoundationsPage() {
           import.
         </p>
         <IconBrowser />
+      </section>
+
+      <section id="regulation-type-icons" className="scroll-mt-20 space-y-4">
+        <h2 className="text-sm font-medium">Custom regulation type icons</h2>
+        <p className="text-sm text-muted-foreground">
+          Twelve icons Lucide does not have: the rule types of a regulation,
+          redrawn from production&rsquo;s badges on Lucide&rsquo;s grid
+          (24&times;24, 2px round stroke, no fill), so they take{" "}
+          <code className="text-foreground">size</code>,{" "}
+          <code className="text-foreground">strokeWidth</code> and{" "}
+          <code className="text-foreground">className</code> like any Lucide
+          icon. In product they sit inside{" "}
+          <code className="text-foreground">RuleTypeIcon</code>, white on the
+          rule&rsquo;s map colour, shown beside each. Hover to download the SVG
+          or copy the import.
+        </p>
+        <RegulationIconGrid />
       </section>
       </CopyScope>
     </div>
