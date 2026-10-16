@@ -18,7 +18,7 @@ export const EXAMPLES: ExampleCase[] = Object.values(Index).flatMap((c) =>
  * network tiles. They are still crawled for accessibility; only their
  * screenshots are skipped.
  */
-export const NON_DETERMINISTIC = new Set(["map-canvas-default"]);
+export const NON_DETERMINISTIC = new Set(["map-canvas-default", "map-draw-control-default"]);
 
 /**
  * Waits for an example to be ready to inspect.
@@ -47,5 +47,12 @@ export const BLOCKS: string[] = Object.values(Blocks).map((b) => b.name);
  * panels, a toolbar and an attribution badge, so they must not be pointed at
  * these -- each gets its own checks instead.
  */
-export const NON_MAP_BLOCKS: string[] = ["datahub-workspace", "reports-workspace"];
+export const NON_MAP_BLOCKS: string[] = [
+  "datahub-workspace",
+  "reports-workspace",
+  // Has a map, but only inside a regulation; it opens on a list, and its
+  // editor is a panel beside a map rather than the two floating panels the
+  // map suites measure.
+  "regulations-workspace",
+];
 export const MAP_BLOCKS: string[] = BLOCKS.filter((b) => !NON_MAP_BLOCKS.includes(b));
