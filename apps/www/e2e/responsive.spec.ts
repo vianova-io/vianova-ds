@@ -669,10 +669,10 @@ for (const block of NON_MAP_BLOCKS) {
           });
 
         for (const view of ["list", "dataset"] as const) {
-          // A card in the data hub, a name in the reports table.
+          // A card in the data hub, a name in the reports or regulations table.
           if (view === "dataset") {
             // The data hub's cards arrive after the page does.
-            const first = root.locator("ul button, [data-slot=report-link]").first();
+            const first = root.locator("ul button, [data-slot=report-link], [data-slot=regulation-link]").first();
             await first.waitFor();
             await first.click();
           }
