@@ -8,6 +8,7 @@ import {
   DEFAULT_BASEMAP_ID,
   type BasemapId,
 } from "@/registry/vianova/lib/basemaps";
+import { BASEMAP_PREVIEWS } from "@/registry/vianova/lib/basemap-previews";
 import {
   Popover,
   PopoverContent,
@@ -19,19 +20,16 @@ import { cn } from "@/registry/vianova/lib/utils";
 /**
  * Picks the basemap a map is drawn on.
  *
- * ## The previews are drawn, not photographed
+ * ## The previews are photographs, taken once
  *
- * The obvious build is three little live maps. It is also the wrong one: three
+ * Each option shows a real render of its basemap -- see lib/basemap-previews.
+ * Not three live maps, which is the obvious build and the wrong one: three
  * WebGL contexts and three tile streams, torn down and rebuilt every time a
- * popover opens, for a control that is shut almost always. Worse for this repo,
- * it would be non-deterministic, and the examples could then never be
- * pixel-pinned -- `map-canvas-default` is already excluded from the visual
- * suite for exactly that reason.
- *
- * So each option draws a square impression of what it is: a street grid, a
- * photographic wash, contour bands. They cost no network, theme themselves from
- * tokens, and are honest about being a legend rather than a picture of your
- * city.
+ * popover opens, for a control that is shut almost always, and
+ * non-deterministic enough that the examples could never be pixel-pinned
+ * (`map-canvas-default` is already excluded from the visual suite for exactly
+ * that reason). Stills cost no network, stay deterministic, and show the
+ * reader what they are actually choosing between.
  *
  * ## Shape
  *
@@ -194,87 +192,22 @@ export function BasemapSwitcher({
 }
 
 /**
- * A drawn impression of a basemap, square.
+ * A thumbnail of the basemap, as it actually renders.
  *
- * Deliberately schematic. A 48px photograph of anywhere is unreadable, and a
- * photograph of the WRONG place is worse than a diagram -- it implies the map
- * will look like that, in a product whose maps are of the reader's own city.
- * Token colours wherever the thing drawn is UI; literal colours only for the
- * satellite wash, which is a photograph and has no token.
+ * Both themes are rendered and one is hidden with `dark:`, rather than picking
+ * with a hook. useColorScheme returns null until mounted, so choosing in JS
+ * means either a flash of the wrong thumbnail or a hydration mismatch; the CSS
+ * variant is resolved by the same `.dark` class before anything paints. The
+ * images are data URIs, so the hidden one costs no request -- only the bytes
+ * that are in the bundle either way.
  */
 function BasemapPreview({ id, className }: { id: BasemapId; className?: string }) {
-  const common = { viewBox: "0 0 36 36", "aria-hidden": true as const, className };
-
-  if (id === "satellite") {
-    return (
-      <svg {...common}>
-        <rect width="36" height="36" fill="#1f3326" />
-        <path d="M0 22 L10 15 L20 20 L28 11 L36 16 V36 H0Z" fill="#2f4a33" />
-        <path d="M0 30 L12 26 L22 31 L36 27 V36 H0Z" fill="#24402c" />
-        <circle cx="27" cy="7" r="5" fill="#3c5a3f" />
-        {/* The giveaway that it is a hybrid: a road and a label over the photo. */}
-        <path
-          d="M2 27 L16 18 L34 22"
-          stroke="#ffffff"
-          strokeOpacity="0.55"
-          strokeWidth="1.2"
-          fill="none"
-        />
-        <rect x="12" y="7" width="10" height="2" rx="1" fill="#ffffff" fillOpacity="0.75" />
-      </svg>
-    );
-  }
-
-  if (id === "terrain") {
-    return (
-      <svg {...common}>
-        <rect width="36" height="36" className="fill-surface-sunken" />
-        {[0.35, 0.28, 0.2, 0.12].map((opacity, i) => (
-          <path
-            key={i}
-            d={`M-2 ${30 - i * 6} Q 9 ${21 - i * 6} 18 ${26 - i * 6} T 38 ${22 - i * 6}`}
-            className="stroke-foreground"
-            strokeOpacity={opacity}
-            strokeWidth="1.1"
-            fill="none"
-          />
-        ))}
-        <path
-          d="M3 34 L15 19 L23 26 L33 11"
-          className="stroke-muted-foreground"
-          strokeWidth="1"
-          fill="none"
-        />
-      </svg>
-    );
-  }
-
-  // Plan: a street grid with one landuse block and one route.
+  const preview = BASEMAP_PREVIEWS[id] ?? BASEMAP_PREVIEWS[DEFAULT_BASEMAP_ID];
+  const common = "block size-full object-cover";
   return (
-    <svg {...common}>
-      <rect width="36" height="36" className="fill-surface-sunken" />
-      <path d="M0 22 L14 22 L14 36 L0 36Z" className="fill-primary" fillOpacity="0.12" />
-      <path
-        d="M22 0 L22 36 M0 11 L36 11"
-        className="stroke-foreground"
-        strokeOpacity="0.34"
-        strokeWidth="1.6"
-        fill="none"
-      />
-      <path
-        d="M8 0 L8 36 M0 25 L36 25 M30 0 L30 36"
-        className="stroke-foreground"
-        strokeOpacity="0.2"
-        strokeWidth="1"
-        fill="none"
-      />
-      <path
-        d="M0 5 Q 12 8 36 3"
-        className="stroke-primary"
-        strokeOpacity="0.5"
-        strokeWidth="1.4"
-        fill="none"
-      />
-    </svg>
+    <span className={cn("block overflow-hidden", className)}>
+      <img src={preview.light} alt="" aria-hidden className={cn(common, "dark:hidden")} />
+      <img src={preview.dark} alt="" aria-hidden className={cn(common, "hidden dark:block")} />
+    </span>
   );
 }

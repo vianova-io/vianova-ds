@@ -406,9 +406,17 @@ export function applyBasemapOverlays(
       type: "hillshade",
       source: BASEMAP_DEM_SOURCE_ID,
       paint: {
-        "hillshade-exaggeration": 0.45,
+        // Stronger in dark, because dark had almost nothing to work with.
+        // Dark Matter's land is already near-black, so a black shadow lands on
+        // black and #3f3f46 was barely a lift: measured against the same view
+        // without the hillshade, light moved 52% of pixels by more than 4/255
+        // with a peak delta of 101, dark moved 18% with a peak of 31 -- and at
+        // thumbnail size that averaged away to nothing, leaving Terrain and
+        // Plan the same picture. The shadow stays black (there is no darker
+        // direction to go) and the highlight does the work instead.
+        "hillshade-exaggeration": scheme === "dark" ? 0.6 : 0.45,
         "hillshade-shadow-color": scheme === "dark" ? "#000000" : "#52525b",
-        "hillshade-highlight-color": scheme === "dark" ? "#3f3f46" : "#ffffff",
+        "hillshade-highlight-color": scheme === "dark" ? "#8a8a95" : "#ffffff",
         "hillshade-accent-color": "#00000000",
       },
     },

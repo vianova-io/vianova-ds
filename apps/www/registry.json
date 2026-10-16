@@ -164,6 +164,21 @@
       "files": []
     },
     {
+      "name": "basemap-previews",
+      "type": "registry:lib",
+      "title": "Basemap Previews",
+      "description": "Basemap Previews helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/basemap-previews.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "registryDependencies": [
+        "@vianova/basemaps"
+      ]
+    },
+    {
       "name": "basemaps",
       "type": "registry:lib",
       "title": "Basemaps",
@@ -2124,6 +2139,7 @@
         "Product"
       ],
       "registryDependencies": [
+        "@vianova/basemap-previews",
         "@vianova/basemaps",
         "@vianova/popover",
         "@vianova/utils"
