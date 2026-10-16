@@ -553,6 +553,7 @@
         "@vianova/confirm-dialog",
         "@vianova/csv",
         "@vianova/dialog",
+        "@vianova/drawer",
         "@vianova/dropdown-menu",
         "@vianova/empty",
         "@vianova/export-menu",
@@ -569,6 +570,7 @@
         "@vianova/textarea",
         "@vianova/toggle-group",
         "@vianova/trip-report",
+        "@vianova/use-mobile",
         "@vianova/utils"
       ],
       "files": [

@@ -20,6 +20,7 @@ import {
   Copy,
   Database,
   FilePlus2,
+  Filter,
   Gauge,
   GripHorizontal,
   Grid3x3,
@@ -93,6 +94,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/registry/vianova/ui/dialog";
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/registry/vianova/ui/drawer";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -187,6 +197,7 @@ import {
   type Rect,
 } from "@/registry/vianova/lib/report-grid";
 import { cn } from "@/registry/vianova/lib/utils";
+import { useIsMobile } from "@/registry/vianova/hooks/use-mobile";
 
 /* -------------------------------------------------------------------------- */
 /* Data                                                                        */
@@ -2499,14 +2510,23 @@ function WidgetSettings({
  * click. The date leads, since it always applies; then the overall filters,
  * then the dataset's own. Nothing at all when only the date applies: the bar
  * already says it, and a "0" on every card is noise.
+ *
+ * On a phone the list opens as a bottom tray rather than a popover: a popover
+ * is cramped there, and a tray is where a thumb expects detail to come from,
+ * and swipes away.
  */
 function CardFilters({
   filters,
   dataset,
+  chart,
 }: {
   filters: Filters;
   dataset: DatasetId;
+  /** The chart's name, so the tray says whose filters these are. */
+  chart: string;
 }) {
+  // Before the early return: hooks run on every render.
+  const isMobile = useIsMobile();
   const applied = appliedFilters(filters, dataset);
   if (applied.length === 0) return null;
   const period = PERIODS[filters.period];
@@ -2524,13 +2544,64 @@ function CardFilters({
       : []),
     ...applied,
   ];
+  const label = `${applied.length} ${applied.length === 1 ? "filter" : "filters"} on this chart`;
+
+  if (isMobile)
+    return (
+      <Drawer showSwipeHandle>
+        <DrawerTrigger
+          render={
+            <button
+              type="button"
+              aria-label={label}
+              // A thumb-sized target at the row's right edge.
+              className="text-muted-foreground active:text-foreground focus-visible:ring-ring -mr-1.5 inline-flex min-h-8 min-w-8 shrink-0 items-center justify-center gap-1 rounded-md px-1.5 text-xs focus-visible:ring-2 focus-visible:outline-none"
+            />
+          }
+        >
+          <Filter className="size-4" aria-hidden />
+          <span className="tabular-nums">{applied.length}</span>
+        </DrawerTrigger>
+        <DrawerContent>
+          <DrawerHeader className="flex-row items-center justify-between gap-2 border-b pb-3 text-left">
+            <DrawerTitle className="text-base font-semibold">
+              Filters on this chart
+            </DrawerTitle>
+            <DrawerDescription className="sr-only">
+              {chart}, from {DATASETS[dataset].label}
+            </DrawerDescription>
+            <DrawerClose
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Close"
+                  className="-mr-1.5"
+                />
+              }
+            >
+              <X />
+            </DrawerClose>
+          </DrawerHeader>
+          <dl className="divide-y overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            {rows.map((r) => (
+              <div key={r.id} className="space-y-1 py-3.5">
+                <dt className="text-muted-foreground text-sm">{r.label}</dt>
+                <dd className="text-base">{r.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </DrawerContent>
+      </Drawer>
+    );
+
   return (
     <Popover>
       <PopoverTrigger
         render={
           <button
             type="button"
-            aria-label={`${applied.length} ${applied.length === 1 ? "filter" : "filters"} on this chart`}
+            aria-label={label}
             title="Filters on this chart"
             className="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex shrink-0 items-center gap-1 rounded-sm text-xs focus-visible:ring-2 focus-visible:outline-none"
           />
@@ -2604,43 +2675,31 @@ function WidgetCard({
           <div className="bg-primary h-full w-1/3 animate-[report-load_1s_ease-in-out_infinite]" />
         </div>
       ) : null}
-      <div className="flex shrink-0 items-start justify-between gap-2 px-3 pt-3">
-        <div className="min-w-0 space-y-1">
-          {/* Renamed in place, as the report's own title is. A role rather
+      {/* A grid, so the dataset row runs under the menu to the card's edge:
+          on a phone the filter count sits there, as in the product. */}
+      <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 px-3 pt-3">
+        {/* Renamed in place, as the report's own title is. A role rather
               than an <h3>, which may not hold the edit's block elements. */}
-          <div
-            role="heading"
-            aria-level={3}
-            // gap-0.5 plus the title's own padding puts its text where the
-            // plain title's was, 8px past the icon.
-            className="flex min-w-0 items-center gap-0.5 text-sm font-medium"
-          >
-            <Icon
-              className="text-muted-foreground size-4 shrink-0"
-              aria-hidden
-            />
-            <InlineEdit
-              variant="title"
-              label="chart title"
-              value={widget.title}
-              placeholder="Untitled chart"
-              onValueChange={(next) => {
-                if (next) onChange({ ...widget, title: next });
-              }}
-              // Not pulled left into the icon's gap, and clear of the drag
-              // grip: a click here renames, it never starts a drag.
-              className="draggable-cancel ml-0 min-w-0"
-            />
-          </div>
-          <div className="text-muted-foreground flex min-w-0 items-center gap-3 text-xs">
-            <span className="flex min-w-0 items-center gap-1.5">
-              <Database className="size-3.5 shrink-0" aria-hidden />
-              <span className="truncate">{data.dataset.label}</span>
-            </span>
-            <span className="draggable-cancel empty:hidden">
-              <CardFilters filters={filters} dataset={data.dataset.id} />
-            </span>
-          </div>
+        <div
+          role="heading"
+          aria-level={3}
+          // gap-0.5 plus the title's own padding puts its text where the
+          // plain title's was, 8px past the icon.
+          className="flex min-w-0 items-center gap-0.5 text-sm font-medium"
+        >
+          <Icon className="text-muted-foreground size-4 shrink-0" aria-hidden />
+          <InlineEdit
+            variant="title"
+            label="chart title"
+            value={widget.title}
+            placeholder="Untitled chart"
+            onValueChange={(next) => {
+              if (next) onChange({ ...widget, title: next });
+            }}
+            // Not pulled left into the icon's gap, and clear of the drag
+            // grip: a click here renames, it never starts a drag.
+            className="draggable-cancel ml-0 min-w-0"
+          />
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -2696,6 +2755,21 @@ function WidgetCard({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {/* On a phone the filter count moves to the row's right edge, as
+              the tray's trigger; on a desktop it follows the dataset. */}
+        <div className="text-muted-foreground col-span-2 flex min-w-0 items-center gap-3 text-xs max-md:justify-between">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <Database className="size-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{data.dataset.label}</span>
+          </span>
+          <span className="draggable-cancel empty:hidden">
+            <CardFilters
+              filters={filters}
+              dataset={data.dataset.id}
+              chart={name}
+            />
+          </span>
+        </div>
       </div>
 
       {/* Anchored to the options button, since the menu that opened it has closed. */}
