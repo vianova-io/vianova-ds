@@ -317,6 +317,24 @@
       ]
     },
     {
+      "name": "sample-regulations",
+      "type": "registry:lib",
+      "title": "Sample Regulations",
+      "description": "Sample Regulations helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/sample-regulations.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "registryDependencies": [
+        "@vianova/rule-type-icon",
+        "@vianova/sample-datasets",
+        "@vianova/schedule-editor",
+        "@vianova/zone-picker"
+      ]
+    },
+    {
       "name": "trip-report",
       "type": "registry:lib",
       "title": "Trip Report",
@@ -524,6 +542,61 @@
       "files": [
         {
           "path": "registry/vianova/blocks/map-workspace.tsx",
+          "type": "registry:block"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "regulations-workspace",
+      "type": "registry:block",
+      "title": "Regulations workspace",
+      "description": "Regulations workspace layout, composed from Vianova components.",
+      "dependencies": [
+        "lucide-react",
+        "maplibre-gl"
+      ],
+      "registryDependencies": [
+        "@vianova/accordion",
+        "@vianova/alert",
+        "@vianova/alert-dialog",
+        "@vianova/badge",
+        "@vianova/basemap-switcher",
+        "@vianova/basemaps",
+        "@vianova/button",
+        "@vianova/checkbox",
+        "@vianova/choice-card",
+        "@vianova/dialog",
+        "@vianova/dropdown-menu",
+        "@vianova/empty",
+        "@vianova/field",
+        "@vianova/inline-edit",
+        "@vianova/input",
+        "@vianova/input-group",
+        "@vianova/legend-categorical",
+        "@vianova/map-canvas",
+        "@vianova/map-controls",
+        "@vianova/map-draw-control",
+        "@vianova/popover",
+        "@vianova/rule-rail",
+        "@vianova/rule-type-icon",
+        "@vianova/sample-regulations",
+        "@vianova/save-bar",
+        "@vianova/schedule-editor",
+        "@vianova/segmented-control",
+        "@vianova/select",
+        "@vianova/skeleton",
+        "@vianova/slider-field",
+        "@vianova/table",
+        "@vianova/use-category-shape-layer",
+        "@vianova/utils",
+        "@vianova/zone-picker"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/blocks/regulations-workspace.tsx",
           "type": "registry:block"
         }
       ],
@@ -969,6 +1042,32 @@
       "files": [
         {
           "path": "registry/vianova/ui/checkbox.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "choice-card",
+      "type": "registry:ui",
+      "title": "Choice Card",
+      "description": "Choice Card component, themed by @vianova/tokens.",
+      "categories": [
+        "Forms"
+      ],
+      "dependencies": [
+        "@base-ui/react",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/badge",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/ui/choice-card.tsx",
           "type": "registry:ui"
         }
       ],
@@ -2677,6 +2776,35 @@
       }
     },
     {
+      "name": "map-draw-control",
+      "type": "registry:ui",
+      "title": "Map Draw Control",
+      "description": "Map Draw Control — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react",
+        "maplibre-gl"
+      ],
+      "registryDependencies": [
+        "@vianova/button",
+        "@vianova/css-color",
+        "@vianova/dropdown-menu",
+        "@vianova/kbd",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/map-draw-control.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "markdown-editor",
       "type": "registry:ui",
       "title": "Markdown Editor",
@@ -2775,6 +2903,57 @@
       "files": [
         {
           "path": "registry/vianova/product/ranked-bars.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "rule-rail",
+      "type": "registry:ui",
+      "title": "Rule Rail",
+      "description": "Rule Rail — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/dropdown-menu",
+        "@vianova/rule-type-icon",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/rule-rail.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "rule-type-icon",
+      "type": "registry:ui",
+      "title": "Rule Type Icon",
+      "description": "Rule Type Icon — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/category-style",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/rule-type-icon.tsx",
           "type": "registry:ui"
         }
       ],
@@ -2938,6 +3117,40 @@
       "files": [
         {
           "path": "registry/vianova/product/visualization-picker.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "zone-picker",
+      "type": "registry:ui",
+      "title": "Zone Picker",
+      "description": "Zone Picker — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/badge",
+        "@vianova/button",
+        "@vianova/checkbox",
+        "@vianova/choice-card",
+        "@vianova/field",
+        "@vianova/input-group",
+        "@vianova/sheet",
+        "@vianova/slider-field",
+        "@vianova/textarea",
+        "@vianova/toggle-group",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/zone-picker.tsx",
           "type": "registry:ui"
         }
       ],
@@ -3164,6 +3377,55 @@
       }
     },
     {
+      "name": "save-bar",
+      "type": "registry:ui",
+      "title": "Save Bar",
+      "description": "Save Bar — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "registryDependencies": [
+        "@vianova/button",
+        "@vianova/spinner",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/save-bar.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "schedule-editor",
+      "type": "registry:ui",
+      "title": "Schedule Editor",
+      "description": "Schedule Editor — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "registryDependencies": [
+        "@vianova/checkbox",
+        "@vianova/field",
+        "@vianova/input",
+        "@vianova/label",
+        "@vianova/toggle-group",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/schedule-editor.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "section-card",
       "type": "registry:ui",
       "title": "Section Card",
@@ -3178,6 +3440,30 @@
       "files": [
         {
           "path": "registry/vianova/patterns/section-card.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "slider-field",
+      "type": "registry:ui",
+      "title": "Slider Field",
+      "description": "Slider Field — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "registryDependencies": [
+        "@vianova/field",
+        "@vianova/input-group",
+        "@vianova/slider",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/slider-field.tsx",
           "type": "registry:ui"
         }
       ],

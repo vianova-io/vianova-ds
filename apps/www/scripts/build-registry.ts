@@ -37,7 +37,7 @@ const CATEGORY: Record<string, string> = {
   label: "Forms", checkbox: "Forms", "radio-group": "Forms", switch: "Forms",
   select: "Forms", "native-select": "Forms", combobox: "Forms", slider: "Forms",
   calendar: "Forms", field: "Forms", form: "Forms", questionnaire: "Forms",
-  attachment: "Forms",
+  attachment: "Forms", "choice-card": "Forms",
 
   dialog: "Overlays", "alert-dialog": "Overlays", sheet: "Overlays", drawer: "Overlays",
   popover: "Overlays", "hover-card": "Overlays", tooltip: "Overlays",
@@ -74,6 +74,7 @@ const BLOCK_TITLES: Record<string, string> = {
   "map-workspace": "Map workspace",
   "datahub-workspace": "Data Hub workspace",
   "reports-workspace": "Reports workspace",
+  "regulations-workspace": "Regulations workspace",
 };
 
 const titleCase = (name: string) =>

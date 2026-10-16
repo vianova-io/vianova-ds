@@ -39,6 +39,7 @@ const ROUTES = [
   "/foundations/",
   "/blocks/datahub-workspace/",
   "/blocks/map-workspace/",
+  "/blocks/regulations-workspace/",
   "/preview/map-canvas-default/",
   "/preview/avatar-default/",
   "/components/button/",
