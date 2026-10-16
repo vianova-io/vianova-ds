@@ -317,6 +317,21 @@
       ]
     },
     {
+      "name": "sample-feeds",
+      "type": "registry:lib",
+      "title": "Sample Feeds",
+      "description": "Sample Feeds helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/sample-feeds.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "registryDependencies": [
+        "@vianova/sample-regulations"
+      ]
+    },
+    {
       "name": "sample-regulations",
       "type": "registry:lib",
       "title": "Sample Regulations",
@@ -494,6 +509,53 @@
       }
     },
     {
+      "name": "feeds-workspace",
+      "type": "registry:block",
+      "title": "Feeds workspace",
+      "description": "Feeds workspace layout, composed from Vianova components.",
+      "dependencies": [
+        "lucide-react",
+        "recharts"
+      ],
+      "registryDependencies": [
+        "@vianova/alert",
+        "@vianova/avatar",
+        "@vianova/badge",
+        "@vianova/button",
+        "@vianova/chart",
+        "@vianova/checkbox",
+        "@vianova/choice-card",
+        "@vianova/confirm-dialog",
+        "@vianova/dialog",
+        "@vianova/empty",
+        "@vianova/export-menu",
+        "@vianova/field",
+        "@vianova/input",
+        "@vianova/input-group",
+        "@vianova/sample-feeds",
+        "@vianova/sample-regulations",
+        "@vianova/segmented-control",
+        "@vianova/select",
+        "@vianova/skeleton",
+        "@vianova/stat-tile",
+        "@vianova/status-badge",
+        "@vianova/table",
+        "@vianova/tabs",
+        "@vianova/textarea",
+        "@vianova/timeline",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/blocks/feeds-workspace.tsx",
+          "type": "registry:block"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "map-workspace",
       "type": "registry:block",
       "title": "Map workspace",
@@ -589,6 +651,7 @@
         "@vianova/select",
         "@vianova/skeleton",
         "@vianova/slider-field",
+        "@vianova/status-badge",
         "@vianova/table",
         "@vianova/use-category-shape-layer",
         "@vianova/utils",
@@ -3496,6 +3559,28 @@
       }
     },
     {
+      "name": "status-badge",
+      "type": "registry:ui",
+      "title": "Status Badge",
+      "description": "Status Badge — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "registryDependencies": [
+        "@vianova/badge",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/status-badge.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "tag-input",
       "type": "registry:ui",
       "title": "Tag Input",
@@ -3512,6 +3597,28 @@
       "files": [
         {
           "path": "registry/vianova/patterns/tag-input.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "timeline",
+      "type": "registry:ui",
+      "title": "Timeline",
+      "description": "Timeline — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "registryDependencies": [
+        "@vianova/status-badge",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/timeline.tsx",
           "type": "registry:ui"
         }
       ],

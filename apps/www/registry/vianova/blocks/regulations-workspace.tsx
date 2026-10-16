@@ -115,6 +115,10 @@ import { InlineEdit } from "@/registry/vianova/patterns/inline-edit";
 import { SaveBar } from "@/registry/vianova/patterns/save-bar";
 import { ScheduleEditor } from "@/registry/vianova/patterns/schedule-editor";
 import { SliderField } from "@/registry/vianova/patterns/slider-field";
+import {
+  StatusBadge,
+  type StatusTone,
+} from "@/registry/vianova/patterns/status-badge";
 import { BasemapSwitcher } from "@/registry/vianova/product/basemap-switcher";
 import { LegendCategorical } from "@/registry/vianova/product/legend-categorical";
 import { MapCanvas } from "@/registry/vianova/product/map-canvas";
@@ -188,11 +192,11 @@ const LISBON: [number, number] = [-9.142, 38.722];
  */
 const MULTI_PARKING_TYPES: RuleType[] = ["parking", "no_parking"];
 
-const STATUS_DOT: Record<RegulationStatus, string> = {
-  active: "bg-success",
-  scheduled: "bg-info",
-  ending: "bg-warning",
-  inactive: "bg-muted-foreground",
+const STATUS_TONE: Record<RegulationStatus, StatusTone> = {
+  active: "success",
+  scheduled: "info",
+  ending: "warning",
+  inactive: "neutral",
 };
 
 type StatusFilter = "all" | RegulationStatus;
@@ -683,7 +687,7 @@ function RegulationRow({
         </span>
       </TableCell>
       <TableCell className="hidden sm:table-cell">
-        <StatusBadge status={status} />
+        <RegulationStatusBadge status={status} />
       </TableCell>
       <TableCell className="text-muted-foreground hidden tabular-nums md:table-cell">
         {zoneTotal(reg)}
@@ -713,13 +717,8 @@ function RegulationRow({
   );
 }
 
-function StatusBadge({ status }: { status: RegulationStatus }) {
-  return (
-    <Badge variant="outline">
-      <span aria-hidden className={cn("size-1.5 rounded-full", STATUS_DOT[status])} />
-      {STATUS_LABELS[status]}
-    </Badge>
-  );
+function RegulationStatusBadge({ status }: { status: RegulationStatus }) {
+  return <StatusBadge tone={STATUS_TONE[status]}>{STATUS_LABELS[status]}</StatusBadge>;
 }
 
 function VisibilityBadge({ visibility }: { visibility: Regulation["visibility"] }) {
@@ -1048,7 +1047,7 @@ function RegulationEditor({
             />
           </h2>
           <div className="flex flex-wrap items-center gap-1.5">
-            {isNew ? <Badge variant="secondary">Draft</Badge> : <StatusBadge status={status} />}
+            {isNew ? <Badge variant="secondary">Draft</Badge> : <RegulationStatusBadge status={status} />}
             <VisibilityBadge visibility={draft.visibility} />
           </div>
         </header>

@@ -54,5 +54,7 @@ export const NON_MAP_BLOCKS: string[] = [
   // editor is a panel beside a map rather than the two floating panels the
   // map suites measure.
   "regulations-workspace",
+  // A list and a detail view; no map anywhere.
+  "feeds-workspace",
 ];
 export const MAP_BLOCKS: string[] = BLOCKS.filter((b) => !NON_MAP_BLOCKS.includes(b));
