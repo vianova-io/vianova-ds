@@ -12,6 +12,7 @@ import {
   Search,
   Map as MapIcon,
   Sparkles,
+  X,
 } from "lucide-react";
 import type {
   DataDrivenPropertyValueSpecification,
@@ -560,6 +561,22 @@ export function MapWorkspace({
   /** A drawn ring, kept as a spatial filter over the flows. */
   const [selection, setSelection] = React.useState<[number, number][] | null>(null);
   const [place, setPlace] = React.useState("");
+  /**
+   * Phone only: the field is an icon until it is asked for.
+   *
+   * At 390px the bar has room for the title and four icon buttons, and a
+   * 220px field is not one of them -- which is why this control used to be
+   * `hidden md:flex` and simply vanished below 768, taking with it the only
+   * way to move the camera by name. Open, it covers the row rather than
+   * squeezing it: the block root is overflow-hidden, so a field that pushed
+   * its neighbours would clip them with no scrollbar and nothing on screen to
+   * show it had happened.
+   */
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const searchFieldRef = React.useRef<HTMLInputElement>(null);
+  React.useEffect(() => {
+    if (searchOpen) searchFieldRef.current?.focus();
+  }, [searchOpen]);
   const mapRef = React.useRef<MapLibreMap | null>(null);
   // State as well as the ref: the ref is what the layer code reads, but a hook
   // that must re-run when the map arrives needs something React can see change.
@@ -1333,6 +1350,27 @@ export function MapWorkspace({
 
   const conditions = countConditions(filter);
 
+  /**
+   * One behaviour behind two fields -- the row's at md and up, the overlay's
+   * below -- so the phone cannot quietly diverge from the desktop.
+   *
+   * Searches the flows already loaded, not a geocoder: the placeholder said
+   * "places, POIs", which means a network service and a key, for a field that
+   * was uncontrolled and wired to nothing. The names are on the features --
+   * street and junction -- so the honest version of this control searches
+   * those and moves the camera.
+   */
+  const runSearch = () => {
+    const needle = place.trim().toLowerCase();
+    if (!needle) return;
+    const hit = features.find((f) => f.properties.name.toLowerCase().includes(needle));
+    if (!hit) return;
+    mapRef.current?.flyTo({ center: midpoint(hit.geometry.coordinates), zoom: 14 });
+    // Collapses on a hit, and only on the phone, where the field is covering
+    // the map it was asked to fly.
+    setSearchOpen(false);
+  };
+
   return (
     <div
       ref={rootRef}
@@ -1405,21 +1443,47 @@ export function MapWorkspace({
         // A role nothing implements is worse than no role: it tells a screen
         // reader user to expect arrow keys that do nothing.
         aria-label="Map controls"
-        className="absolute inset-x-0 top-0 flex h-14 items-center gap-2 px-2 lg:px-4"
+        className={cn(
+          "absolute inset-x-0 top-0 flex h-14 items-center gap-2 px-2 lg:px-4",
+          // While the phone's search field is open it covers the row, and a
+          // covered control must not still be tabbable or announced -- or the
+          // keyboard walks into buttons nobody can see. visibility, not
+          // display: it takes them out of the tab order and the a11y tree
+          // while they keep their boxes, so opening the field reflows nothing.
+          // The overlay is the last child, which is why it is spared.
+          searchOpen && "max-md:[&>*:not(:last-child)]:invisible",
+        )}
       >
-        <InlineEdit
-          value={title}
-          onValueChange={setTitle}
-          label="Map name"
-          variant="title"
-          // min-w-0 so the title can actually truncate. InlineEdit is a flex
-          // item whose read state is itself inline-flex around a `truncate`
-          // span, and truncation needs min-w-0 at every level of that chain --
-          // without it the span refuses to shrink below its text and pushes
-          // the controls to its right out of a bar that is overflow-hidden,
-          // which clips them with no scrollbar and no ellipsis to show for it.
-          className="min-w-0"
-        />
+        {/*
+          A real heading, which this block had none of: `<h1>`..`<h6>` and
+          aria-level both returned nothing across the whole file, so the
+          workspace gave a screen reader no outline at all and the map's name
+          read as one more button in a row of them.
+
+          An `h2` element rather than role="heading": InlineEdit's title
+          variant is built to be wrapped in one -- it "takes its type from the
+          parent" -- and Tailwind's preflight strips the browser's own h2 type,
+          so this is semantics at no visual cost. Level 2, one under the page
+          title, matching how reports-workspace labels its report name.
+
+          min-w-0 on both: the h2 is now the flex item that has to be allowed
+          to shrink, and InlineEdit still needs it for its own `truncate` span.
+        */}
+        <h2 className="min-w-0">
+          <InlineEdit
+            value={title}
+            onValueChange={setTitle}
+            label="Map name"
+            variant="title"
+            // min-w-0 so the title can actually truncate. InlineEdit is a flex
+            // item whose read state is itself inline-flex around a `truncate`
+            // span, and truncation needs min-w-0 at every level of that chain --
+            // without it the span refuses to shrink below its text and pushes
+            // the controls to its right out of a bar that is overflow-hidden,
+            // which clips them with no scrollbar and no ellipsis to show for it.
+            className="min-w-0"
+          />
+        </h2>
 
         <div className="mx-auto flex items-center gap-2">
           {/*
@@ -1452,11 +1516,8 @@ export function MapWorkspace({
             </Button>
           ))}
 
-          {/* Searches the flows already loaded, not a geocoder: the placeholder
-              said "places, POIs", which means a network service and a key, for
-              a field that was uncontrolled and wired to nothing. The names are
-              on the features -- street and junction -- so the honest version of
-              this control searches those and moves the camera. */}
+          {/* The field itself, from md up. Behaviour lives in runSearch, which
+              the phone overlay below shares. */}
           <InputGroup className="hidden w-[220px] bg-card/95 backdrop-blur md:flex lg:w-[320px]">
             <InputGroupAddon>
               <Search />
@@ -1465,18 +1526,32 @@ export function MapWorkspace({
               value={place}
               onChange={(event) => setPlace(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key !== "Enter") return;
-                const needle = place.trim().toLowerCase();
-                if (!needle) return;
-                const hit = features.find((f) =>
-                  f.properties.name.toLowerCase().includes(needle),
-                );
-                if (hit) mapRef.current?.flyTo({ center: midpoint(hit.geometry.coordinates), zoom: 14 });
+                if (event.key === "Enter") runSearch();
               }}
               placeholder="Search streets and junctions"
               aria-label="Search streets and junctions"
             />
           </InputGroup>
+
+          {/* Below md the field is this button, and opening it reveals the
+              overlay at the end of the bar. A disclosure, so aria-expanded --
+              but no aria-controls: the overlay only exists while it is open,
+              and an aria-controls pointing at nothing is worse than none.
+
+              The same after:-inset-2 hit slop as the switcher and the basemap
+              trigger, for the same reason: 36px is what the control-size
+              ladder pins, and the pseudo-element buys a thumb 52px without
+              moving a pixel. */}
+          <Button
+            variant="secondary"
+            size="icon"
+            aria-label="Search streets and junctions"
+            aria-expanded={searchOpen}
+            onClick={() => setSearchOpen(true)}
+            className="relative after:absolute after:-inset-2 after:content-[''] md:hidden"
+          >
+            <Search />
+          </Button>
 
           {/* The real control, from the registry: freehand, circle and polygon
               with F/C/P, drawing onto the live map. The two buttons here before
@@ -1586,6 +1661,47 @@ export function MapWorkspace({
           <Sparkles data-icon="inline-start" />
           <span className="hidden sm:inline">Export report</span>
         </Button>
+
+        {/*
+          The phone's search field: the whole row, for as long as it is open.
+
+          Last child and absolutely positioned, so it paints over its
+          neighbours instead of competing with them for 374px. md:hidden as
+          well as state-gated, so a rotation to tablet hands the row back to
+          the inline field rather than leaving two of them.
+
+          Escape closes without searching; Enter searches and closes through
+          runSearch, which is the same code the inline field runs.
+        */}
+        {searchOpen ? (
+          <div className="bg-card/95 absolute inset-0 flex items-center gap-2 px-2 backdrop-blur md:hidden">
+            <InputGroup className="flex-1">
+              <InputGroupAddon>
+                <Search />
+              </InputGroupAddon>
+              <InputGroupInput
+                ref={searchFieldRef}
+                value={place}
+                onChange={(event) => setPlace(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") runSearch();
+                  if (event.key === "Escape") setSearchOpen(false);
+                }}
+                placeholder="Search streets and junctions"
+                aria-label="Search streets and junctions"
+              />
+            </InputGroup>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Close search"
+              onClick={() => setSearchOpen(false)}
+              className="relative shrink-0 after:absolute after:-inset-2 after:content-['']"
+            >
+              <X />
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {drawMode ? (
