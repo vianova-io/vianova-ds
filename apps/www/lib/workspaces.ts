@@ -18,6 +18,7 @@ export const WORKSPACE_ORDER = [
   "datahub-workspace",
   "reports-workspace",
   "regulations-workspace",
+  "feeds-workspace",
 ];
 
 export function orderWorkspaces<T extends { name: string }>(items: T[]): T[] {
