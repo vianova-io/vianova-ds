@@ -2611,6 +2611,30 @@
       }
     },
     {
+      "name": "draw-zone-icon",
+      "type": "registry:ui",
+      "title": "Draw Zone Icon",
+      "description": "Draw Zone Icon — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/draw-zone-icon.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "export-menu",
       "type": "registry:ui",
       "title": "Export Menu",
@@ -2855,6 +2879,7 @@
       "registryDependencies": [
         "@vianova/button",
         "@vianova/css-color",
+        "@vianova/draw-zone-icon",
         "@vianova/dropdown-menu",
         "@vianova/kbd",
         "@vianova/utils"
