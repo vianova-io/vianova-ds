@@ -12,12 +12,14 @@ import {
   Info,
   Lock,
   LocateFixed,
+  Map as MapIcon,
   MoreHorizontal,
   Plus,
   Power,
   Scale,
   Search,
   SlidersHorizontal,
+  SquarePen,
   Trash2,
   TriangleAlert,
   X,
@@ -661,10 +663,12 @@ function RegulationRow({
       <TableCell>
         {/* Production stacked one icon per rule, so four cap rules read as
             four identical glyphs. One per TYPE says the same thing in less
-            room, and the count lives in the editor. */}
+            room, and the count lives in the editor. 24px, as production's
+            list is: at 16px the glyph is the only thing that tells cap from
+            floor, and it was too small to. */}
         <span className="flex items-center gap-1">
           {types.slice(0, 3).map((t) => (
-            <RuleTypeIcon key={t} type={t} size="sm" label={RULE_TYPES[t].label} />
+            <RuleTypeIcon key={t} type={t} size="md" label={RULE_TYPES[t].label} />
           ))}
           {types.length > 3 ? (
             <span className="text-muted-foreground text-xs">+{types.length - 3}</span>
@@ -953,6 +957,14 @@ function RegulationEditor({
   const [confirmDeactivate, setConfirmDeactivate] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [focusZone, setFocusZone] = React.useState<{ id: string; at: number } | null>(null);
+  /*
+   * Below lg the settings and the map take turns rather than stacking: stacked,
+   * the map sat under every setting, so Locate and Draw acted on something
+   * off-screen. Switched by CSS, as the map workspace's panes are -- both stay
+   * mounted, nothing flashes on a statically exported first paint, and from lg
+   * up CSS shows both and this state is ignored.
+   */
+  const [pane, setPane] = React.useState<"settings" | "map">("settings");
 
   if (!draft) {
     return (
@@ -1002,6 +1014,20 @@ function RegulationEditor({
 
   const back = () => (dirty ? setConfirmLeave(true) : onClose());
 
+  const duplicateRule = (id: string) => {
+    const src = draft.rules.find((r) => r.id === id);
+    if (!src) return;
+    const copy = { ...src, id: uid("rule"), name: `${src.name} (copy)`, zoneIds: [...src.zoneIds] };
+    update({ rules: [...draft.rules, copy] });
+    setSelected(copy.id);
+  };
+  const deleteRule = (id: string) => {
+    const rest = draft.rules.filter((r) => r.id !== id);
+    update({ rules: rest });
+    if (selected === id) setSelected(rest[0]?.id ?? RULE_RAIL_GLOBAL);
+  };
+  const zoneCount = draft.rules.reduce((n, r) => n + r.zoneIds.length, 0);
+
   const addZones = (made: PickerZone[], into: string) => {
     const target = draft.rules.find((r) => r.id === into);
     if (!target) return;
@@ -1009,13 +1035,16 @@ function RegulationEditor({
   };
 
   return (
-    <div className="flex min-h-full flex-col lg:h-full lg:flex-row">
+    <div className="flex h-full flex-col lg:flex-row">
       {/* Panel */}
       <section
         aria-label="Regulation settings"
-        className="bg-background flex min-w-0 flex-col lg:h-full lg:w-[460px] lg:shrink-0 lg:border-r"
+        className={cn(
+          "bg-background flex min-w-0 flex-col lg:h-full lg:w-[460px] lg:shrink-0 lg:flex-none lg:border-r",
+          pane === "settings" ? "min-h-0 flex-1" : "shrink-0",
+        )}
       >
-        <header className="space-y-2 border-b px-4 pt-3 pb-4">
+        <header className="space-y-2 border-b px-4 pt-3 pb-3 lg:pb-4">
           <div className="flex items-center justify-between gap-2">
             <Button variant="ghost" size="sm" className="-ml-2" onClick={back}>
               <ArrowLeft data-icon="inline-start" />
@@ -1033,7 +1062,9 @@ function RegulationEditor({
               onReactivate={() => update({ deactivated: false })}
             />
           </div>
-          <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase">
+          {/* The kicker is a row of its own only where height is cheap; on a
+              phone the type joins the status badges below. */}
+          <p className="text-muted-foreground hidden items-center gap-1.5 text-xs font-medium tracking-wide uppercase lg:flex">
             <RuleTypeIcon type={draft.kind} size="sm" />
             {RULE_TYPES[draft.kind].label}
           </p>
@@ -1047,15 +1078,56 @@ function RegulationEditor({
             />
           </h2>
           <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant="outline" className="lg:hidden">
+              <RuleTypeIcon type={draft.kind} size="sm" />
+              {RULE_TYPES[draft.kind].label}
+            </Badge>
             {isNew ? <Badge variant="secondary">Draft</Badge> : <RegulationStatusBadge status={status} />}
             <VisibilityBadge visibility={draft.visibility} />
           </div>
+
+          <SegmentedControl
+            data-slot="regulation-pane-switcher"
+            aria-label="Show"
+            className="mt-1 w-full lg:hidden"
+            value={pane}
+            onValueChange={(v) => setPane(v as "settings" | "map")}
+            items={[
+              {
+                value: "settings",
+                // Not "unsaved changes": that is the save bar's own wording, and
+                // two of it on screen would make neither findable by text.
+                label: dirty ? "Settings, edited" : "Settings",
+                // The unsaved state lives on the save bar, which the map pane
+                // hides, so the tab carries a dot for it while you are away.
+                icon: (
+                  <span aria-hidden className="flex items-center gap-1.5">
+                    <SquarePen className="size-4" />
+                    Settings
+                    {dirty ? <span className="bg-warning size-1.5 rounded-full" /> : null}
+                  </span>
+                ),
+              },
+              {
+                value: "map",
+                label: `Map (${zoneCount})`,
+                icon: (
+                  <span aria-hidden className="flex items-center gap-1.5">
+                    <MapIcon className="size-4" />
+                    Map
+                    <span className="text-muted-foreground tabular-nums">{zoneCount}</span>
+                  </span>
+                ),
+              },
+            ]}
+          />
         </header>
 
-        <div className="flex min-h-0 flex-1">
+        <div className={cn("flex min-h-0 flex-1 flex-col lg:flex-row", pane === "map" && "max-lg:hidden")}>
           {multi ? (
             <RuleRail
-              className="border-r py-3"
+              orientation="responsive"
+              className="max-lg:rounded-none max-lg:border-0 max-lg:border-b max-lg:py-1 lg:border-r lg:py-3"
               items={draft.rules.map((r) => ({ id: r.id, type: r.type, label: r.name }))}
               value={selected}
               onValueChange={setSelected}
@@ -1065,18 +1137,8 @@ function RegulationEditor({
                 update({ rules: [...draft.rules, made] });
                 setSelected(made.id);
               }}
-              onDuplicate={(id) => {
-                const src = draft.rules.find((r) => r.id === id);
-                if (!src) return;
-                const copy = { ...src, id: uid("rule"), name: `${src.name} (copy)`, zoneIds: [...src.zoneIds] };
-                update({ rules: [...draft.rules, copy] });
-                setSelected(copy.id);
-              }}
-              onDelete={(id) => {
-                const rest = draft.rules.filter((r) => r.id !== id);
-                update({ rules: rest });
-                if (selected === id) setSelected(rest[0]?.id ?? RULE_RAIL_GLOBAL);
-              }}
+              onDuplicate={duplicateRule}
+              onDelete={deleteRule}
               getPanelId={() => "regulation-rule-panel"}
             />
           ) : null}
@@ -1095,7 +1157,12 @@ function RegulationEditor({
                 zonesLoading={zonesLoading}
                 onChange={(next) => updateRule(rule.id, next)}
                 onAddZones={() => setPickerOpen(true)}
-                onLocate={(id) => setFocusZone({ id, at: Date.now() })}
+                onLocate={(id) => {
+                  setPane("map");
+                  setFocusZone({ id, at: Date.now() });
+                }}
+                onDuplicate={multi ? () => duplicateRule(rule.id) : undefined}
+                onDelete={multi && draft.rules.length > 1 ? () => deleteRule(rule.id) : undefined}
               />
             ) : (
               <GlobalSettings
@@ -1107,6 +1174,7 @@ function RegulationEditor({
         </div>
 
         <SaveBar
+          className={cn(pane === "map" && "max-lg:hidden")}
           dirty={dirty}
           saving={saving}
           onSave={save}
@@ -1118,6 +1186,7 @@ function RegulationEditor({
 
       {/* Map */}
       <RegulationMap
+        className={cn(pane === "settings" && "max-lg:hidden")}
         regulation={draft}
         selectedRule={rule?.id}
         zoneIndex={zoneIndex}
@@ -1134,6 +1203,9 @@ function RegulationEditor({
           };
           onZonesCreated([zone]);
           addZones([zone], rule.id);
+          // Back to the rule the zone just joined: the change is there, and so
+          // is the save bar.
+          setPane("settings");
         }}
       />
 
@@ -1292,6 +1364,8 @@ function RuleEditor({
   onChange,
   onAddZones,
   onLocate,
+  onDuplicate,
+  onDelete,
 }: {
   rule: Rule;
   /** A rule in a multi-rule regulation has a name of its own; a single rule is the regulation. */
@@ -1301,6 +1375,12 @@ function RuleEditor({
   onChange: (next: Partial<Rule>) => void;
   onAddZones: () => void;
   onLocate: (zoneId: string) => void;
+  /**
+   * The rule's own actions, shown below lg only: there the rail is a strip of
+   * chips with no ⋯ of their own. From lg up the rail's tiles carry them.
+   */
+  onDuplicate?: () => void;
+  onDelete?: () => void;
 }) {
   const meta = RULE_TYPES[rule.type];
   const valueSpec = RULE_VALUE[rule.type];
@@ -1311,10 +1391,38 @@ function RuleEditor({
     <div className="space-y-4 p-4">
       {showName ? (
         <div className="space-y-1">
-          <p className="flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase">
-            <RuleTypeIcon type={rule.type} size="sm" />
-            <span className="text-muted-foreground">{meta.label}</span>
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase">
+              <RuleTypeIcon type={rule.type} size="sm" />
+              <span className="text-muted-foreground">{meta.label}</span>
+            </p>
+            {onDuplicate || onDelete ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Actions for ${rule.name}`}
+                      className="-my-1 lg:hidden"
+                    />
+                  }
+                >
+                  <MoreHorizontal />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  {onDuplicate ? (
+                    <DropdownMenuItem onClick={onDuplicate}>
+                      <Copy /> Duplicate
+                    </DropdownMenuItem>
+                  ) : null}
+                  <DropdownMenuItem variant="destructive" disabled={!onDelete} onClick={onDelete}>
+                    <Trash2 /> Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+          </div>
           <h3 className="text-base font-semibold">
             <InlineEdit
               variant="title"
@@ -1742,6 +1850,7 @@ function RegulationMap({
   focusZone,
   canDraw,
   onDrawn,
+  className,
 }: {
   regulation: Regulation;
   selectedRule?: string;
@@ -1749,8 +1858,29 @@ function RegulationMap({
   focusZone: { id: string; at: number } | null;
   canDraw: boolean;
   onDrawn: (ring: [number, number][]) => void;
+  className?: string;
 }) {
   const [map, setMap] = React.useState<MapLibreMap | null>(null);
+  const sectionRef = React.useRef<HTMLElement>(null);
+  /*
+   * Below lg the map is a pane that is display:none until asked for, and
+   * MapLibre only listens to the WINDOW resizing: shown, it would keep the 0x0
+   * canvas it was created with. Watching the section fixes that and anything
+   * else that resizes it, and `visible` lets the framing wait for a real size
+   * -- fitBounds on a 0x0 map lands on the wrong zoom.
+   */
+  const [visible, setVisible] = React.useState(false);
+  React.useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const shown = (entry?.contentRect.width ?? 0) > 0;
+      setVisible(shown);
+      if (shown) map?.resize();
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [map]);
   const [basemapId, setBasemapId] = React.useState<BasemapId>(DEFAULT_BASEMAP_ID);
   const [drawMode, setDrawMode] = React.useState<DrawMode | null>(null);
 
@@ -1796,20 +1926,22 @@ function RegulationMap({
   // wherever someone had panned to check a zone.
   const framed = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (!map || framed.current === regulation.id) return;
+    if (!map || !visible || framed.current === regulation.id) return;
+    map.resize();
     const rings = [...focused, ...others].map((s) => s.ring);
     const b = boundsOf(rings);
     if (!b) return;
     framed.current = regulation.id;
     map.fitBounds(b, { padding: 48, duration: 0, maxZoom: 15 });
-  }, [map, regulation.id, focused, others]);
+  }, [map, visible, regulation.id, focused, others]);
 
   React.useEffect(() => {
-    if (!map || !focusZone) return;
+    if (!map || !visible || !focusZone) return;
+    map.resize();
     const z = zoneIndex.get(focusZone.id);
     const b = z && boundsOf([z.ring]);
     if (b) map.fitBounds(b, { padding: 80, maxZoom: 17 });
-  }, [map, focusZone, zoneIndex]);
+  }, [map, visible, focusZone, zoneIndex]);
 
   React.useEffect(() => {
     if (!canDraw) setDrawMode(null);
@@ -1817,8 +1949,12 @@ function RegulationMap({
 
   return (
     <section
+      ref={sectionRef}
       aria-label="Map of the regulation's zones"
-      className="relative isolate h-[420px] min-w-0 flex-1 overflow-hidden border-t lg:h-full lg:border-t-0"
+      className={cn(
+        "relative isolate min-h-0 min-w-0 flex-1 overflow-hidden border-t lg:h-full lg:border-t-0",
+        className,
+      )}
     >
       <MapCanvas
         className="absolute inset-0"
@@ -1852,8 +1988,10 @@ function RegulationMap({
         />
       ) : null}
 
+      {/* The legend is lifted clear of the attribution on a phone, where
+          MapLibre's compact attribution opens across the whole bottom edge. */}
       {types.length ? (
-        <div className="bg-card/95 absolute bottom-3 left-3 max-w-[calc(100%-6rem)] rounded-lg border p-2.5 backdrop-blur">
+        <div className="bg-card/95 absolute bottom-3 left-3 max-w-[calc(100%-6rem)] rounded-lg border p-2.5 backdrop-blur max-lg:bottom-10">
           <p className="text-muted-foreground mb-1.5 text-xs font-medium">Rule types</p>
           <LegendCategorical
             columns={1}
