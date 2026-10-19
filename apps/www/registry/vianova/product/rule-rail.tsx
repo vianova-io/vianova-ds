@@ -64,6 +64,7 @@ export function RuleRail({
   showGlobal = true,
   "aria-label": ariaLabel = "Rules",
   getPanelId,
+  orientation = "vertical",
   className,
 }: {
   items: RuleRailItem[];
@@ -83,8 +84,18 @@ export function RuleRail({
   "aria-label"?: string;
   /** The id of the panel a tile controls, for aria-controls. */
   getPanelId?: (id: string) => string;
+  /**
+   * "responsive" is a horizontal strip of chips below `lg` and this column from
+   * `lg` up. Switched by CSS, not a media query: the site is a static export,
+   * and a hook would paint every phone a frame of the column first. In the
+   * strip the per-rule ⋯ menus are hidden -- chips have no fixed height to
+   * place them by -- so the host must offer Duplicate and Delete for the
+   * selected rule itself.
+   */
+  orientation?: "vertical" | "responsive";
   className?: string;
 }) {
+  const r = orientation === "responsive";
   const baseId = React.useId();
   const tabId = (id: string) => `${baseId}-tab-${id}`;
   const refs = React.useRef(new Map<string, HTMLButtonElement>());
@@ -105,9 +116,14 @@ export function RuleRail({
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, id: string) => {
     const at = order.indexOf(id);
+    const forward = order[(at + 1) % order.length];
+    const backward = order[(at - 1 + order.length) % order.length];
     const next = {
-      ArrowDown: order[(at + 1) % order.length],
-      ArrowUp: order[(at - 1 + order.length) % order.length],
+      ArrowDown: forward,
+      ArrowUp: backward,
+      // Both axes when the strip can be horizontal: which one it is depends on
+      // a breakpoint the keyboard handler cannot see.
+      ...(r ? { ArrowRight: forward, ArrowLeft: backward } : {}),
       Home: order[0],
       End: order[order.length - 1],
     }[event.key];
@@ -123,21 +139,24 @@ export function RuleRail({
     <div
       data-slot="rule-rail"
       className={cn(
-        "flex h-full w-[72px] shrink-0 flex-col rounded-lg border border-border bg-card",
+        r
+          ? "flex w-full min-w-0 shrink-0 flex-row items-center rounded-lg border border-border bg-card lg:h-full lg:w-[72px] lg:flex-col lg:items-stretch"
+          : "flex h-full w-[72px] shrink-0 flex-col rounded-lg border border-border bg-card",
         className,
       )}
     >
       {addable.length > 0 ? (
-        <div className="px-2 pt-2">
+        <div className={r ? "shrink-0 pl-2 lg:px-2 lg:pt-2" : "px-2 pt-2"}>
           {addable.length === 1 ? (
             <AddTile
+              chip={r}
               label={`Add ${RULE_TYPES[addable[0]!].label.toLowerCase()} rule`}
               onClick={() => onAdd?.(addable[0]!)}
             />
           ) : (
             <DropdownMenu>
-              <DropdownMenuTrigger render={<AddTile label="Add rule" />} />
-              <DropdownMenuContent side="right" align="start" className="w-48">
+              <DropdownMenuTrigger render={<AddTile chip={r} label="Add rule" />} />
+              <DropdownMenuContent side={r ? "bottom" : "right"} align="start" className="w-48">
                 {addable.map((type) => (
                   <DropdownMenuItem key={type} onClick={() => onAdd?.(type)}>
                     <RuleTypeIcon type={type} size="sm" />
@@ -151,14 +170,19 @@ export function RuleRail({
       ) : null}
 
       <div
-        className="relative flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-width:thin]"
+        className={cn(
+          "relative flex flex-1 [scrollbar-width:thin]",
+          r
+            ? "min-w-0 flex-row overflow-x-auto max-lg:[scrollbar-width:none] lg:min-h-0 lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto"
+            : "min-h-0 flex-col overflow-y-auto",
+        )}
         style={{ padding: PAD }}
       >
         <div
           role="tablist"
-          aria-orientation="vertical"
+          aria-orientation={r ? undefined : "vertical"}
           aria-label={ariaLabel}
-          className="flex flex-1 flex-col"
+          className={r ? "flex flex-1 flex-row lg:flex-col" : "flex flex-1 flex-col"}
           style={{ gap: GAP }}
         >
           {items.map((item) => {
@@ -182,7 +206,10 @@ export function RuleRail({
                 onClick={() => onValueChange(item.id)}
                 onKeyDown={(e) => onKeyDown(e, item.id)}
                 className={cn(
-                  "flex w-full shrink-0 flex-col items-center gap-0.5 rounded-md px-1 pt-1.5 text-foreground transition-shadow",
+                  "flex shrink-0 items-center rounded-md text-foreground transition-shadow",
+                  r
+                    ? "h-9 max-w-40 flex-row gap-1.5 px-2.5 lg:h-[68px] lg:w-full lg:max-w-none lg:flex-col lg:gap-0.5 lg:px-1 lg:pt-1.5"
+                    : "w-full flex-col gap-0.5 px-1 pt-1.5",
                   // An inset ring for "selected", so it composes with the
                   // outer focus ring instead of being replaced by it, and so a
                   // scroller cannot clip it.
@@ -195,12 +222,23 @@ export function RuleRail({
                 // it follows the theme: 12% of purple over a dark card is a
                 // dark purple, where a fixed light tint would glare.
                 style={{
-                  height: TILE,
+                  height: r ? undefined : TILE,
                   backgroundColor: `color-mix(in oklab, ${color} 12%, var(--card))`,
                 }}
               >
-                <RuleTypeIcon type={item.type} size="md" />
-                <span className="line-clamp-2 w-full text-center text-xs leading-[14px] break-words">
+                {r ? <RuleTypeIcon type={item.type} size="sm" className="lg:hidden" /> : null}
+                <RuleTypeIcon
+                  type={item.type}
+                  size="md"
+                  className={r ? "hidden lg:inline-flex" : undefined}
+                />
+                <span
+                  className={
+                    r
+                      ? "truncate text-sm lg:line-clamp-2 lg:w-full lg:text-center lg:text-xs lg:leading-[14px] lg:break-words lg:whitespace-normal"
+                      : "line-clamp-2 w-full text-center text-xs leading-[14px] break-words"
+                  }
+                >
                   {item.label}
                 </span>
               </button>
@@ -209,9 +247,23 @@ export function RuleRail({
 
           {showGlobal ? (
             // Sticky rather than outside the scroller: it has to stay in the
-            // tablist so the arrow keys reach it, and the tablist scrolls.
-            <div className="sticky bottom-0 z-10 mt-auto bg-card pt-1">
-              <div className="mb-1 border-t border-border" />
+            // tablist so the arrow keys reach it, and the tablist scrolls. Not
+            // sticky in the phone strip, where pinning it to the right edge
+            // covered the very chips it was meant to sit after.
+            <div
+              className={
+                r
+                  ? "flex shrink-0 items-center gap-1 pl-1 lg:sticky lg:bottom-0 lg:z-10 lg:mt-auto lg:block lg:bg-card lg:pt-1 lg:pl-0"
+                  : "sticky bottom-0 z-10 mt-auto bg-card pt-1"
+              }
+            >
+              <div
+                className={
+                  r
+                    ? "h-6 border-l border-border lg:mb-1 lg:h-auto lg:border-t lg:border-l-0"
+                    : "mb-1 border-t border-border"
+                }
+              />
               <button
                 ref={(el) => {
                   if (el) refs.current.set(RULE_RAIL_GLOBAL, el);
@@ -227,22 +279,26 @@ export function RuleRail({
                 onClick={() => onValueChange(RULE_RAIL_GLOBAL)}
                 onKeyDown={(e) => onKeyDown(e, RULE_RAIL_GLOBAL)}
                 className={cn(
-                  "flex h-14 w-full flex-col items-center justify-center gap-0.5 rounded-md bg-muted/60 text-xs text-muted-foreground transition-shadow",
+                  "flex items-center justify-center rounded-md bg-muted/60 text-xs text-muted-foreground transition-shadow",
+                  r
+                    ? "h-9 flex-row gap-1.5 px-2.5 text-sm lg:h-14 lg:w-full lg:flex-col lg:gap-0.5 lg:px-0 lg:text-xs"
+                    : "h-14 w-full flex-col gap-0.5",
                   value === RULE_RAIL_GLOBAL
                     ? "text-foreground inset-ring-2 inset-ring-primary"
                     : "hover:text-foreground",
                   focusRing,
                 )}
               >
-                <Settings2 className="size-5" aria-hidden />
+                <Settings2 className={r ? "size-4 lg:size-5" : "size-5"} aria-hidden />
                 Global
               </button>
             </div>
           ) : null}
         </div>
 
-        {hasMenu
-          ? items.map((item, i) => (
+        {hasMenu ? (
+          <div className={r ? "hidden lg:contents" : "contents"}>
+            {items.map((item, i) => (
               <RuleMenu
                 key={item.id}
                 item={item}
@@ -253,8 +309,9 @@ export function RuleRail({
                 onDuplicate={onDuplicate}
                 onDelete={onDelete}
               />
-            ))
-          : null}
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -262,9 +319,10 @@ export function RuleRail({
 
 function AddTile({
   label,
+  chip = false,
   className,
   ...props
-}: Omit<React.ComponentProps<"button">, "children"> & { label: string }) {
+}: Omit<React.ComponentProps<"button">, "children"> & { label: string; chip?: boolean }) {
   return (
     <button
       type="button"
@@ -273,7 +331,10 @@ function AddTile({
       aria-label={label}
       title={label}
       className={cn(
-        "flex h-12 w-full flex-col items-center justify-center gap-0.5 rounded-md border border-dashed border-border text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-popup-open:bg-muted",
+        "flex items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-popup-open:bg-muted",
+        chip
+          ? "h-9 flex-row gap-1 px-2.5 text-sm lg:h-12 lg:w-full lg:flex-col lg:gap-0.5 lg:px-0 lg:text-xs"
+          : "h-12 w-full flex-col gap-0.5",
         focusRing,
         className,
       )}
