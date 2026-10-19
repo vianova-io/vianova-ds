@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Circle, Hexagon, Spline } from "lucide-react";
+import { ChevronDown, Circle, MousePointer2, Spline } from "lucide-react";
 import type {
   FilterSpecification,
   GeoJSONSource,
@@ -14,10 +14,8 @@ import { Button } from "@/registry/vianova/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/registry/vianova/ui/dropdown-menu";
 import { Kbd } from "@/registry/vianova/ui/kbd";
@@ -26,18 +24,46 @@ import { cn } from "@/registry/vianova/lib/utils";
 
 export type DrawMode = "freehand" | "circle" | "polygon";
 
+/**
+ * Select is `null`, not a fourth DrawMode.
+ *
+ * Production lists it beside the three shapes, and it belongs there -- it is
+ * what the reader picks to stop drawing and go back to panning the map. But it
+ * draws nothing, and giving it a DrawMode of its own would oblige every
+ * consumer, `useMapDraw` included, to carry a mode that means "no mode" and to
+ * remember never to draw in it. `null` already means exactly that, and the
+ * menu is where the two are reconciled: one radio group, "select" standing in
+ * for null at the edge.
+ *
+ * It also replaces the old "Stop drawing" item, which only appeared mid-draw.
+ * A radio cannot be un-picked by clicking it again, so the way out had to be a
+ * separate item; as a radio of its own, Select is the way out and is always
+ * visible.
+ */
+const SELECT = "select";
+
 const MODES: {
-  value: DrawMode;
+  value: DrawMode | null;
   label: string;
   key: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
+  { value: null, label: "Select", key: "S", icon: MousePointer2 },
   { value: "freehand", label: "Free hand", key: "F", icon: Spline },
   { value: "circle", label: "Circle", key: "C", icon: Circle },
-  { value: "polygon", label: "Polygon", key: "P", icon: Hexagon },
+  // The polygon glyph, not Lucide's Hexagon: this mode does not draw a
+  // hexagon, it drops a vertex per click and closes the ring, and the handles
+  // on the corners are what say so.
+  { value: "polygon", label: "Polygon", key: "P", icon: DrawZoneIcon },
 ];
 
-const KEY_TO_MODE: Record<string, DrawMode> = { f: "freehand", c: "circle", p: "polygon" };
+/** `s` maps to null, so membership is tested with `in`, not truthiness. */
+const KEY_TO_MODE: Record<string, DrawMode | null> = {
+  s: null,
+  f: "freehand",
+  c: "circle",
+  p: "polygon",
+};
 
 /**
  * Whether a keydown belongs to something other than the map.
@@ -53,7 +79,11 @@ function isForeignKey(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null;
   if (!target || typeof target.closest !== "function") return false;
   if (target.isContentEditable) return true;
-  if (target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']")) {
+  if (
+    target.closest(
+      "input, textarea, select, [contenteditable=''], [contenteditable='true']",
+    )
+  ) {
     return true;
   }
   return !!target.closest("[role=menu]");
@@ -102,62 +132,118 @@ export function MapDrawControl({
         if (current !== null) change(null);
         return;
       }
-      const picked = KEY_TO_MODE[event.key.toLowerCase()];
-      if (picked && picked !== current) {
+      const key = event.key.toLowerCase();
+      // `in`, because KEY_TO_MODE.s is null and a truthiness test would drop
+      // the one shortcut that stops a drawing.
+      if (!(key in KEY_TO_MODE)) return;
+      const picked = KEY_TO_MODE[key]!;
+      if (picked !== current) {
         event.preventDefault();
-        change(picked);
+        change(picked ?? null);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [shortcuts, disabled]);
 
+  const current = MODES.find((m) => m.value === mode) ?? MODES[0]!;
+  const CurrentIcon = current.icon;
+  // What the tool button switches TO when nothing is being drawn. Remembered,
+  // so a reader who picked Circle once gets Circle back on the next click
+  // rather than whatever the component thinks is the default.
+  const lastToolRef = React.useRef<DrawMode>("polygon");
+  if (mode !== null) lastToolRef.current = mode;
+
+  /**
+   * Shared with the zoom stack and the basemap tile, so the map corner reads
+   * as one family. Sizing comes from --draw-size rather than a fixed `size-8`:
+   * the same control sits in the corner at 32px and on a toolbar row at 36px,
+   * and the control-size ladder pins that row. A consumer sets the whole
+   * control with one class -- `[--draw-size:2.25rem]` -- instead of reaching
+   * past the component with a descendant selector to override `size-8`.
+   */
+  const face =
+    "flex h-[var(--draw-size)] cursor-pointer items-center justify-center border bg-card/95 backdrop-blur transition-colors " +
+    "focus-visible:relative focus-visible:z-10 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none " +
+    "disabled:pointer-events-none disabled:opacity-50";
+  const tone = active
+    ? "border-primary text-primary"
+    : "border-border text-muted-foreground hover:text-foreground";
+
   return (
-    <div data-slot="map-draw-control" className={cn("flex", className)}>
+    <div
+      data-slot="map-draw-control"
+      className={cn("flex [--draw-size:2rem]", className)}
+    >
+      {/*
+        A split control, as production draws it: the tool on the left, the
+        menu of tools behind a chevron on the right.
+
+        The left button is not a second way to open the menu -- it toggles
+        between Select and the last drawing tool, which is the one thing a
+        reader does over and over while drawing several zones and which used
+        to take two clicks through the menu every time.
+      */}
+      <button
+        type="button"
+        data-part="tool"
+        disabled={disabled}
+        aria-label="Draw a zone"
+        // The label stays put while the glyph changes, so a screen reader is
+        // not told the button became a different button; `title` and
+        // aria-pressed carry the state.
+        title={
+          active
+            ? `Stop drawing (${current.label})`
+            : `Draw a zone (${current.label})`
+        }
+        // aria-pressed says a drawing is under way even with the menu shut,
+        // which aria-expanded on its own cannot. The colour change pairs with
+        // a border change so it does not rest on hue alone.
+        aria-pressed={active}
+        onClick={() => onModeChange(active ? null : lastToolRef.current)}
+        className={cn(face, tone, "w-[var(--draw-size)] rounded-l-lg")}
+      >
+        <CurrentIcon className="size-4" aria-hidden />
+      </button>
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger
           disabled={disabled}
           render={
             <button
               type="button"
-              aria-label="Draw a zone"
-              title="Draw a zone"
-              // aria-pressed says a drawing is under way even with the menu
-              // shut, which aria-expanded on its own cannot. The colour change
-              // pairs with a border change so it does not rest on hue alone.
-              aria-pressed={active}
-              // The same 32px square, border and translucent card as the zoom
-              // stack and the basemap tile, so the corner reads as one family.
+              data-part="chevron"
+              aria-label="Choose a drawing tool"
+              title="Choose a drawing tool"
+              // -ml-px collapses the two borders between the halves into one.
               className={cn(
-                "flex size-8 cursor-pointer items-center justify-center rounded-lg border bg-card/95 backdrop-blur transition-colors",
-                "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-                "disabled:pointer-events-none disabled:opacity-50",
-                active
-                  ? "border-primary text-primary"
-                  : "border-border text-muted-foreground hover:text-foreground",
+                face,
+                tone,
+                "-ml-px w-[calc(var(--draw-size)*0.75)] rounded-r-lg",
               )}
             />
           }
         >
-          {/* The tool's own glyph: a polygon with its corners exposed as
-              handles, which is what this button produces. PenLine named the
-              gesture instead -- a pen draws anything -- and said nothing about
-              zones. The mode menu below keeps shape glyphs, because there each
-              item names its shape rather than the tool. */}
-          <DrawZoneIcon className="size-4" aria-hidden />
+          <ChevronDown className="size-3.5" aria-hidden />
         </DropdownMenuTrigger>
-        {/* w-auto: the content defaults to the trigger's width, and a 32px menu
+        {/* w-auto: the content defaults to the trigger's width, and a 24px menu
             cannot hold "Free hand" and its key. */}
         <DropdownMenuContent align="end" className="w-auto min-w-44">
           <DropdownMenuRadioGroup
-            value={mode ?? ""}
-            onValueChange={(value: string) => onModeChange(value as DrawMode)}
+            value={mode ?? SELECT}
+            onValueChange={(value: string) =>
+              onModeChange(value === SELECT ? null : (value as DrawMode))
+            }
           >
             {MODES.map(({ value, label, key, icon: Icon }) => (
               // closeOnClick: Base UI keeps a menu open after a radio pick by
               // default, which here would leave the menu covering the map the
               // reader is about to draw on.
-              <DropdownMenuRadioItem key={value} value={value} closeOnClick>
+              <DropdownMenuRadioItem
+                key={label}
+                value={value ?? SELECT}
+                closeOnClick
+              >
                 <Icon aria-hidden />
                 {label}
                 {shortcuts ? (
@@ -168,21 +254,6 @@ export function MapDrawControl({
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
-          {active ? (
-            <>
-              <DropdownMenuSeparator />
-              {/* A radio cannot be un-picked by clicking it again, so stopping
-                  needs an item of its own. */}
-              <DropdownMenuItem onClick={() => onModeChange(null)}>
-                Stop drawing
-                {shortcuts ? (
-                  <Kbd className="ml-auto" aria-hidden>
-                    Esc
-                  </Kbd>
-                ) : null}
-              </DropdownMenuItem>
-            </>
-          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -190,7 +261,8 @@ export function MapDrawControl({
 }
 
 const BANNER_TEXT: Record<DrawMode, string> = {
-  polygon: "Click to add points. Click the first point or press Enter to finish.",
+  polygon:
+    "Click to add points. Click the first point or press Enter to finish.",
   circle: "Press and drag from the centre.",
   freehand: "Press and drag to draw the outline.",
 };
@@ -274,7 +346,8 @@ function circleRing(centre: Position, radius: number, steps = 64): Position[] {
   for (let i = 0; i < steps; i++) {
     const bearing = (2 * Math.PI * i) / steps;
     const lat2 = Math.asin(
-      Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(bearing),
+      Math.sin(lat1) * Math.cos(d) +
+        Math.cos(lat1) * Math.sin(d) * Math.cos(bearing),
     );
     const lon2 =
       lon1 +
@@ -291,11 +364,16 @@ function circleRing(centre: Position, radius: number, steps = 64): Position[] {
 function closeRing(points: Position[]): Position[] {
   const first = points[0]!;
   const last = points[points.length - 1]!;
-  return first[0] === last[0] && first[1] === last[1] ? points : [...points, first];
+  return first[0] === last[0] && first[1] === last[1]
+    ? points
+    : [...points, first];
 }
 
 /** Ramer-Douglas-Peucker over screen points, returning the kept indices. */
-function simplify(points: { x: number; y: number }[], tolerance: number): number[] {
+function simplify(
+  points: { x: number; y: number }[],
+  tolerance: number,
+): number[] {
   if (points.length < 3) return points.map((_, i) => i);
   const keep = new Array<boolean>(points.length).fill(false);
   keep[0] = keep[points.length - 1] = true;
@@ -336,7 +414,8 @@ const LAYERS = {
   live: `${SOURCE_ID}-live`,
   vertex: `${SOURCE_ID}-vertex`,
 };
-const kindIs = (kind: string) => ["==", ["get", "kind"], kind] as FilterSpecification;
+const kindIs = (kind: string) =>
+  ["==", ["get", "kind"], kind] as FilterSpecification;
 
 /** Within this many pixels of the first vertex, a click closes the polygon. */
 const SNAP_PX = 10;
@@ -443,7 +522,12 @@ export function useMapDraw({
     const removeLayers = () => {
       // A map that is being torn down throws on any of these.
       try {
-        for (const layer of [LAYERS.vertex, LAYERS.live, LAYERS.line, LAYERS.fill]) {
+        for (const layer of [
+          LAYERS.vertex,
+          LAYERS.live,
+          LAYERS.line,
+          LAYERS.fill,
+        ]) {
           if (map.getLayer(layer)) map.removeLayer(layer);
         }
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
@@ -461,9 +545,17 @@ export function useMapDraw({
           geometry: { type: "Polygon", coordinates: [closeRing(ring)] },
         });
       const line = (kind: string, coords: Position[]) =>
-        out.push({ type: "Feature", properties: { kind }, geometry: { type: "LineString", coordinates: coords } });
+        out.push({
+          type: "Feature",
+          properties: { kind },
+          geometry: { type: "LineString", coordinates: coords },
+        });
       const vertex = (p: Position, snap = false) =>
-        out.push({ type: "Feature", properties: { kind: "vertex", snap }, geometry: { type: "Point", coordinates: p } });
+        out.push({
+          type: "Feature",
+          properties: { kind: "vertex", snap },
+          geometry: { type: "Point", coordinates: p },
+        });
 
       if (mode === "polygon") {
         const outline = cursor ? [...vertices, cursor] : vertices;
@@ -473,7 +565,8 @@ export function useMapDraw({
           line("live", [vertices[vertices.length - 1]!, cursor]);
           if (vertices.length >= 2) line("live", [cursor, vertices[0]!]);
         }
-        const snapping = cursor !== null && vertices.length >= 3 && nearFirst(cursor);
+        const snapping =
+          cursor !== null && vertices.length >= 3 && nearFirst(cursor);
         vertices.forEach((v, i) => vertex(v, i === 0 && snapping));
       } else if (mode === "circle") {
         if (centre && radius > 0) {
@@ -521,7 +614,11 @@ export function useMapDraw({
         type: "line",
         source: SOURCE_ID,
         filter: kindIs("live"),
-        paint: { "line-color": primary, "line-width": 2, "line-dasharray": [2, 2] },
+        paint: {
+          "line-color": primary,
+          "line-width": 2,
+          "line-dasharray": [2, 2],
+        },
       });
       map.addLayer({
         id: LAYERS.vertex,
@@ -654,7 +751,8 @@ export function useMapDraw({
       if (mode === "circle") {
         // A tap without a drag has no radius; start again rather than emit a
         // zero-area zone.
-        if (centre && moved >= FREEHAND_STEP_PX && radius > 0) complete(circleRing(centre, radius));
+        if (centre && moved >= FREEHAND_STEP_PX && radius > 0)
+          complete(circleRing(centre, radius));
         else {
           reset();
           render();
@@ -689,7 +787,11 @@ export function useMapDraw({
       } else if (mode === "polygon" && event.key === "Enter") {
         event.preventDefault();
         finishPolygon();
-      } else if (mode === "polygon" && event.key === "Backspace" && vertices.length > 0) {
+      } else if (
+        mode === "polygon" &&
+        event.key === "Backspace" &&
+        vertices.length > 0
+      ) {
         // preventDefault: some browsers still treat Backspace as "go back".
         event.preventDefault();
         vertices.pop();

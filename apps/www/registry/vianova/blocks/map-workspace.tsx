@@ -284,12 +284,16 @@ const LAYERS = [
  * error from ignoring curvature is far below the width of the road being
  * tested.
  */
-function ringContains(ring: [number, number][], [x, y]: [number, number]): boolean {
+function ringContains(
+  ring: [number, number][],
+  [x, y]: [number, number],
+): boolean {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     const [xi, yi] = ring[i]!;
     const [xj, yj] = ring[j]!;
-    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi)
+      inside = !inside;
   }
   return inside;
 }
@@ -554,12 +558,17 @@ export function MapWorkspace({
    * by width: "which one" below lg, "which ones" above it. Collapsing them
    * would make one of the two controls lie about the other's width.
    */
-  const [deskPanels, setDeskPanels] = React.useState({ data: true, charts: true });
+  const [deskPanels, setDeskPanels] = React.useState({
+    data: true,
+    charts: true,
+  });
 
   /** Null when the pointer is a pointer; a mode while a zone is being drawn. */
   const [drawMode, setDrawMode] = React.useState<DrawMode | null>(null);
   /** A drawn ring, kept as a spatial filter over the flows. */
-  const [selection, setSelection] = React.useState<[number, number][] | null>(null);
+  const [selection, setSelection] = React.useState<[number, number][] | null>(
+    null,
+  );
   const [place, setPlace] = React.useState("");
   /**
    * Phone only: the field is an icon until it is asked for.
@@ -723,7 +732,8 @@ export function MapWorkspace({
   const chartsPaneId = `${uid}-charts`;
 
   const scheme = useColorScheme() ?? "dark";
-  const [basemapId, setBasemapId] = React.useState<BasemapId>(DEFAULT_BASEMAP_ID);
+  const [basemapId, setBasemapId] =
+    React.useState<BasemapId>(DEFAULT_BASEMAP_ID);
 
   /**
    * The ramp is a property of the basemap, which this used to claim and not do.
@@ -833,7 +843,9 @@ export function MapWorkspace({
     // rather than its whole geometry: a flow is one road segment, and asking
     // whether a line is "in" a zone has no single answer worth defending here.
     if (!selection) return matched;
-    return matched.filter((f) => ringContains(selection, midpoint(f.geometry.coordinates)));
+    return matched.filter((f) =>
+      ringContains(selection, midpoint(f.geometry.coordinates)),
+    );
   }, [all, predicate, selection]);
 
   const points = React.useMemo(
@@ -1363,9 +1375,14 @@ export function MapWorkspace({
   const runSearch = () => {
     const needle = place.trim().toLowerCase();
     if (!needle) return;
-    const hit = features.find((f) => f.properties.name.toLowerCase().includes(needle));
+    const hit = features.find((f) =>
+      f.properties.name.toLowerCase().includes(needle),
+    );
     if (!hit) return;
-    mapRef.current?.flyTo({ center: midpoint(hit.geometry.coordinates), zoom: 14 });
+    mapRef.current?.flyTo({
+      center: midpoint(hit.geometry.coordinates),
+      zoom: 14,
+    });
     // Collapses on a hit, and only on the phone, where the field is covering
     // the map it was asked to fly.
     setSearchOpen(false);
@@ -1469,7 +1486,16 @@ export function MapWorkspace({
           min-w-0 on both: the h2 is now the flex item that has to be allowed
           to shrink, and InlineEdit still needs it for its own `truncate` span.
         */}
-        <h2 className="min-w-0">
+        {/*
+          Capped, not just truncating. The centred field is out of flow, so
+          nothing in the layout stops a long map name from running underneath
+          it -- `truncate` alone only promises the name will not push its
+          neighbours, which is a different promise. The cap is half the bar
+          minus half the field, minus the gap, minus the data toggle where it
+          exists: 50% - 6.5rem at md (96px of field, no toggle), and
+          50% - 13.25rem at lg (160px of field, plus a 36px toggle and a gap).
+        */}
+        <h2 className="min-w-0 md:max-w-[calc(50%-6.5rem)] lg:max-w-[calc(50%-13.25rem)]">
           <InlineEdit
             value={title}
             onValueChange={setTitle}
@@ -1485,40 +1511,58 @@ export function MapWorkspace({
           />
         </h2>
 
-        <div className="mx-auto flex items-center gap-2">
-          {/*
-            The two panel disclosures, from lg up.
+        {/*
+          Left: the data panel's disclosure, next to the name of the map it
+          belongs to. Charts moves to the other end of the row, beside the
+          drawing tools, which is where production puts it -- the two panels
+          dock to opposite sides, so a toggle on the side its panel appears on
+          says more than a pair of them huddled together.
 
-            They were decorative because CSS forced both panels open at this
-            width, so there was nothing to toggle and a control that claimed
-            otherwise would have been lying. `deskPanels` is that missing
-            state. Below lg they give way to the switcher further along the
-            row, which answers the different question of which single panel is
-            on screen.
-          */}
-          {(
-            [
-              ["data", "Data layers", Layers, dataPaneId],
-              ["charts", "Charts", BarChart3, chartsPaneId],
-            ] as const
-          ).map(([id, label, Icon, controls]) => (
-            <Button
-              key={id}
-              variant={deskPanels[id] ? "default" : "secondary"}
-              size="icon"
-              aria-label={label}
-              aria-expanded={deskPanels[id]}
-              aria-controls={controls}
-              onClick={() => setDeskPanels((open) => ({ ...open, [id]: !open[id] }))}
-              className="hidden lg:inline-flex"
-            >
-              <Icon />
-            </Button>
-          ))}
+          They were decorative because CSS forced both panels open at this
+          width, so there was nothing to toggle and a control that claimed
+          otherwise would have been lying. `deskPanels` is that missing state.
+          Below lg they give way to the switcher further along the row, which
+          answers the different question of which single panel is on screen.
+        */}
+        <Button
+          variant={deskPanels.data ? "default" : "secondary"}
+          size="icon"
+          aria-label="Data layers"
+          aria-expanded={deskPanels.data}
+          aria-controls={dataPaneId}
+          onClick={() =>
+            setDeskPanels((open) => ({ ...open, data: !open.data }))
+          }
+          className="hidden lg:inline-flex"
+        >
+          <Layers />
+        </Button>
 
-          {/* The field itself, from md up. Behaviour lives in runSearch, which
-              the phone overlay below shares. */}
-          <InputGroup className="hidden w-[220px] bg-card/95 backdrop-blur md:flex lg:w-[320px]">
+        {/*
+          Centre: the search, centred on the BAR rather than on what is left
+          between its neighbours.
+
+          Absolutely positioned for that reason. In flow it would sit wherever
+          the title's length pushed it, and the title is editable -- renaming
+          the map would slide the search sideways. Out of flow it is pinned to
+          the middle and stays there, which is what production does and what
+          makes the row read as three groups instead of one long queue.
+
+          The cost is that nothing stops a neighbour from running underneath
+          it, so the title's side is capped below: `max-w` keeps the left group
+          clear of the field's left edge at every width it exists at.
+        */}
+        <div className="absolute left-1/2 hidden -translate-x-1/2 md:block">
+          {/* Behaviour lives in runSearch, which the phone overlay shares. */}
+          <InputGroup
+            // Widths measured against what the right group actually needs at
+            // each breakpoint, because a centred field is only centred if the
+            // row can spare the same space on both sides. At md the right side
+            // carries the panel switcher and the basemap trigger as well
+            // (252px measured), so 12rem is what fits beside it in a 718px
+            // bar; from lg those two go away and 20rem fits in 726px.
+            className="w-48 bg-card/95 backdrop-blur lg:w-80"
+          >
             <InputGroupAddon>
               <Search />
             </InputGroupAddon>
@@ -1532,7 +1576,13 @@ export function MapWorkspace({
               aria-label="Search streets and junctions"
             />
           </InputGroup>
+        </div>
 
+        {/*
+          Right: everything else, pushed over by ml-auto so the group ends at
+          the bar's right edge however wide its members are.
+        */}
+        <div className="ml-auto flex items-center gap-2">
           {/* Below md the field is this button, and opening it reveals the
               overlay at the end of the bar. A disclosure, so aria-expanded --
               but no aria-controls: the overlay only exists while it is open,
@@ -1553,23 +1603,38 @@ export function MapWorkspace({
             <Search />
           </Button>
 
-          {/* The real control, from the registry: freehand, circle and polygon
-              with F/C/P, drawing onto the live map. The two buttons here before
-              were a pointer icon and a chevron that opened nothing.
+          {/* The real control, from the registry: Select, freehand, circle and
+              polygon with S/F/C/P, drawing onto the live map. The two buttons
+              here before were a pointer icon and a chevron that opened
+              nothing -- this is that shape, made real.
 
-              size-9 on its button, because the component hardcodes size-8: it
-              was built to float in the map corner, where 32px matches the zoom
-              stack and the basemap tile. On this row 32px is the odd one out --
-              the same mismatch Export report had. The descendant selector beats
-              the component's own `size-8` without forking it. */}
+              --draw-size, not a descendant selector on its buttons: the
+              component is built for the map corner, where 32px matches the
+              zoom stack and the basemap tile, and this row is 36px. It now
+              takes its size from one custom property, so a consumer sets the
+              whole control without reaching past it. */}
           <MapDrawControl
-            className="hidden md:flex [&_button]:size-9"
+            className="hidden md:flex [--draw-size:2.25rem]"
             mode={drawMode}
             onModeChange={setDrawMode}
           />
-        </div>
 
-        {/*
+          {/* Charts, at the end the charts panel docks to. */}
+          <Button
+            variant={deskPanels.charts ? "default" : "secondary"}
+            size="icon"
+            aria-label="Charts"
+            aria-expanded={deskPanels.charts}
+            aria-controls={chartsPaneId}
+            onClick={() =>
+              setDeskPanels((open) => ({ ...open, charts: !open.charts }))
+            }
+            className="hidden lg:inline-flex"
+          >
+            <BarChart3 />
+          </Button>
+
+          {/*
           Panel switcher, below lg only.
 
           Two buttons with aria-expanded/aria-controls, not a toggle group:
@@ -1583,33 +1648,32 @@ export function MapWorkspace({
           elementFromPoint resolves a hit on the pseudo-element back to the
           button, so it is testable rather than merely asserted.
         */}
-        <div
-          data-slot="panel-switcher"
-          className="flex items-center gap-2 lg:hidden"
-        >
-          {(
-            [
-              ["data", "Data layers", Layers, dataPaneId],
-              ["charts", "Charts", BarChart3, chartsPaneId],
-            ] as const
-          ).map(([id, label, Icon, controls]) => (
-            <Button
-              key={id}
-              variant={pane === id ? "default" : "secondary"}
-              size="icon"
-              aria-label={label}
-              aria-expanded={pane === id}
-              aria-controls={controls}
-              onClick={() => setPane(id)}
-              className="relative after:absolute after:-inset-2 after:content-['']"
-            >
-              <Icon />
-            </Button>
-          ))}
+          <div
+            data-slot="panel-switcher"
+            className="flex items-center gap-2 lg:hidden"
+          >
+            {(
+              [
+                ["data", "Data layers", Layers, dataPaneId],
+                ["charts", "Charts", BarChart3, chartsPaneId],
+              ] as const
+            ).map(([id, label, Icon, controls]) => (
+              <Button
+                key={id}
+                variant={pane === id ? "default" : "secondary"}
+                size="icon"
+                aria-label={label}
+                aria-expanded={pane === id}
+                aria-controls={controls}
+                onClick={() => setPane(id)}
+                className="relative after:absolute after:-inset-2 after:content-['']"
+              >
+                <Icon />
+              </Button>
+            ))}
+          </div>
 
-        </div>
-
-        {/* The basemap's phone home, a sibling of the panel switcher rather
+          {/* The basemap's phone home, a sibling of the panel switcher rather
             than a member of it -- that slot means the two panel disclosures,
             and the responsive suite counts them.
             MapControls is desktop-only, which was free while its buttons did
@@ -1618,25 +1682,25 @@ export function MapWorkspace({
             MapLibre's attribution owns what is left. On a toolbar row it must
             be a 36px icon button -- control-size.spec pins that ladder -- so it
             takes the same hit-slop trick as its neighbours. */}
-        <BasemapSwitcher
-          className="lg:hidden"
-          value={basemapId}
-          onValueChange={setBasemapId}
-          side="bottom"
-          align="end"
-          trigger={
-            <Button
-              variant="secondary"
-              size="icon"
-              aria-label={`Basemap: ${BASEMAP_BY_ID[basemapId]?.label ?? ""}`}
-              className="relative after:absolute after:-inset-2 after:content-['']"
-            >
-              <MapIcon />
-            </Button>
-          }
-        />
+          <BasemapSwitcher
+            className="lg:hidden"
+            value={basemapId}
+            onValueChange={setBasemapId}
+            side="bottom"
+            align="end"
+            trigger={
+              <Button
+                variant="secondary"
+                size="icon"
+                aria-label={`Basemap: ${BASEMAP_BY_ID[basemapId]?.label ?? ""}`}
+                className="relative after:absolute after:-inset-2 after:content-['']"
+              >
+                <MapIcon />
+              </Button>
+            }
+          />
 
-        {/* Downloads what is on screen -- the filtered flows, including any
+          {/* Downloads what is on screen -- the filtered flows, including any
             drawn zone -- through the registry's own toCsv/downloadFile. It had
             no onClick at all.
 
@@ -1644,23 +1708,30 @@ export function MapWorkspace({
             icon button, and this was 32. That is the mismatch
             control-size.spec.ts was written about, which it misses here
             because it only measures /preview/button-control-ladder. */}
-        <Button
-          aria-label="Export report"
-          disabled={!features.length}
-          onClick={() =>
-            downloadFile(
-              toCsv(
-                features.map((f) => f.properties as unknown as Record<string, unknown>),
-                EXPORT_COLUMNS,
-              ),
-              `${title || "flows"}.csv`,
-              "text/csv;charset=utf-8",
-            )
-          }
-        >
-          <Sparkles data-icon="inline-start" />
-          <span className="hidden sm:inline">Export report</span>
-        </Button>
+          <Button
+            aria-label="Export report"
+            disabled={!features.length}
+            onClick={() =>
+              downloadFile(
+                toCsv(
+                  features.map(
+                    (f) => f.properties as unknown as Record<string, unknown>,
+                  ),
+                  EXPORT_COLUMNS,
+                ),
+                `${title || "flows"}.csv`,
+                "text/csv;charset=utf-8",
+              )
+            }
+          >
+            <Sparkles data-icon="inline-start" />
+            {/* xl, not sm: the label is ~90px and the widest thing this
+                group can give up without losing a control. Measured: with it
+                showing at lg, the group ran 63px under the centred field in a
+                726px bar. */}
+            <span className="hidden xl:inline">Export report</span>
+          </Button>
+        </div>
 
         {/*
           The phone's search field: the whole row, for as long as it is open.
