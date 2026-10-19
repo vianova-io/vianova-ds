@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Circle, Hexagon, PenLine, Spline } from "lucide-react";
+import { Circle, Hexagon, Spline } from "lucide-react";
 import type {
   FilterSpecification,
   GeoJSONSource,
@@ -9,6 +9,7 @@ import type {
   Map as MapLibreMap,
 } from "maplibre-gl";
 
+import { DrawZoneIcon } from "@/registry/vianova/product/draw-zone-icon";
 import { Button } from "@/registry/vianova/ui/button";
 import {
   DropdownMenu,
@@ -138,7 +139,12 @@ export function MapDrawControl({
             />
           }
         >
-          <PenLine className="size-4" aria-hidden />
+          {/* The tool's own glyph: a polygon with its corners exposed as
+              handles, which is what this button produces. PenLine named the
+              gesture instead -- a pen draws anything -- and said nothing about
+              zones. The mode menu below keeps shape glyphs, because there each
+              item names its shape rather than the tool. */}
+          <DrawZoneIcon className="size-4" aria-hidden />
         </DropdownMenuTrigger>
         {/* w-auto: the content defaults to the trigger's width, and a 32px menu
             cannot hold "Free hand" and its key. */}
