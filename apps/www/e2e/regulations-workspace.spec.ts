@@ -134,3 +134,25 @@ test("on a phone, rules are a strip and settings and map take turns", async ({ p
   await expect(root.getByRole("tab", { name: /Parking bays \(copy\)/ })).toHaveAttribute("aria-selected", "true");
   await expect(root.getByRole("radio", { name: "Settings, edited" })).toBeChecked();
 });
+
+test("a polygon drawn with the map's draw control joins the rule, and the tool returns to Select", async ({ page }) => {
+  const root = await open(page);
+  await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
+  await expect(root.getByText("2 zones").first()).toBeVisible();
+
+  // The same split control as the map workspace: the tool on the left, the
+  // menu of tools behind the chevron.
+  const map = root.getByRole("region", { name: "Map of the regulation's zones" });
+  await map.getByRole("button", { name: "Choose a drawing tool" }).click();
+  await page.getByRole("menuitemradio", { name: /Polygon/ }).click();
+  await expect(map.getByRole("button", { name: "Draw a zone" })).toHaveAttribute("aria-pressed", "true");
+
+  const box = (await map.boundingBox())!;
+  for (const [x, y] of [[0.4, 0.4], [0.6, 0.4], [0.6, 0.6], [0.4, 0.6]] as const) {
+    await page.mouse.click(box.x + box.width * x, box.y + box.height * y);
+  }
+  await map.getByRole("button", { name: "Done" }).click();
+
+  await expect(root.getByText("3 zones").first()).toBeVisible();
+  await expect(map.getByRole("button", { name: "Draw a zone" })).toHaveAttribute("aria-pressed", "false");
+});
