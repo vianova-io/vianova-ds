@@ -3256,9 +3256,9 @@
         "@vianova/checkbox",
         "@vianova/choice-card",
         "@vianova/field",
-        "@vianova/input-group",
         "@vianova/sheet",
         "@vianova/slider-field",
+        "@vianova/tag-input",
         "@vianova/textarea",
         "@vianova/toggle-group",
         "@vianova/utils"

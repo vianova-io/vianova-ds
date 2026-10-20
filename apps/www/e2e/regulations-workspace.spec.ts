@@ -86,8 +86,20 @@ test("zones added from the picker land in the rule", async ({ page }) => {
 
   await root.getByRole("button", { name: "Add zones" }).click();
   const sheet = page.getByRole("dialog", { name: "Add zones" });
-  await sheet.getByRole("textbox").first().fill("Belém");
+  // The search field is a tag input: a ticked zone becomes a chip in it, and
+  // removing the chip unticks the zone.
+  const search = sheet.getByRole("textbox", { name: "Search zones" });
+  await search.fill("Belém");
   await sheet.getByRole("checkbox", { name: "Belém", exact: true }).click();
+  await expect(sheet.locator("[data-slot=tag-input-chip]", { hasText: "Belém" })).toBeVisible();
+  await sheet.getByRole("button", { name: "Remove Belém" }).click();
+  await expect(sheet.getByRole("checkbox", { name: "Belém", exact: true })).not.toBeChecked();
+
+  // Enter picks the top match without touching the list.
+  await search.fill("Belém");
+  await search.press("Enter");
+  await expect(search).toHaveValue("");
+  await expect(sheet.locator("[data-slot=tag-input-chip]", { hasText: "Belém" })).toBeVisible();
   await sheet.getByRole("button", { name: "Add 1 zone" }).click();
 
   await expect(root.getByText("3 zones").first()).toBeVisible();

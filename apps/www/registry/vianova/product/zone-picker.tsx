@@ -13,6 +13,7 @@ import {
 
 import { cn } from "@/registry/vianova/lib/utils";
 import { SliderField } from "@/registry/vianova/patterns/slider-field";
+import { TagInput } from "@/registry/vianova/patterns/tag-input";
 import { Badge } from "@/registry/vianova/ui/badge";
 import { Button } from "@/registry/vianova/ui/button";
 import { Checkbox } from "@/registry/vianova/ui/checkbox";
@@ -23,11 +24,6 @@ import {
   FieldError,
   FieldLabel,
 } from "@/registry/vianova/ui/field";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/registry/vianova/ui/input-group";
 import {
   Sheet,
   SheetContent,
@@ -630,6 +626,7 @@ function ZoneList({
   const deferredQuery = React.useDeferredValue(query);
 
   const excluded = React.useMemo(() => new Set(excludeIds), [excludeIds]);
+  const byId = React.useMemo(() => new Map(zones.map((z) => [z.id, z])), [zones]);
 
   const filtered = React.useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
@@ -682,18 +679,33 @@ function ZoneList({
 
   return (
     <div data-slot="zone-picker-list" className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <InputGroup className="flex-1">
-          <InputGroupAddon>
-            <Search />
-          </InputGroupAddon>
-          <InputGroupInput
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Type a tag, zone or regulation name"
-            aria-label="Search zones"
-          />
-        </InputGroup>
+      {/* Sticky, so the chips -- what is selected -- stay in view while the
+          list scrolls under them. -mx/px keep its background edge to edge. */}
+      <div className="bg-popover sticky top-0 z-10 -mx-4 flex items-center gap-2 px-4 py-2">
+        {/*
+          The search and the selection in one field, as a mail client's To:
+          line is: chips for the zones picked, then the text that filters the
+          list. Removing a chip unticks the zone; Enter picks the top match, so
+          a zone can be found and chosen without leaving the keyboard.
+        */}
+        <TagInput
+          className="min-w-0 flex-1"
+          startAddon={<Search />}
+          inputLabel="Search zones"
+          placeholder="Type a tag, zone or regulation name"
+          value={[...selected]}
+          onValueChange={(ids) => onSelectedChange(new Set(ids))}
+          getTagLabel={(id) => byId.get(id)?.name ?? id}
+          maxVisible={5}
+          draft={query}
+          onDraftChange={setQuery}
+          onDraftCommit={() => {
+            const top = selectable.find((z) => !selected.has(z.id));
+            if (!top) return;
+            toggle(top.id, true);
+            setQuery("");
+          }}
+        />
         <ToggleGroup
           variant="outline"
           value={[view]}
