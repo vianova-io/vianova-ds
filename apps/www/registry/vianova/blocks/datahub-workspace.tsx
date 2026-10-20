@@ -84,6 +84,7 @@ import {
 } from "@/registry/vianova/ui/toggle-group";
 import { Textarea } from "@/registry/vianova/ui/textarea";
 import { ConfirmDialog } from "@/registry/vianova/patterns/confirm-dialog";
+import { MapThumbnail as Thumbnail } from "@/registry/vianova/product/map-thumbnail";
 import { CategoryStylePicker } from "@/registry/vianova/product/category-style-picker";
 import { LegendCategorical } from "@/registry/vianova/product/legend-categorical";
 import { MapCanvas } from "@/registry/vianova/product/map-canvas";
@@ -288,53 +289,6 @@ function styleFor(column: Column, value: string): CategoryStyle {
     resolveStyles(values, { values: column.styles })[value] ?? {
       color: CATEGORY_PALETTE[0],
     }
-  );
-}
-
-/** A stylised street grid, standing in for the map thumbnail the platform renders. */
-function Thumbnail({ seed, className }: { seed: number; className?: string }) {
-  const next = rng(seed);
-  // Streets run roughly east-west and north-south with a little wobble, the way
-  // a city grid reads from far away. One of them is the dataset's own route.
-  const streets = [
-    ...Array.from({ length: 4 }, (_, i) => {
-      const y = 8 + i * 15 + (next() - 0.5) * 6;
-      return `M-2 ${y.toFixed(1)} Q50 ${(y + (next() - 0.5) * 10).toFixed(1)} 102 ${(y + (next() - 0.5) * 8).toFixed(1)}`;
-    }),
-    ...Array.from({ length: 6 }, (_, i) => {
-      const x = 8 + i * 17 + (next() - 0.5) * 6;
-      return `M${x.toFixed(1)} -2 Q${(x + (next() - 0.5) * 10).toFixed(1)} 30 ${(x + (next() - 0.5) * 8).toFixed(1)} 62`;
-    }),
-  ];
-  const route = `M${(next() * 20).toFixed(1)} ${(10 + next() * 40).toFixed(1)} C30 ${(next() * 60).toFixed(1)} 60 ${(next() * 60).toFixed(1)} ${(80 + next() * 20).toFixed(1)} ${(10 + next() * 40).toFixed(1)}`;
-  return (
-    <div
-      className={cn("bg-muted relative overflow-hidden", className)}
-      aria-hidden
-    >
-      <svg
-        viewBox="0 0 100 60"
-        preserveAspectRatio="xMidYMid slice"
-        className="absolute inset-0 size-full"
-      >
-        {streets.map((d, i) => (
-          <path
-            key={i}
-            d={d}
-            fill="none"
-            className="stroke-border"
-            strokeWidth="1.1"
-          />
-        ))}
-        <path
-          d={route}
-          fill="none"
-          className="stroke-primary"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-        />
-      </svg>
-    </div>
   );
 }
 

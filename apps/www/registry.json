@@ -485,6 +485,7 @@
         "@vianova/input-group",
         "@vianova/legend-categorical",
         "@vianova/map-canvas",
+        "@vianova/map-thumbnail",
         "@vianova/popover",
         "@vianova/sample-datasets",
         "@vianova/select",
@@ -577,6 +578,7 @@
         "@vianova/color-stop-slider",
         "@vianova/colorize-panel",
         "@vianova/data-layer-card",
+        "@vianova/data-library-dialog",
         "@vianova/export-menu",
         "@vianova/filter-ast",
         "@vianova/filter-builder",
@@ -2611,6 +2613,40 @@
       }
     },
     {
+      "name": "data-library-dialog",
+      "type": "registry:ui",
+      "title": "Data Library Dialog",
+      "description": "Data Library Dialog — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/badge",
+        "@vianova/button",
+        "@vianova/dialog",
+        "@vianova/draw-zone-icon",
+        "@vianova/empty",
+        "@vianova/input-group",
+        "@vianova/map-thumbnail",
+        "@vianova/sample-datasets",
+        "@vianova/select",
+        "@vianova/tabs",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/data-library-dialog.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "draw-zone-icon",
       "type": "registry:ui",
       "title": "Draw Zone Icon",
@@ -2887,6 +2923,27 @@
       "files": [
         {
           "path": "registry/vianova/product/map-draw-control.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "map-thumbnail",
+      "type": "registry:ui",
+      "title": "Map Thumbnail",
+      "description": "Map Thumbnail — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "registryDependencies": [
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/map-thumbnail.tsx",
           "type": "registry:ui"
         }
       ],
