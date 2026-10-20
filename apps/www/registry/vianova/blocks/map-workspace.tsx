@@ -1461,7 +1461,7 @@ export function MapWorkspace({
         // reader user to expect arrow keys that do nothing.
         aria-label="Map controls"
         className={cn(
-          "absolute inset-x-0 top-0 flex h-14 items-center gap-2 px-2 lg:px-4",
+          "absolute inset-x-0 top-0 flex h-14 items-center px-2 lg:px-4",
           // While the phone's search field is open it covers the row, and a
           // covered control must not still be tabbable or announced -- or the
           // keyboard walks into buttons nobody can see. visibility, not
@@ -1487,82 +1487,79 @@ export function MapWorkspace({
           to shrink, and InlineEdit still needs it for its own `truncate` span.
         */}
         {/*
-          Capped, not just truncating. The centred field is out of flow, so
-          nothing in the layout stops a long map name from running underneath
-          it -- `truncate` alone only promises the name will not push its
-          neighbours, which is a different promise. The cap is half the bar
-          minus half the field, minus the gap, minus the data toggle where it
-          exists: 50% - 6.5rem at md (96px of field, no toggle), and
-          50% - 13.25rem at lg (160px of field, plus a 36px toggle and a gap).
+          Three columns, as production builds this bar: `flex-1/3` on each of
+          three children, 8px between their members. Measured off the live app
+          rather than guessed from a screenshot -- at a 2560px viewport the
+          columns are 843px each, the control cluster starts at 859 (the 1/3
+          mark plus the bar's p-4), and the search field is a fixed 350.
+
+          The cluster is NOT centred on the bar, which is what the previous
+          attempt here did: it begins at the one-third mark and runs left to
+          right -- data, search, drawing, charts -- so the row reads as a
+          title, then a workbench, then the one action that leaves the page.
+          Centring the field put it 192px right of where production has it and
+          split the two panel toggles to opposite ends of the row.
+
+          A third is the BASIS, not a fixed width -- `flex: 1 1 33.333%`, the
+          same as production's, whose title input carries `min-width: 0` for
+          exactly this reason. Our bar is never 2560px wide: at the narrowest
+          lg viewport it is 726, where a third of a column, the cluster and
+          Export add up to 861. Something has to give, and it is the title,
+          which truncates. Fixing the column at a third instead pushed Export
+          151px outside a root that is overflow-hidden -- clipped away with no
+          scrollbar and nothing to show it had gone.
         */}
-        <h2 className="min-w-0 md:max-w-[calc(50%-6.5rem)] lg:max-w-[calc(50%-13.25rem)]">
-          <InlineEdit
-            value={title}
-            onValueChange={setTitle}
-            label="Map name"
-            variant="title"
-            // min-w-0 so the title can actually truncate. InlineEdit is a flex
-            // item whose read state is itself inline-flex around a `truncate`
-            // span, and truncation needs min-w-0 at every level of that chain --
-            // without it the span refuses to shrink below its text and pushes
-            // the controls to its right out of a bar that is overflow-hidden,
-            // which clips them with no scrollbar and no ellipsis to show for it.
-            className="min-w-0"
-          />
-        </h2>
+        <div className="flex min-w-0 grow basis-1/3 items-center gap-2 pr-2">
+          <h2 className="min-w-0">
+            <InlineEdit
+              value={title}
+              onValueChange={setTitle}
+              label="Map name"
+              variant="title"
+              // min-w-0 so the title can actually truncate. InlineEdit is a
+              // flex item whose read state is itself inline-flex around a
+              // `truncate` span, and truncation needs min-w-0 at every level
+              // of that chain -- without it the span refuses to shrink below
+              // its text and pushes the controls to its right out of a bar
+              // that is overflow-hidden, which clips them with no scrollbar
+              // and no ellipsis to show for it.
+              className="min-w-0"
+            />
+          </h2>
+        </div>
 
         {/*
-          Left: the data panel's disclosure, next to the name of the map it
-          belongs to. Charts moves to the other end of the row, beside the
-          drawing tools, which is where production puts it -- the two panels
-          dock to opposite sides, so a toggle on the side its panel appears on
-          says more than a pair of them huddled together.
+          The middle third: the workbench. Data, search, drawing, charts, in
+          production's order.
 
-          They were decorative because CSS forced both panels open at this
-          width, so there was nothing to toggle and a control that claimed
-          otherwise would have been lying. `deskPanels` is that missing state.
-          Below lg they give way to the switcher further along the row, which
-          answers the different question of which single panel is on screen.
+          The two panel toggles sit together here rather than at opposite ends
+          of the row. They were decorative before, because CSS forced both
+          panels open at this width and there was nothing to toggle;
+          `deskPanels` is that missing state. Below lg they give way to the
+          switcher in the third column, which answers the different question
+          of which single panel is on screen.
         */}
-        <Button
-          variant={deskPanels.data ? "default" : "secondary"}
-          size="icon"
-          aria-label="Data layers"
-          aria-expanded={deskPanels.data}
-          aria-controls={dataPaneId}
-          onClick={() =>
-            setDeskPanels((open) => ({ ...open, data: !open.data }))
-          }
-          className="hidden lg:inline-flex"
-        >
-          <Layers />
-        </Button>
-
-        {/*
-          Centre: the search, centred on the BAR rather than on what is left
-          between its neighbours.
-
-          Absolutely positioned for that reason. In flow it would sit wherever
-          the title's length pushed it, and the title is editable -- renaming
-          the map would slide the search sideways. Out of flow it is pinned to
-          the middle and stays there, which is what production does and what
-          makes the row read as three groups instead of one long queue.
-
-          The cost is that nothing stops a neighbour from running underneath
-          it, so the title's side is capped below: `max-w` keeps the left group
-          clear of the field's left edge at every width it exists at.
-        */}
-        <div className="absolute left-1/2 hidden -translate-x-1/2 md:block">
-          {/* Behaviour lives in runSearch, which the phone overlay shares. */}
-          <InputGroup
-            // Widths measured against what the right group actually needs at
-            // each breakpoint, because a centred field is only centred if the
-            // row can spare the same space on both sides. At md the right side
-            // carries the panel switcher and the basemap trigger as well
-            // (252px measured), so 12rem is what fits beside it in a 718px
-            // bar; from lg those two go away and 20rem fits in 726px.
-            className="w-48 bg-card/95 backdrop-blur lg:w-80"
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant={deskPanels.data ? "default" : "secondary"}
+            size="icon"
+            aria-label="Data layers"
+            aria-expanded={deskPanels.data}
+            aria-controls={dataPaneId}
+            onClick={() =>
+              setDeskPanels((open) => ({ ...open, data: !open.data }))
+            }
+            className="hidden lg:inline-flex"
           >
+            <Layers />
+          </Button>
+
+          {/* Behaviour lives in runSearch, which the phone overlay shares.
+              Production's field is a fixed 350px; 320 at lg is the nearest
+              step that leaves the cluster inside a 726px bar at the smallest
+              lg viewport, and 12rem is what fits at md, where the third
+              column also carries the panel switcher and the basemap tile. */}
+          <InputGroup className="hidden w-48 bg-card/95 backdrop-blur md:flex lg:w-80">
             <InputGroupAddon>
               <Search />
             </InputGroupAddon>
@@ -1576,13 +1573,7 @@ export function MapWorkspace({
               aria-label="Search streets and junctions"
             />
           </InputGroup>
-        </div>
 
-        {/*
-          Right: everything else, pushed over by ml-auto so the group ends at
-          the bar's right edge however wide its members are.
-        */}
-        <div className="ml-auto flex items-center gap-2">
           {/* Below md the field is this button, and opening it reveals the
               overlay at the end of the bar. A disclosure, so aria-expanded --
               but no aria-controls: the overlay only exists while it is open,
@@ -1610,16 +1601,15 @@ export function MapWorkspace({
 
               --draw-size, not a descendant selector on its buttons: the
               component is built for the map corner, where 32px matches the
-              zoom stack and the basemap tile, and this row is 36px. It now
-              takes its size from one custom property, so a consumer sets the
-              whole control without reaching past it. */}
+              zoom stack and the basemap tile, and this row is 36px. It takes
+              its size from one custom property, so a consumer sets the whole
+              control without reaching past it. */}
           <MapDrawControl
             className="hidden md:flex [--draw-size:2.25rem]"
             mode={drawMode}
             onModeChange={setDrawMode}
           />
 
-          {/* Charts, at the end the charts panel docks to. */}
           <Button
             variant={deskPanels.charts ? "default" : "secondary"}
             size="icon"
@@ -1633,21 +1623,29 @@ export function MapWorkspace({
           >
             <BarChart3 />
           </Button>
+        </div>
 
-          {/*
-          Panel switcher, below lg only.
-
-          Two buttons with aria-expanded/aria-controls, not a toggle group:
-          this reveals and hides a region, which is the disclosure pattern, and
-          aria-controls states a relationship a toggle group has no way to
-          express.
-
-          The 36px box stays -- the control-size ladder pins icon buttons to
-          exactly 36px -- and `after:-inset-2` grows the hit area to 52px for a
-          thumb without moving a pixel. Same trick sidebar.tsx uses, and
-          elementFromPoint resolves a hit on the pseudo-element back to the
-          button, so it is testable rather than merely asserted.
+        {/*
+          The last third. Production leaves it empty and pins Export to the
+          bar's right edge; justify-end reaches the same place without taking
+          the button out of flow, which matters here because this column also
+          holds the two controls that only exist below lg.
         */}
+        <div className="flex grow basis-1/3 items-center justify-end gap-2 pl-2">
+          {/*
+            Panel switcher, below lg only.
+
+            Two buttons with aria-expanded/aria-controls, not a toggle group:
+            this reveals and hides a region, which is the disclosure pattern,
+            and aria-controls states a relationship a toggle group has no way
+            to express.
+
+            The 36px box stays -- the control-size ladder pins icon buttons to
+            exactly 36px -- and `after:-inset-2` grows the hit area to 52px for
+            a thumb without moving a pixel. Same trick sidebar.tsx uses, and
+            elementFromPoint resolves a hit on the pseudo-element back to the
+            button, so it is testable rather than merely asserted.
+          */}
           <div
             data-slot="panel-switcher"
             className="flex items-center gap-2 lg:hidden"
@@ -1674,14 +1672,12 @@ export function MapWorkspace({
           </div>
 
           {/* The basemap's phone home, a sibling of the panel switcher rather
-            than a member of it -- that slot means the two panel disclosures,
-            and the responsive suite counts them.
-            MapControls is desktop-only, which was free while its buttons did
-            nothing. One of them does now, so it needs somewhere below lg, and
-            the bottom-right corner is not it: the data panel docks there and
-            MapLibre's attribution owns what is left. On a toolbar row it must
-            be a 36px icon button -- control-size.spec pins that ladder -- so it
-            takes the same hit-slop trick as its neighbours. */}
+              than a member of it -- that slot means the two panel disclosures,
+              and the responsive suite counts them.
+              MapControls is desktop-only, which was free while its buttons did
+              nothing. One of them does now, so it needs somewhere below lg,
+              and the bottom-right corner is not it: the data panel docks there
+              and MapLibre's attribution owns what is left. */}
           <BasemapSwitcher
             className="lg:hidden"
             value={basemapId}
@@ -1701,13 +1697,13 @@ export function MapWorkspace({
           />
 
           {/* Downloads what is on screen -- the filtered flows, including any
-            drawn zone -- through the registry's own toCsv/downloadFile. It had
-            no onClick at all.
+              drawn zone -- through the registry's own toCsv/downloadFile. It
+              had no onClick at all.
 
-            size="default", not "sm": every other control on this row is a 36px
-            icon button, and this was 32. That is the mismatch
-            control-size.spec.ts was written about, which it misses here
-            because it only measures /preview/button-control-ladder. */}
+              size="default", not "sm": every other control on this row is a
+              36px icon button, and this was 32. That is the mismatch
+              control-size.spec.ts was written about, which it missed here
+              because it only measured /preview/button-control-ladder. */}
           <Button
             aria-label="Export report"
             disabled={!features.length}
@@ -1725,25 +1721,16 @@ export function MapWorkspace({
             }
           >
             <Sparkles data-icon="inline-start" />
-            {/* xl, not sm: the label is ~90px and the widest thing this
-                group can give up without losing a control. Measured: with it
-                showing at lg, the group ran 63px under the centred field in a
-                726px bar. */}
+            {/* xl, not sm. The label is ~90px, and below xl that 90px is the
+                difference between a readable map name and "Zür...": at the
+                narrowest lg viewport the bar is 726px, the cluster takes 478
+                of it, and whatever Export does not use goes to the title.
+                Measured both ways -- with the label the title gets 72px, and
+                without it 164. */}
             <span className="hidden xl:inline">Export report</span>
           </Button>
         </div>
 
-        {/*
-          The phone's search field: the whole row, for as long as it is open.
-
-          Last child and absolutely positioned, so it paints over its
-          neighbours instead of competing with them for 374px. md:hidden as
-          well as state-gated, so a rotation to tablet hands the row back to
-          the inline field rather than leaving two of them.
-
-          Escape closes without searching; Enter searches and closes through
-          runSearch, which is the same code the inline field runs.
-        */}
         {searchOpen ? (
           <div className="bg-card/95 absolute inset-0 flex items-center gap-2 px-2 backdrop-blur md:hidden">
             <InputGroup className="flex-1">
