@@ -64,6 +64,7 @@ import {
 } from "@/registry/vianova/product/colorize-panel";
 import { type ColorStop } from "@/registry/vianova/product/color-stop-slider";
 import { DataLayerCard } from "@/registry/vianova/product/data-layer-card";
+import { DataLibraryDialog } from "@/registry/vianova/product/data-library-dialog";
 import { FilterBuilder } from "@/registry/vianova/product/filter-builder";
 import { FilterFacets } from "@/registry/vianova/product/filter-facets";
 import {
@@ -113,6 +114,7 @@ import {
   SAMPLE_FEEDS,
   columnLabel,
   type ParsedSample,
+  type SampleFeed,
 } from "@/registry/vianova/lib/sample-datasets";
 import { compileFilter } from "@/registry/vianova/lib/filter-eval";
 import { badgeColor } from "@/registry/vianova/lib/category-style";
@@ -607,6 +609,25 @@ export function MapWorkspace({
 
   const [tab, setTab] = React.useState<LayerTab>("data");
   const [query, setQuery] = React.useState("");
+  /**
+   * The layers this map has, by feed id.
+   *
+   * Empty to begin with: the map opens with its own flows and nothing else,
+   * and everything beyond that is added from the library behind the panel's +
+   * button. The panel used to list the whole catalogue with every row switched
+   * off, which read as a map that already had nine layers it was refusing to
+   * draw -- and left the + button with nothing it could possibly add.
+   */
+  const [added, setAdded] = React.useState<string[]>([]);
+  const [libraryOpen, setLibraryOpen] = React.useState(false);
+  /**
+   * Feeds that came from the reader's machine rather than the catalogue.
+   *
+   * Kept beside it rather than merged into it: SAMPLE_FEEDS is a module
+   * constant shared with the data hub, and pushing onto it would leak one
+   * block's uploads into the other's list for the rest of the session.
+   */
+  const [uploads, setUploads] = React.useState<SampleFeed[]>([]);
   /** Which sample layers are switched on, by feed id. */
   const [layerOn, setLayerOn] = React.useState<Record<string, boolean>>({});
   /** The rows each visible sample layer is showing, for the charts. */
@@ -643,16 +664,66 @@ export function MapWorkspace({
     if (on) setChartLayer(id);
   }, []);
 
+  /** The catalogue the library offers, plus anything uploaded this session. */
+  const catalogue = React.useMemo(
+    () => [...SAMPLE_FEEDS, ...uploads],
+    [uploads],
+  );
+
+  const addedFeeds = React.useMemo(
+    () => catalogue.filter((feed) => added.includes(feed.id)),
+    [catalogue, added],
+  );
+
   const visibleFeeds = React.useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return SAMPLE_FEEDS.filter(
+    return addedFeeds.filter(
       (feed) =>
         tabOf(feed.section) === tab &&
         (!needle ||
           feed.title.toLowerCase().includes(needle) ||
           feed.description.toLowerCase().includes(needle)),
     );
-  }, [query, tab]);
+  }, [addedFeeds, query, tab]);
+
+  /**
+   * Adding switches a layer on as well as listing it. Adding a layer and then
+   * having to find its eye to see anything would make the library's own button
+   * a half-measure -- you asked for the layer, so it is drawn.
+   */
+  const addLayers = React.useCallback(
+    (ids: string[]) => {
+      setAdded((all) => [...all, ...ids.filter((id) => !all.includes(id))]);
+      ids.forEach((id) => setLayerVisible(id, true));
+    },
+    [setLayerVisible],
+  );
+
+  /**
+   * An uploaded CSV becomes a feed like any other, pointed at an object URL.
+   * SampleMapLayer fetches an absolute source as it stands, so the file is
+   * parsed, filtered, coloured and charted by exactly the same code as the
+   * catalogue's own -- no second path that could rot.
+   */
+  const uploadFeed = React.useCallback(
+    (file: File) => {
+      const id = `upload-${Date.now()}`;
+      const feed: SampleFeed = {
+        id,
+        file: URL.createObjectURL(file),
+        title: file.name.replace(/\.csv$/i, ""),
+        section: "data",
+        description: `Uploaded from this device, ${(file.size / 1024).toFixed(0)} KB.`,
+        rowRepresents: "a row of the uploaded file",
+        domain: "upload",
+        uploadedAt: new Date().toISOString(),
+      };
+      setUploads((all) => [...all, feed]);
+      addLayers([id]);
+      setTab("data");
+    },
+    [addLayers],
+  );
 
   /**
    * What the Charts panel can describe: the flows, plus every sample layer that
@@ -1762,6 +1833,21 @@ export function MapWorkspace({
         ) : null}
       </div>
 
+      {/*
+        The library. Mounted at the block's root rather than inside the panel
+        so its overlay covers the workspace, and kept out of the panel's own
+        scrolling body -- a dialog rendered inside a scroll container inherits
+        its clipping.
+      */}
+      <DataLibraryDialog
+        open={libraryOpen}
+        onOpenChange={setLibraryOpen}
+        added={added}
+        onAdd={addLayers}
+        onUpload={uploadFeed}
+        feeds={catalogue}
+      />
+
       {drawMode ? (
         <MapDrawBanner
           className="absolute top-16 left-1/2 w-[min(22rem,calc(100%-6rem))] -translate-x-1/2"
@@ -1815,10 +1901,15 @@ export function MapWorkspace({
               </TabsList>
             </Tabs>
             <FloatingPanelActions>
+              {/* Opens the library. It had no onClick: the panel already
+                  listed every sample feed, so there was nothing this could
+                  add, and it sat there claiming otherwise. */}
               <Button
                 variant="ghost"
                 size="icon-sm"
                 aria-label="Add data layer"
+                aria-haspopup="dialog"
+                onClick={() => setLibraryOpen(true)}
               >
                 <Plus />
               </Button>
@@ -1953,10 +2044,33 @@ export function MapWorkspace({
                 />
               ))}
 
+              {/* Two different emptinesses, and they want different words: a
+                  search that matched nothing is the reader's filter, while a
+                  tab with no layers in it is an invitation to add one. Saying
+                  "nothing matches" over an empty map would be a dead end. */}
               {visibleFeeds.length === 0 ? (
-                <p className="text-muted-foreground px-1 py-6 text-center text-sm">
-                  Nothing here matches &ldquo;{query}&rdquo;.
-                </p>
+                query.trim() ? (
+                  <p className="text-muted-foreground px-1 py-6 text-center text-sm">
+                    Nothing here matches &ldquo;{query}&rdquo;.
+                  </p>
+                ) : (
+                  <div className="px-1 py-6 text-center">
+                    <p className="text-muted-foreground text-sm">
+                      {tab === "data"
+                        ? "No other layers yet."
+                        : "No zones or regulations yet."}
+                    </p>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => setLibraryOpen(true)}
+                    >
+                      <Plus data-icon="inline-start" />
+                      Add from library
+                    </Button>
+                  </div>
+                )
               ) : null}
             </div>
           </FloatingPanelBody>

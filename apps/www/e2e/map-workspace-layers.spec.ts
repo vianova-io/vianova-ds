@@ -46,9 +46,61 @@ const toggle = (page: Page, name: string) =>
     name: new RegExp(`^(Show|Hide) ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
   });
 
+/**
+ * Every catalogue feed, added through the library.
+ *
+ * The panel arrives with the map's own flows and nothing else -- layers come
+ * from the + button now, which is the whole point of the library. Everything
+ * below was written against a panel that listed the catalogue on load, and
+ * those assertions are still the ones worth making, so the precondition is
+ * restored here rather than rewritten into forty tests.
+ *
+ * Tab by tab, because a pick does not survive a tab change and confirming
+ * closes the dialog: open, select what that tab offers, add, repeat.
+ */
+async function addEverything(page: Page) {
+  const dialog = page.locator("[data-slot=data-library]");
+  for (const tab of ["Data", "Zones", "Regulations"]) {
+    await page.getByRole("button", { name: "Add data layer" }).click();
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("tab", { name: tab }).click();
+
+    const pickable = dialog.locator("[data-slot=library-card]:not([disabled])");
+    const count = await pickable.count();
+    if (!count) {
+      await dialog.getByRole("button", { name: "Cancel" }).click();
+      continue;
+    }
+    for (let i = 0; i < count; i++) await pickable.nth(i).click();
+    await dialog.getByRole("button", { name: /^Add \d+ layers$|^Add layer$/ }).click();
+    await expect(dialog).toBeHidden();
+  }
+
+  // Adding also switches a layer ON -- you asked for the layer, so it is
+  // drawn. These tests were written against a panel that listed every feed
+  // switched OFF, and "a layer is a name and an eye until it is switched on"
+  // is still the behaviour worth pinning, so the eyes go back to closed.
+  // Zurich's own flows are left alone: they were visible before too.
+  //
+  // Tab by tab again, and this is the part that is easy to get wrong: the
+  // panel renders only the tab it is showing, so hiding everything on Data
+  // leaves zero Hide buttons on screen while six zone layers are still lit.
+  const hide = page.getByRole("button", { name: /^Hide (?!Vehicle Flows)/ });
+  for (const tab of ["Data", "Zones"]) {
+    await page.getByRole("tab", { name: tab }).click();
+    for (let guard = 0; guard < 20 && (await hide.count()); guard++) {
+      await hide.first().click();
+    }
+    await expect(hide).toHaveCount(0);
+  }
+  // Back to Data, which is where the panel starts and what the tests assume.
+  await page.getByRole("tab", { name: "Data" }).click();
+}
+
 async function open(page: Page) {
   await page.goto("/blocks/map-workspace");
   await expect(page.getByRole("tab", { name: "Data" })).toBeVisible();
+  await addEverything(page);
 }
 
 const zones = (page: Page) => page.getByRole("tab", { name: "Zones" });

@@ -161,7 +161,15 @@ export function SampleMapLayer({
   React.useEffect(() => {
     if (!visible || sample || failed) return;
     const controller = new AbortController();
-    fetch(`${dataUrl}/${feed.file}`, { signal: controller.signal })
+    // An absolute source is used as it stands. The catalogue's own feeds name
+    // a file inside `dataUrl`, but a feed can also come from the reader's
+    // machine -- the data library hands an uploaded CSV over as an object URL
+    // -- and prefixing one of those with a directory would ask the server for
+    // a path that was never on it.
+    const src = /^(?:blob:|data:|https?:|\/)/.test(feed.file)
+      ? feed.file
+      : `${dataUrl}/${feed.file}`;
+    fetch(src, { signal: controller.signal })
       .then((r) =>
         r.ok ? r.text() : Promise.reject(new Error(String(r.status))),
       )

@@ -4,12 +4,17 @@ import { createLucideIcon } from "lucide-react";
  * The draw-a-zone glyph: a closed polygon with its vertices exposed as
  * handles, redrawn on Lucide's grid.
  *
- * Production puts this on the map's drawing tool, where it replaces
- * `PenLine`. A pen names the gesture and draws anything; this names what the
- * tool produces -- a closed zone whose corners can be moved. The handles are
- * the whole point: they are what makes the shape read as editable rather than
- * as a stamp. (The mode menu keeps its shape glyphs, Spline / Circle /
- * Hexagon, because each item there names a shape rather than the tool.)
+ * A pen names the gesture and draws anything; this names what the tool
+ * produces -- a closed zone whose corners can be moved. The handles are the
+ * whole point: they are what makes the shape read as editable rather than as
+ * a stamp.
+ *
+ * It marks the Polygon mode in the drawing menu, and the split control's left
+ * half wears it whenever that mode is the active one. It arrived on the
+ * trigger itself, replacing `PenLine`; the split control then gave the trigger
+ * the active mode's glyph instead, which is where this ended up. Lucide's
+ * Hexagon used to mark Polygon and named a hexagon -- that mode drops a vertex
+ * per click and closes the ring, which is what the handles say.
  *
  * Lucide's rules, not production's artwork: 24x24, a 2px round-capped stroke,
  * no fill, `currentColor`, and all art inside 2..22. Two details are Lucide's
