@@ -243,6 +243,17 @@ export function MapDrawControl({
                 key={label}
                 value={value ?? SELECT}
                 closeOnClick
+                // No tick on the selected item, as production has none: the
+                // trigger already shows which tool is active -- it wears that
+                // tool's glyph and carries aria-pressed -- so a tick repeats
+                // it at the far end of the row, past the shortcut.
+                //
+                // Hidden, not removed. The item keeps role="menuitemradio"
+                // and aria-checked, so a screen reader is still told which
+                // one is selected; only the glyph goes. pr-2 reclaims the
+                // pr-8 the component reserves for an indicator it no longer
+                // draws.
+                className="pr-2 [&_[data-slot=dropdown-menu-radio-item-indicator]]:hidden"
               >
                 <Icon aria-hidden />
                 {label}
