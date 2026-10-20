@@ -14,6 +14,15 @@ import { cn } from "@/registry/vianova/lib/utils";
  *
  * Backspace on an empty field removes the last tag, which is the behaviour
  * every mail client has trained people to expect.
+ *
+ * It also serves as the chip field of a picker, where the chips are things
+ * chosen from a list and the text is a search over it -- the zone picker's
+ * "To:" field. Three props turn that on, and none changes the default:
+ * `getTagLabel` shows a name for a value (an id), `draft`/`onDraftChange`
+ * hand the typed text to the host to filter with, and `onDraftCommit` takes
+ * over Enter so the host picks a match instead of free text becoming a tag.
+ * With `onDraftCommit` set, nothing typed is ever committed on its own --
+ * not on a separator, not on blur.
  */
 export function TagInput({
   value,
@@ -25,6 +34,13 @@ export function TagInput({
   separators = [",", "Enter"],
   disabled,
   id,
+  getTagLabel,
+  draft: draftProp,
+  onDraftChange,
+  onDraftCommit,
+  maxVisible,
+  startAddon,
+  inputLabel,
   className,
   ...props
 }: Omit<React.ComponentProps<"div">, "onChange" | "defaultValue"> & {
@@ -36,9 +52,34 @@ export function TagInput({
   separators?: string[];
   disabled?: boolean;
   id?: string;
+  /** What a chip says for a value, when the value is an id rather than words. */
+  getTagLabel?: (value: string) => string;
+  /** The typed text, controlled -- for a host that searches with it. */
+  draft?: string;
+  onDraftChange?: (draft: string) => void;
+  /**
+   * Takes over Enter: called with the typed text instead of adding it as a
+   * tag. The host decides what, if anything, it adds -- say, the top match.
+   */
+  onDraftCommit?: (draft: string) => void;
+  /**
+   * Show this many chips and fold the rest into a "+N more" chip that expands
+   * them. For a picker where Select all can add hundreds.
+   */
+  maxVisible?: number;
+  /** Shown before the chips, such as a search icon. Decorative. */
+  startAddon?: React.ReactNode;
+  /** The input's accessible name, when no <label for> points at it. */
+  inputLabel?: string;
 }) {
   const [internal, setInternal] = React.useState(defaultValue);
-  const [draft, setDraft] = React.useState("");
+  const [internalDraft, setInternalDraft] = React.useState("");
+  const draft = draftProp ?? internalDraft;
+  const setDraft = (next: string) => {
+    if (draftProp === undefined) setInternalDraft(next);
+    onDraftChange?.(next);
+  };
+  const [expanded, setExpanded] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const tags = value ?? internal;
 
@@ -56,7 +97,13 @@ export function TagInput({
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (separators.includes(event.key)) {
+    if (onDraftCommit) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        onDraftCommit(draft);
+        return;
+      }
+    } else if (separators.includes(event.key)) {
       event.preventDefault();
       add(draft);
       setDraft("");
@@ -66,6 +113,13 @@ export function TagInput({
       commit(tags.slice(0, -1));
     }
   };
+
+  const label = (tag: string) => getTagLabel?.(tag) ?? tag;
+  // The first picks stay in place and the rest fold, so chips do not shuffle
+  // under the pointer as more are added.
+  const folding = maxVisible !== undefined && !expanded && tags.length > maxVisible;
+  const visible = folding ? tags.slice(0, maxVisible) : tags;
+  const hidden = tags.length - visible.length;
 
   return (
     <div
@@ -80,16 +134,21 @@ export function TagInput({
       )}
       {...props}
     >
-      {tags.map((tag) => (
+      {startAddon ? (
+        <span aria-hidden className="text-muted-foreground flex shrink-0 items-center pl-1.5 [&_svg]:size-4">
+          {startAddon}
+        </span>
+      ) : null}
+      {visible.map((tag) => (
         <span
           key={tag}
           data-slot="tag-input-chip"
-          className="bg-secondary text-secondary-foreground inline-flex items-center gap-1 rounded-md py-0.5 pr-1 pl-2 text-xs font-medium"
+          className="bg-secondary text-secondary-foreground inline-flex max-w-full min-w-0 items-center gap-1 rounded-md py-0.5 pr-1 pl-2 text-xs font-medium"
         >
-          {tag}
+          <span className="truncate">{label(tag)}</span>
           <button
             type="button"
-            aria-label={`Remove ${tag}`}
+            aria-label={`Remove ${label(tag)}`}
             disabled={disabled}
             onClick={(event) => {
               event.stopPropagation();
@@ -101,10 +160,25 @@ export function TagInput({
           </button>
         </span>
       ))}
+      {hidden > 0 || (expanded && maxVisible !== undefined && tags.length > maxVisible) ? (
+        <button
+          type="button"
+          data-slot="tag-input-more"
+          aria-expanded={expanded}
+          onClick={(event) => {
+            event.stopPropagation();
+            setExpanded((e) => !e);
+          }}
+          className="text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:ring-ring rounded-md px-1.5 py-0.5 text-xs font-medium tabular-nums focus-visible:ring-2 focus-visible:outline-none"
+        >
+          {expanded ? "Show less" : `+${hidden} more`}
+        </button>
+      ) : null}
       <input
         ref={inputRef}
         id={id}
         type="text"
+        aria-label={inputLabel}
         value={draft}
         disabled={disabled || (max !== undefined && tags.length >= max)}
         placeholder={tags.length ? "" : placeholder}
@@ -112,7 +186,10 @@ export function TagInput({
         onKeyDown={onKeyDown}
         // Committing on blur stops a typed-but-unsubmitted tag being lost when
         // the user tabs straight to Save.
+        // Not when a host owns Enter: there the text is a search, and blurring
+        // a half-typed search must not turn it into a tag.
         onBlur={() => {
+          if (onDraftCommit) return;
           add(draft);
           setDraft("");
         }}
