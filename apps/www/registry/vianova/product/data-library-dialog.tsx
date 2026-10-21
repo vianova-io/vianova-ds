@@ -33,11 +33,23 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/registry/vianova/ui/tabs";
 import { DrawZoneIcon } from "@/registry/vianova/product/draw-zone-icon";
 import {
+  GeometryThumbnail,
   MapThumbnail,
   thumbnailSeed,
+  type ThumbPoint,
+  type ThumbShape,
 } from "@/registry/vianova/product/map-thumbnail";
 import {
+  CATEGORY_PALETTE,
+  readStyleSet,
+  resolveStyles,
+} from "@/registry/vianova/lib/category-style";
+import {
   SAMPLE_FEEDS,
+  defaultCategoryColumn,
+  parseSample,
+  pointsBy,
+  shapesBy,
   type SampleFeed,
   type SampleSection,
 } from "@/registry/vianova/lib/sample-datasets";
@@ -84,6 +96,131 @@ type Sort = keyof typeof SORTS;
  * formatter is built once rather than per card, which also keeps a grid of a
  * dozen cheap.
  */
+type Geometry = {
+  points: ThumbPoint[];
+  shapes: ThumbShape[];
+  colour: (c: string) => string;
+};
+
+/**
+ * Parsed geometry, kept for the session.
+ *
+ * Module scope on purpose: the dialog unmounts nothing when it closes, but a
+ * reader who opens it, closes it and opens it again should not re-download and
+ * re-parse 670KB of trips to redraw the same picture. Misses are cached as
+ * null so a file that failed is not retried on every open either.
+ */
+const geometryCache = new Map<string, Geometry | null>();
+
+/**
+ * The dataset's own points and polygons, drawn on the card.
+ *
+ * Loaded per card and only once it is near the viewport. The data tab's four
+ * files are 1.6MB between them, and a picker that downloads all of that to
+ * decide what a card looks like would cost more than the layer it is offering
+ * to add. Until the file is in, the card keeps the stylised street grid --
+ * which is also what it keeps if the fetch fails, since a card with no picture
+ * at all would read as a broken dataset rather than a slow one.
+ */
+function LibraryThumbnail({
+  feed,
+  dataUrl,
+  className,
+}: {
+  feed: SampleFeed;
+  dataUrl?: string;
+  className?: string;
+}) {
+  const host = React.useRef<HTMLDivElement>(null);
+  const [near, setNear] = React.useState(false);
+  const [geometry, setGeometry] = React.useState<Geometry | null | undefined>(
+    () => geometryCache.get(feed.file),
+  );
+
+  React.useEffect(() => {
+    const node = host.current;
+    if (!node || near) return;
+    // No IntersectionObserver (jsdom, an old browser) means draw everything
+    // rather than nothing: degrade to the eager path, not to a blank card.
+    if (typeof IntersectionObserver === "undefined") {
+      setNear(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => entries.some((e) => e.isIntersecting) && setNear(true),
+      { rootMargin: "200px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [near]);
+
+  React.useEffect(() => {
+    if (!near || !dataUrl || geometry !== undefined) return;
+    const controller = new AbortController();
+    const src = /^(?:blob:|data:|https?:|\/)/.test(feed.file)
+      ? feed.file
+      : `${dataUrl}/${feed.file}`;
+    fetch(src, { signal: controller.signal })
+      .then((r) =>
+        r.ok ? r.text() : Promise.reject(new Error(String(r.status))),
+      )
+      .then((text) => {
+        const sample = parseSample(text);
+        if (!sample) throw new Error("no geometry");
+        const column = defaultCategoryColumn(sample);
+        const values = sample.columns.find((c) => c.name === column)
+          ?.values ?? [""];
+        // The saved styles, so a colour chosen in the hub or on the map shows
+        // up here too -- the same dataset should not be two different colours
+        // in the picker and on the map it is about to join.
+        const styles = resolveStyles(
+          values,
+          column ? readStyleSet(feed.id, column) : undefined,
+        );
+        // Points or areas, never both, and decided the way the map decides it
+        // (sample-map-layer: `geometry === "area" ? "zones" : "points"`).
+        // `ringOf` takes any cell with enough number pairs, so a trip's
+        // LINESTRING passes as a ring: asking for shapes here regardless drew
+        // Trips (MDS) as two thousand filled polygons -- a scribble, and a
+        // card the map would never agree with, since it paints those trips as
+        // points.
+        const area = sample.geometry === "area";
+        const next: Geometry = {
+          points: area ? [] : pointsBy(sample, column),
+          shapes: area ? shapesBy(sample, column) : [],
+          colour: (category) => styles[category]?.color ?? CATEGORY_PALETTE[0]!,
+        };
+        geometryCache.set(feed.file, next);
+        setGeometry(next);
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        geometryCache.set(feed.file, null);
+        setGeometry(null);
+      });
+    return () => controller.abort();
+  }, [near, dataUrl, feed.file, feed.id, geometry]);
+
+  if (geometry) {
+    return (
+      <GeometryThumbnail
+        points={geometry.points}
+        shapes={geometry.shapes}
+        colour={geometry.colour}
+        className={className}
+      />
+    );
+  }
+  // The wrapper carries the sizing, because an element the observer can watch
+  // has to have a box of its own -- `display: contents` has none, and the
+  // callback would never fire.
+  return (
+    <div ref={host} className={className}>
+      <MapThumbnail seed={thumbnailSeed(feed.id)} className="size-full" />
+    </div>
+  );
+}
+
 const uploadedFormat = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
   month: "short",
@@ -98,6 +235,7 @@ export function DataLibraryDialog({
   onAdd,
   onUpload,
   feeds = SAMPLE_FEEDS,
+  dataUrl,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -107,6 +245,12 @@ export function DataLibraryDialog({
   /** Omit to hide the upload control rather than show one that does nothing. */
   onUpload?: (file: File) => void;
   feeds?: SampleFeed[];
+  /**
+   * Where the catalogue's CSVs are served from, without a trailing slash.
+   * Omit it and the cards keep the drawn stand-in rather than fetching
+   * anything -- which is what the docs example does.
+   */
+  dataUrl?: string;
 }) {
   const [section, setSection] = React.useState<SampleSection>("data");
   const [query, setQuery] = React.useState("");
@@ -293,8 +437,9 @@ export function DataLibraryDialog({
                       isPicked && "border-primary ring-primary/30 ring-2",
                     )}
                   >
-                    <MapThumbnail
-                      seed={thumbnailSeed(feed.id)}
+                    <LibraryThumbnail
+                      feed={feed}
+                      dataUrl={dataUrl}
                       className="h-24 w-full border-b"
                     />
                     <span className="flex flex-1 flex-col gap-1 p-3">

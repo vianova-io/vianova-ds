@@ -2626,6 +2626,7 @@
       "registryDependencies": [
         "@vianova/badge",
         "@vianova/button",
+        "@vianova/category-style",
         "@vianova/dialog",
         "@vianova/draw-zone-icon",
         "@vianova/empty",
