@@ -1846,6 +1846,9 @@ export function MapWorkspace({
         onAdd={addLayers}
         onUpload={uploadFeed}
         feeds={catalogue}
+        // The same directory the layers themselves load from, so a card draws
+        // the dataset it is offering rather than a stand-in for it.
+        dataUrl={`${BASE_PATH}/data`}
       />
 
       {drawMode ? (

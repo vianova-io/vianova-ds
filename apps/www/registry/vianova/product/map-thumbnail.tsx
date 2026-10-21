@@ -1,5 +1,8 @@
 import { cn } from "@/registry/vianova/lib/utils";
 
+export type ThumbPoint = { position: [number, number]; category: string };
+export type ThumbShape = { ring: [number, number][]; category: string };
+
 /**
  * A stylised street grid, standing in for the map thumbnail the platform
  * renders.
@@ -87,6 +90,102 @@ export function MapThumbnail({
           strokeWidth="1.6"
           strokeLinecap="round"
         />
+      </svg>
+    </div>
+  );
+}
+
+/**
+ * The dataset's own geometry, drawn small: points and areas in their category
+ * colours on the card's background. It needs no WebGL and no tiles, so a list
+ * of a dozen of them costs nothing, and it is the data rather than a stand-in.
+ *
+ * Shared for the same reason the street grid is: the data hub draws it on its
+ * catalogue cards and the map's library draws it on the same datasets in its
+ * picker, and the same dataset has to look like itself in both. Moved here
+ * from the hub unchanged -- its baselines are pixel comparisons of this
+ * markup, so the geometry, the viewBox and the rounding all stay as they were.
+ */
+export function GeometryThumbnail({
+  points,
+  shapes,
+  colour,
+  className,
+}: {
+  points: ThumbPoint[];
+  shapes: ThumbShape[];
+  /** Category to fill colour. */
+  colour: (category: string) => string;
+  className?: string;
+}) {
+  let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const {
+    position: [x, y],
+  } of points)
+    [w, s, e, n] = [
+      Math.min(w, x),
+      Math.min(s, y),
+      Math.max(e, x),
+      Math.max(n, y),
+    ];
+  for (const { ring } of shapes)
+    for (const [x, y] of ring)
+      [w, s, e, n] = [
+        Math.min(w, x),
+        Math.min(s, y),
+        Math.max(e, x),
+        Math.max(n, y),
+      ];
+
+  // The frame is the card's picture, about 3.7 times wider than tall. Longitude
+  // degrees are shorter than latitude ones away from the equator, so the shape
+  // is squared up before it is fitted into it.
+  const k = Math.cos(((s + n) / 2) * (Math.PI / 180));
+  const spanX = Math.max((e - w) * k, 1e-6);
+  const spanY = Math.max(n - s, 1e-6);
+  const scale = Math.min(94 / spanX, 24 / spanY);
+  const ox = (100 - spanX * scale) / 2;
+  const oy = (27 - spanY * scale) / 2;
+  const px = (x: number) => ox + (x - w) * k * scale;
+  const py = (y: number) => oy + (n - y) * scale;
+
+  // A thousand dots add nothing a few hundred do not already say.
+  const stride = Math.max(1, Math.ceil(points.length / 400));
+
+  return (
+    <div
+      className={cn("bg-muted relative overflow-hidden", className)}
+      aria-hidden
+    >
+      <svg
+        viewBox="0 0 100 27"
+        preserveAspectRatio="xMidYMid slice"
+        className="absolute inset-0 size-full"
+      >
+        {shapes.map((shape, i) => (
+          <polygon
+            key={i}
+            points={shape.ring
+              .map(([x, y]) => `${px(x).toFixed(1)},${py(y).toFixed(1)}`)
+              .join(" ")}
+            fill={colour(shape.category)}
+            fillOpacity={0.4}
+            stroke={colour(shape.category)}
+            strokeWidth={0.3}
+          />
+        ))}
+        {points
+          .filter((_, i) => i % stride === 0)
+          .map((p, i) => (
+            <circle
+              key={i}
+              cx={px(p.position[0])}
+              cy={py(p.position[1])}
+              r={0.7}
+              fill={colour(p.category)}
+              fillOpacity={0.9}
+            />
+          ))}
       </svg>
     </div>
   );
