@@ -155,7 +155,10 @@ function LibraryThumbnail({
   }, [near]);
 
   React.useEffect(() => {
-    if (!near || !dataUrl || geometry !== undefined) return;
+    // A feed with no file of its own -- the map's own layer, which the
+    // catalogue lists so it can be added back after it is removed -- has
+    // nothing to fetch and keeps the drawn stand-in.
+    if (!near || !dataUrl || !feed.file || geometry !== undefined) return;
     const controller = new AbortController();
     const src = /^(?:blob:|data:|https?:|\/)/.test(feed.file)
       ? feed.file

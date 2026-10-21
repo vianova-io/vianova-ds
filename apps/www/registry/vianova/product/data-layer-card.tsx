@@ -9,10 +9,17 @@ import {
   EyeOff,
   ListFilter,
   MoreHorizontal,
+  Trash2,
 } from "lucide-react";
 
 import { Badge } from "@/registry/vianova/ui/badge";
 import { Button } from "@/registry/vianova/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/registry/vianova/ui/dropdown-menu";
 import {
   Collapsible,
   CollapsibleContent,
@@ -34,6 +41,13 @@ import { cn } from "@/registry/vianova/lib/utils";
  * the legend, visualisation picker and filter count, and a collapsed row that
  * is just a name plus a visibility toggle. `expanded={false}` gives the
  * collapsed form — a separate component would duplicate the header logic.
+ *
+ * A hidden layer is always the collapsed row, whatever `expanded` says. The
+ * controls here configure something that is being drawn, so leaving them up
+ * over a layer nobody can see offers settings with no visible effect — and
+ * ten expanded cards for ten switched-off layers is 2,000px of panel. Enforced
+ * here rather than left to each caller because it is the same answer every
+ * time, and a caller that forgot it was the bug this closes.
  */
 export function DataLayerCard({
   name,
@@ -53,6 +67,7 @@ export function DataLayerCard({
   unavailableVisualizations,
   unavailableVisualizationReason,
   onVisibilityChange,
+  onRemove,
   onColorize,
   colorizeOpen = false,
   colorizeTriggerId,
@@ -89,6 +104,7 @@ export function DataLayerCard({
   /** Replaces the default icon button at the end of the filters row. */
   filtersAction?: React.ReactNode;
   visible?: boolean;
+  /** Only consulted while `visible`: a hidden layer is collapsed regardless. */
   expanded?: boolean;
   defaultVisualization?: VisualizationTypeId;
   /** Controlled counterpart of `defaultVisualization`. */
@@ -99,6 +115,12 @@ export function DataLayerCard({
   /** Why those are greyed, shown on hover. */
   unavailableVisualizationReason?: string;
   onVisibilityChange?: (visible: boolean) => void;
+  /**
+   * Takes the layer off the map. Given one, the options button becomes a real
+   * menu; without one it stays the plain button it has always been, so the
+   * card looks the same wherever nothing can be removed.
+   */
+  onRemove?: () => void;
   /**
    * Makes the legend open this layer's colour configuration.
    *
@@ -119,6 +141,35 @@ export function DataLayerCard({
   children?: React.ReactNode;
 }) {
   const VisibilityIcon = visible ? Eye : EyeOff;
+  /**
+   * The options menu, on both forms of the card.
+   *
+   * A collapsed card used to be a name and an eye, which was fine while a
+   * layer could not be removed: now it can, and a layer that is switched off
+   * would otherwise be one you can never take off the map -- the only control
+   * it offers turns it back on.
+   */
+  const options = onRemove ? (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Options for ${name}`}
+          />
+        }
+      >
+        <MoreHorizontal />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-auto min-w-40">
+        <DropdownMenuItem variant="destructive" onClick={onRemove}>
+          <Trash2 />
+          Remove layer
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ) : null;
   const legendNode = legend === undefined ? <LegendRamp /> : legend;
   const showFilters = filters ?? filterCount !== undefined;
 
@@ -130,7 +181,7 @@ export function DataLayerCard({
     visualization ??
     VISUALIZATION_TYPES.find((t) => t.value === activeType)?.label;
 
-  if (!expanded) {
+  if (!expanded || !visible) {
     return (
       <div
         data-slot="data-layer-card"
@@ -142,14 +193,17 @@ export function DataLayerCard({
         {...props}
       >
         <span className="truncate text-sm text-muted-foreground">{name}</span>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label={visible ? `Hide ${name}` : `Show ${name}`}
-          onClick={() => onVisibilityChange?.(!visible)}
-        >
-          <VisibilityIcon />
-        </Button>
+        <div className="flex shrink-0 items-center gap-0.5">
+          {options}
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={visible ? `Hide ${name}` : `Show ${name}`}
+            onClick={() => onVisibilityChange?.(!visible)}
+          >
+            <VisibilityIcon />
+          </Button>
+        </div>
       </div>
     );
   }
@@ -167,9 +221,11 @@ export function DataLayerCard({
       <div className="flex items-start justify-between gap-2">
         <span className="text-sm font-medium">{name}</span>
         <div className="flex shrink-0 items-center gap-0.5">
-          <Button variant="ghost" size="icon-xs" aria-label="Layer options">
-            <MoreHorizontal />
-          </Button>
+          {options ?? (
+            <Button variant="ghost" size="icon-xs" aria-label="Layer options">
+              <MoreHorizontal />
+            </Button>
+          )}
           <Button variant="ghost" size="icon-xs" aria-label="Layer charts">
             <BarChart3 />
           </Button>

@@ -118,6 +118,7 @@ export function SampleMapLayer({
   visible,
   onVisibleChange,
   onSampleChange,
+  onRemove,
 }: {
   feed: SampleFeed;
   map: MapLibreMap | null;
@@ -125,6 +126,8 @@ export function SampleMapLayer({
   dataUrl: string;
   visible: boolean;
   onVisibleChange: (visible: boolean) => void;
+  /** Takes the layer off the map. Omit it and the card offers no way to. */
+  onRemove?: () => void;
   /**
    * Reports the parsed file and the rows a filter leaves, so the page around
    * this can chart what the map is showing.
@@ -155,6 +158,21 @@ export function SampleMapLayer({
   const uid = React.useId();
   const colorizeTriggerId = `${uid}-colorize`;
   const browsePresetsId = `${uid}-preset`;
+
+  /**
+   * Hiding the layer folds the colour chain away with its card.
+   *
+   * The card collapses to a name and an eye when the layer goes off, taking
+   * the legend button these steps hang from with it -- so a docked Colorize
+   * would be left configuring a layer nobody can see, with no trigger for
+   * PanelStep to return focus to on close. Keyed on the prop, not written into
+   * the eye's handler: the library switches layers on and off too.
+   */
+  React.useEffect(() => {
+    if (visible) return;
+    setColorizeOpen(false);
+    setPresetOpen(false);
+  }, [visible]);
 
   /* ------------------------------- loading ------------------------------- */
 
@@ -482,10 +500,12 @@ export function SampleMapLayer({
     <>
       <DataLayerCard
         name={feed.title}
+        onRemove={onRemove}
         meta={meta}
         // Expanded follows visibility: a layer that is off is a name and an
         // eye, and turning it on is what asks for its controls. Ten expanded
-        // cards would be 2,000px of panel for layers nobody switched on.
+        // cards would be 2,000px of panel for layers nobody switched on. The
+        // card enforces this as well; passed here so the rule reads locally.
         expanded={visible}
         visible={visible}
         onVisibilityChange={onVisibleChange}

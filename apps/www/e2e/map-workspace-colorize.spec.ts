@@ -42,6 +42,17 @@ async function openWorkspace(page: Page) {
   await expect(legendTrigger(page)).toBeVisible();
 }
 
+/**
+ * Zürich's own card.
+ *
+ * Every assertion about a legend is scoped to it. The map opens with three
+ * layers now, and the other two carry categorical legends of their own, so a
+ * bare `[data-slot="legend-categorical"]` matches three elements and fails
+ * strict mode for a reason that has nothing to do with the colorize chain.
+ */
+const flowsCard = (page: Page) =>
+  page.locator('[data-slot="data-layer-card"]', { hasText: "Vehicle Flows" }).first();
+
 /** Where `child` sits relative to `parent`, in whole pixels. */
 async function relate(parent: Locator, child: Locator) {
   const a = (await parent.boundingBox())!;
@@ -131,7 +142,7 @@ test.describe("colouring by a category", () => {
     page,
   }) => {
     await openWorkspace(page);
-    await expect(page.locator('[data-slot="legend-ramp"]')).toBeVisible();
+    await expect(flowsCard(page).locator('[data-slot="legend-ramp"]')).toBeVisible();
 
     await legendTrigger(page).click();
     await colorBy(page, "Road type");
@@ -146,9 +157,9 @@ test.describe("colouring by a category", () => {
     // The card's legend follows the map, and names its values -- a category
     // list distinguished only by colour is unusable by the people the
     // colour-blind-safe filter exists for.
-    const legend = page.locator('[data-slot="legend-categorical"]');
+    const legend = flowsCard(page).locator('[data-slot="legend-categorical"]');
     await expect(legend).toBeVisible();
-    await expect(page.locator('[data-slot="legend-ramp"]')).toHaveCount(0);
+    await expect(flowsCard(page).locator('[data-slot="legend-ramp"]')).toHaveCount(0);
     await expect(legend.locator("li")).toHaveCount(8);
 
     // Labelled, not raw: the column holds "motorway_link".
@@ -161,7 +172,9 @@ test.describe("colouring by a category", () => {
     await openWorkspace(page);
     await legendTrigger(page).click();
     await colorBy(page, "Road type");
-    await expect(page.locator('[data-slot="legend-categorical"]')).toBeVisible();
+    await expect(
+      flowsCard(page).locator('[data-slot="legend-categorical"]'),
+    ).toBeVisible();
 
     // A grid cell sums many segments, so it has no single road type -- and no
     // honest category legend. Both fall back together.
@@ -171,8 +184,10 @@ test.describe("colouring by a category", () => {
     // by the SVG. Clicking the label is what a pointer user does anyway.
     await page.locator('label[title="Grid"]').click();
 
-    await expect(page.locator('[data-slot="legend-ramp"]')).toBeVisible();
-    await expect(page.locator('[data-slot="legend-categorical"]')).toHaveCount(0);
+    await expect(flowsCard(page).locator('[data-slot="legend-ramp"]')).toBeVisible();
+    await expect(
+      flowsCard(page).locator('[data-slot="legend-categorical"]'),
+    ).toHaveCount(0);
   });
 
   test("choosing a preset recolours the legend swatches", async ({ page }) => {

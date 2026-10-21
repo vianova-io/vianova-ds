@@ -76,7 +76,10 @@ import {
 } from "@/registry/vianova/product/floating-panel";
 import { LegendCategorical } from "@/registry/vianova/product/legend-categorical";
 import { LegendRamp, RAMP_STOPS } from "@/registry/vianova/product/legend-ramp";
-import { MapCanvas } from "@/registry/vianova/product/map-canvas";
+import {
+  MapCanvas,
+  whenStyleReady,
+} from "@/registry/vianova/product/map-canvas";
 import { BasemapSwitcher } from "@/registry/vianova/product/basemap-switcher";
 import { MapControls } from "@/registry/vianova/product/map-controls";
 import {
@@ -503,6 +506,46 @@ const tabOf = (section: string): LayerTab =>
  *  step's title and the chart selector cannot drift apart. */
 const LAYER_NAME = "Vehicle Flows";
 
+/**
+ * The map's own layer, as a catalogue entry.
+ *
+ * Zurich's flows used to be furniture: always listed, never removable, and
+ * absent from the library. It is a layer like the rest -- it has a legend, a
+ * visualisation, filters and a colorize chain -- so it follows the same rules,
+ * and the panel can be emptied completely.
+ *
+ * `file` is empty because its rows are not one of the hub's CSVs. Everything
+ * that reads a feed's file guards on that: the library's thumbnail keeps the
+ * drawn stand-in rather than fetching a directory.
+ */
+const FLOWS_ID = "flows";
+const FLOWS_FEED: SampleFeed = {
+  id: FLOWS_ID,
+  file: "",
+  title: LAYER_NAME,
+  section: "data",
+  description:
+    "Vehicle volumes on every road segment in Zürich, summed over the period.",
+  rowRepresents: "a road segment",
+  domain: "traffic",
+  uploadedAt: "2026-10-05T09:00:00Z",
+};
+
+/**
+ * What a new map opens with.
+ *
+ * Three layers rather than the whole catalogue: enough that the panel, the
+ * charts and the legend all have something to describe, few enough that the +
+ * button has work to do. Trips (MDS) is deliberately not among them -- it is
+ * 670KB, and a block that parses it before anyone asks is slower to first
+ * paint for a layer most readers will not look at.
+ */
+const DEFAULT_LAYERS = [
+  FLOWS_ID,
+  "sample-infringements-lisbon",
+  "sample-mds-vehicles-lisbon",
+];
+
 /** How many bars a breakdown shows before the tail is dropped. */
 const CHART_BARS = 8;
 
@@ -618,7 +661,7 @@ export function MapWorkspace({
    * off, which read as a map that already had nine layers it was refusing to
    * draw -- and left the + button with nothing it could possibly add.
    */
-  const [added, setAdded] = React.useState<string[]>([]);
+  const [added, setAdded] = React.useState<string[]>(DEFAULT_LAYERS);
   const [libraryOpen, setLibraryOpen] = React.useState(false);
   /**
    * Feeds that came from the reader's machine rather than the catalogue.
@@ -629,7 +672,14 @@ export function MapWorkspace({
    */
   const [uploads, setUploads] = React.useState<SampleFeed[]>([]);
   /** Which sample layers are switched on, by feed id. */
-  const [layerOn, setLayerOn] = React.useState<Record<string, boolean>>({});
+  const [layerOn, setLayerOn] = React.useState<Record<string, boolean>>(() =>
+    // The layers a map opens with are drawn, not merely listed. Added and
+    // switched off would be the old panel again: cards for layers the map is
+    // refusing to paint.
+    Object.fromEntries(
+      DEFAULT_LAYERS.filter((id) => id !== FLOWS_ID).map((id) => [id, true]),
+    ),
+  );
   /** The rows each visible sample layer is showing, for the charts. */
   const [layerData, setLayerData] = React.useState<
     Record<string, { sample: ParsedSample; rows: Record<string, string>[] }>
@@ -666,12 +716,23 @@ export function MapWorkspace({
 
   /** The catalogue the library offers, plus anything uploaded this session. */
   const catalogue = React.useMemo(
-    () => [...SAMPLE_FEEDS, ...uploads],
+    () => [FLOWS_FEED, ...SAMPLE_FEEDS, ...uploads],
     [uploads],
   );
 
+  /**
+   * The added feeds that SampleMapLayer draws.
+   *
+   * The flows are excluded although they are in the catalogue and in `added`:
+   * they have their own card above this list, with their own legend and
+   * colorize chain, and nothing to load from a CSV. Leaving them in rendered
+   * the layer twice -- once as itself and once as a feed with no file.
+   */
   const addedFeeds = React.useMemo(
-    () => catalogue.filter((feed) => added.includes(feed.id)),
+    () =>
+      catalogue.filter(
+        (feed) => feed.id !== FLOWS_ID && added.includes(feed.id),
+      ),
     [catalogue, added],
   );
 
@@ -694,10 +755,27 @@ export function MapWorkspace({
   const addLayers = React.useCallback(
     (ids: string[]) => {
       setAdded((all) => [...all, ...ids.filter((id) => !all.includes(id))]);
-      ids.forEach((id) => setLayerVisible(id, true));
+      ids.forEach((id) => {
+        // The flows keep their own visibility state: their rows do not come
+        // through SampleMapLayer, so setLayerVisible would light nothing.
+        if (id === FLOWS_ID) setVisible(true);
+        else setLayerVisible(id, true);
+      });
     },
     [setLayerVisible],
   );
+
+  /**
+   * Taking a layer off the map.
+   *
+   * It stops being drawn as well as listed: a removed layer that kept painting
+   * would be a layer with no card to switch it off again.
+   */
+  const removeLayer = React.useCallback((id: string) => {
+    setAdded((all) => all.filter((x) => x !== id));
+    setLayerOn((all) => ({ ...all, [id]: false }));
+    if (id === FLOWS_ID) setVisible(false);
+  }, []);
 
   /**
    * An uploaded CSV becomes a feed like any other, pointed at an object URL.
@@ -971,6 +1049,22 @@ export function MapWorkspace({
   const [dataPanel, setDataPanel] = React.useState<HTMLElement | null>(null);
   const colorizeTriggerId = React.useId();
   const browsePresetsId = React.useId();
+
+  /**
+   * Hiding the layer folds the chain away with its card.
+   *
+   * The card collapses to a name and an eye when the layer goes off, and that
+   * takes the legend button these steps hang from with it -- so a docked
+   * Colorize would be left configuring colours nobody can see, with no trigger
+   * for PanelStep to return focus to on close. An effect rather than a line in
+   * the eye's handler: the camera, the library and a future control can all
+   * move `visible`, and only one of them is that button.
+   */
+  React.useEffect(() => {
+    if (visible) return;
+    setColorizeOpen(false);
+    setPresetOpen(false);
+  }, [visible]);
 
   const colorFieldType =
     COLOR_FIELDS.find((f) => f.name === colorField)?.type ?? "number";
@@ -1362,8 +1456,17 @@ export function MapWorkspace({
   const [dataLayerPainted, setDataLayerPainted] = React.useState(false);
   const syncAndReport = React.useCallback(
     (map: MapLibreMap) => {
-      syncLayer(map);
-      setDataLayerPainted(LAYERS.some((id) => !!map.getLayer(id)));
+      // Waited for, not assumed. syncLayer opens with `if
+      // (!map.isStyleLoaded()) return`, and isStyleLoaded goes false while
+      // tiles settle as well as while a style swaps -- so a sync asked for in
+      // that window did nothing and nothing asked again, because its deps had
+      // already changed. Removing a layer seconds after load left it painted
+      // with no card to switch it off: the panel said the map had nothing on
+      // it while the map still drew it.
+      whenStyleReady(map, (ready) => {
+        syncLayer(ready);
+        setDataLayerPainted(LAYERS.some((id) => !!ready.getLayer(id)));
+      });
     },
     [syncLayer],
   );
@@ -1937,15 +2040,20 @@ export function MapWorkspace({
               {/* Zürich, so it belongs with the feeds rather than the
                   areas -- and it is the only layer here that is not one of
                   the hub's samples. */}
-              {tab === "data" ? (
+              {tab === "data" && added.includes(FLOWS_ID) ? (
                 <DataLayerCard
                   name={LAYER_NAME}
+                  onRemove={() => removeLayer(FLOWS_ID)}
                   meta={meta}
                   metaIcon={<Hash />}
                   visualizationType={viz}
                   onVisualizationTypeChange={setViz}
                   unavailableVisualizations={UNAVAILABLE}
                   unavailableVisualizationReason="this layer is road segments, with no zone polygons and no timestamps"
+                  // Expanded follows visibility, as it does for every sample
+                  // layer below. The card enforces this too; passing it here
+                  // keeps the rule readable at the call site.
+                  expanded={visible}
                   visible={visible}
                   onVisibilityChange={setVisible}
                   filters
@@ -2044,6 +2152,7 @@ export function MapWorkspace({
                   visible={Boolean(layerOn[feed.id])}
                   onVisibleChange={(on) => setLayerVisible(feed.id, on)}
                   onSampleChange={onSampleChange}
+                  onRemove={() => removeLayer(feed.id)}
                 />
               ))}
 
@@ -2058,10 +2167,16 @@ export function MapWorkspace({
                   </p>
                 ) : (
                   <div className="px-1 py-6 text-center">
+                    {/* Three different emptinesses. "No other layers" only
+                        reads right while the flows card is above it; once that
+                        has been removed too, the panel is genuinely bare and
+                        should say so. */}
                     <p className="text-muted-foreground text-sm">
-                      {tab === "data"
-                        ? "No other layers yet."
-                        : "No zones or regulations yet."}
+                      {tab !== "data"
+                        ? "No zones or regulations yet."
+                        : added.includes(FLOWS_ID)
+                          ? "No other layers yet."
+                          : "No data layers yet."}
                     </p>
                     <Button
                       variant="secondary"

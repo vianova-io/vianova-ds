@@ -129,7 +129,10 @@ export type MapCanvasProps = Omit<React.ComponentProps<"div">, "onLoad"> & {
  * rather than an ordering one. Plan -> Terrain was unaffected because that
  * pair shares a style and never re-adds anything.
  */
-function whenStyleReady(map: MapLibreMap, fn: (map: MapLibreMap) => void) {
+export function whenStyleReady(
+  map: MapLibreMap,
+  fn: (map: MapLibreMap) => void,
+) {
   const attempt = () => {
     if (map.isStyleLoaded()) fn(map);
     else map.once("idle", attempt);
@@ -179,7 +182,10 @@ export function MapCanvas({
 
   // Read by the style-ready paths without putting the basemap in their deps,
   // which would rebuild the map rather than swap its style.
-  const overlayRef = React.useRef<{ basemap?: Basemap; scheme: "light" | "dark" }>({
+  const overlayRef = React.useRef<{
+    basemap?: Basemap;
+    scheme: "light" | "dark";
+  }>({
     basemap: resolvedBasemap,
     scheme,
   });
@@ -190,7 +196,12 @@ export function MapCanvas({
   // compares styles by identity -- depending on the object would call setStyle
   // on every single render, re-fetching the style and re-firing onStyleReady.
   const style = React.useMemo<StyleLike>(() => {
-    if (mapStyle && typeof mapStyle === "object" && "light" in mapStyle && "dark" in mapStyle) {
+    if (
+      mapStyle &&
+      typeof mapStyle === "object" &&
+      "light" in mapStyle &&
+      "dark" in mapStyle
+    ) {
       return mapStyle[scheme];
     }
     if (mapStyle) return mapStyle;
@@ -261,12 +272,17 @@ export function MapCanvas({
       whenStyleReady(map, (ready) => {
         // Before the caller's hook, so a hillshade is already in place under
         // whatever they add next and neither has to know about the other.
-        applyBasemapOverlays(ready, overlayRef.current.basemap, overlayRef.current.scheme);
+        applyBasemapOverlays(
+          ready,
+          overlayRef.current.basemap,
+          overlayRef.current.scheme,
+        );
         whenStyleReady(ready, (settled) => onStyleReadyRef.current?.(settled));
       });
     });
     map.on("error", (e) => {
-      if ((e as { error?: { status?: number } }).error?.status === 401) setFailed(true);
+      if ((e as { error?: { status?: number } }).error?.status === 401)
+        setFailed(true);
     });
 
     return () => {
@@ -297,7 +313,11 @@ export function MapCanvas({
       // applyBasemapOverlays removes as readily as it adds -- which is what
       // makes the reverse, Terrain -> Plan, drop the hillshade.
       whenStyleReady(map, (ready) => {
-        applyBasemapOverlays(ready, overlayRef.current.basemap, overlayRef.current.scheme);
+        applyBasemapOverlays(
+          ready,
+          overlayRef.current.basemap,
+          overlayRef.current.scheme,
+        );
       });
       return;
     }
@@ -314,7 +334,11 @@ export function MapCanvas({
     // empty with nothing left to trigger a retry.
     map.once("styledata", () => {
       whenStyleReady(map, (ready) => {
-        applyBasemapOverlays(ready, overlayRef.current.basemap, overlayRef.current.scheme);
+        applyBasemapOverlays(
+          ready,
+          overlayRef.current.basemap,
+          overlayRef.current.scheme,
+        );
         // Gate AGAIN before handing the map over -- see notifyStyleReady.
         whenStyleReady(ready, (settled) => onStyleReadyRef.current?.(settled));
       });
@@ -354,7 +378,9 @@ export function MapCanvas({
       {...props}
     >
       <div ref={containerRef} className="size-full" />
-      {failed && fallback ? <div className="absolute inset-0">{fallback}</div> : null}
+      {failed && fallback ? (
+        <div className="absolute inset-0">{fallback}</div>
+      ) : null}
     </div>
   );
 }
