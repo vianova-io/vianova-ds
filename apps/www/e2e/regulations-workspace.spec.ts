@@ -25,6 +25,19 @@ async function open(page: Page, viewport = { width: 1440, height: 1000 }) {
 }
 
 async function expectNoBlockingViolations(page: Page) {
+  // Nothing dimming the block when the scan runs.
+  //
+  // A sheet lays a backdrop over the workspace, and this scan is scoped to the
+  // workspace -- so axe measures the contrast of text UNDER that scrim and
+  // reports colour-contrast failures on markup that is fine a frame later.
+  // Intermittent, because it depends on whether the analysis starts before or
+  // after the fade: measured at the exact point this helper was called after
+  // adding a zone, the backdrop was still at opacity 1 and took ~180ms to go,
+  // and the suite failed roughly two runs in seven.
+  await expect(
+    page.locator("[data-slot=sheet-overlay], [data-slot=dialog-overlay]"),
+  ).toHaveCount(0);
+
   const results = await new AxeBuilder({ page })
     .include("[data-slot=regulations-workspace]")
     // MapLibre's own canvas and controls are not ours to fix.
