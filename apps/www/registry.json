@@ -2597,6 +2597,7 @@
         "@vianova/badge",
         "@vianova/button",
         "@vianova/collapsible",
+        "@vianova/dropdown-menu",
         "@vianova/legend-ramp",
         "@vianova/separator",
         "@vianova/utils",
