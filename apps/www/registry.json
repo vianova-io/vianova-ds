@@ -569,6 +569,7 @@
       "registryDependencies": [
         "@vianova/basemap-switcher",
         "@vianova/basemaps",
+        "@vianova/bottom-tray",
         "@vianova/button",
         "@vianova/button-group",
         "@vianova/category-style",
@@ -579,6 +580,7 @@
         "@vianova/colorize-panel",
         "@vianova/data-layer-card",
         "@vianova/data-library-dialog",
+        "@vianova/dropdown-menu",
         "@vianova/export-menu",
         "@vianova/filter-ast",
         "@vianova/filter-builder",
@@ -3348,6 +3350,27 @@
       "files": [
         {
           "path": "registry/vianova/patterns/app-shell.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "bottom-tray",
+      "type": "registry:ui",
+      "title": "Bottom Tray",
+      "description": "Bottom Tray — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "registryDependencies": [
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/bottom-tray.tsx",
           "type": "registry:ui"
         }
       ],

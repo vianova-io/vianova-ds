@@ -8,6 +8,7 @@ import {
   Layers,
   ListFilter,
   Minimize2,
+  MoreVertical,
   Plus,
   Search,
   Map as MapIcon,
@@ -21,6 +22,16 @@ import type {
 
 import { Button } from "@/registry/vianova/ui/button";
 import { ButtonGroup } from "@/registry/vianova/ui/button-group";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/registry/vianova/ui/dropdown-menu";
 import {
   ChartContainer,
   ChartTooltip,
@@ -83,6 +94,7 @@ import {
 import { BasemapSwitcher } from "@/registry/vianova/product/basemap-switcher";
 import { MapControls } from "@/registry/vianova/product/map-controls";
 import {
+  BASEMAPS,
   BASEMAP_BY_ID,
   DEFAULT_BASEMAP_ID,
   MAP_SCHEME_LABELS,
@@ -99,6 +111,10 @@ import { RankedBars } from "@/registry/vianova/product/ranked-bars";
 import { SampleMapLayer } from "@/registry/vianova/product/sample-map-layer";
 import type { VisualizationTypeId } from "@/registry/vianova/product/visualization-picker";
 import { useColorScheme } from "@/registry/vianova/hooks/use-color-scheme";
+import {
+  BottomTray,
+  type TraySnap,
+} from "@/registry/vianova/patterns/bottom-tray";
 import { InlineEdit } from "@/registry/vianova/patterns/inline-edit";
 import {
   countConditions,
@@ -587,7 +603,16 @@ export function MapWorkspace({
    * layer and chart state survives a rotation -- as does the uncontrolled
    * expand/collapse state inside each DataLayerCard.
    */
-  const [pane, setPane] = React.useState<"data" | "charts">("data");
+  const [pane, setPane] = React.useState<"data" | "charts" | null>("data");
+  /**
+   * How tall the open tray is, below lg.
+   *
+   * One value for both panels rather than one each: they are the same tray as
+   * far as a thumb is concerned -- only one is ever on screen -- and a reader
+   * who dragged it to full and then switched to Charts means the tray to stay
+   * where they put it.
+   */
+  const [traySnap, setTraySnap] = React.useState<TraySnap>("half");
 
   /**
    * Panel visibility from lg up, where `pane` has nothing to say.
@@ -1636,6 +1661,16 @@ export function MapWorkspace({
         aria-label="Map controls"
         className={cn(
           "absolute inset-x-0 top-0 flex h-14 items-center px-2 lg:px-4",
+          // A scrim under the row, below md.
+          //
+          // Every control here carries bg-card/95 and its own backdrop blur;
+          // the title carries nothing and sits on bare map. That is legible
+          // over dark tiles and poor over Satellite or a light Plan, and the
+          // phone is where the title is longest relative to the space it has.
+          // A gradient rather than a bar, so the row does not read as a second
+          // piece of chrome above the map -- the same treatment the basemap
+          // thumbnails use to protect their captions.
+          "max-md:bg-linear-to-b max-md:from-background/85 max-md:via-background/55 max-md:to-transparent",
           // While the phone's search field is open it covers the row, and a
           // covered control must not still be tabbable or announced -- or the
           // keyboard walks into buttons nobody can see. visibility, not
@@ -1778,8 +1813,11 @@ export function MapWorkspace({
               zoom stack and the basemap tile, and this row is 36px. It takes
               its size from one custom property, so a consumer sets the whole
               control without reaching past it. */}
+          {/* On the phone too. It used to stop at md, so a zone could not be
+              drawn on the device most likely to be standing in the street
+              looking at one. */}
           <MapDrawControl
-            className="hidden md:flex [--draw-size:2.25rem]"
+            className="flex [--draw-size:2.25rem]"
             mode={drawMode}
             onModeChange={setDrawMode}
           />
@@ -1837,7 +1875,11 @@ export function MapWorkspace({
                 aria-label={label}
                 aria-expanded={pane === id}
                 aria-controls={controls}
-                onClick={() => setPane(id)}
+                // A toggle, not a radio: the lit one closes, so the map can be
+                // seen whole. Tapping the other swaps, as before. Below lg
+                // these two ARE the top navigation, so this is the way out of
+                // a tray as well as the way between them.
+                onClick={() => setPane((open) => (open === id ? null : id))}
                 className="relative after:absolute after:-inset-2 after:content-['']"
               >
                 <Icon />
@@ -1852,8 +1894,10 @@ export function MapWorkspace({
               nothing. One of them does now, so it needs somewhere below lg,
               and the bottom-right corner is not it: the data panel docks there
               and MapLibre's attribution owns what is left. */}
+          {/* md to lg only: below md it is in the overflow menu, and from lg
+              up MapControls carries it in the map's corner. */}
           <BasemapSwitcher
-            className="lg:hidden"
+            className="hidden md:flex lg:hidden"
             value={basemapId}
             onValueChange={setBasemapId}
             side="bottom"
@@ -1880,6 +1924,7 @@ export function MapWorkspace({
               because it only measured /preview/button-control-ladder. */}
           <Button
             aria-label="Export report"
+            className="hidden md:inline-flex"
             disabled={!features.length}
             onClick={() =>
               downloadFile(
@@ -1903,6 +1948,78 @@ export function MapWorkspace({
                 without it 164. */}
             <span className="hidden xl:inline">Export report</span>
           </Button>
+
+          {/*
+            The phone's overflow.
+
+            342px holds a title and four controls before something has to go,
+            and the two that go are the ones you reach for least while moving
+            around a map: the export, which is an end-of-task action, and the
+            basemap, which is set once. Search, the two panels and the drawing
+            tools stay on the row.
+
+            The basemaps are radio items rather than the BasemapSwitcher's own
+            popover: a popover opened from inside a menu is two layers of
+            dismissal over a 342px screen, and the thumbnails it exists to
+            show would be 100px wide here.
+          */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  aria-label="More map options"
+                  className="relative after:absolute after:-inset-2 after:content-[''] md:hidden"
+                />
+              }
+            >
+              <MoreVertical />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-auto min-w-48">
+              <DropdownMenuItem
+                disabled={!features.length}
+                onClick={() =>
+                  downloadFile(
+                    toCsv(
+                      features.map(
+                        (f) =>
+                          f.properties as unknown as Record<string, unknown>,
+                      ),
+                      EXPORT_COLUMNS,
+                    ),
+                    `${title || "flows"}.csv`,
+                    "text/csv;charset=utf-8",
+                  )
+                }
+              >
+                <Sparkles />
+                Export report
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {/* The label goes INSIDE the radio group. Base UI's GroupLabel
+                  labels the group it is in, and one with no group around it
+                  throws (error #31) when the menu opens -- so the menu simply
+                  did not appear, with nothing failing anywhere else. */}
+              <DropdownMenuRadioGroup
+                value={basemapId}
+                onValueChange={(value: string) =>
+                  setBasemapId(value as BasemapId)
+                }
+              >
+                <DropdownMenuLabel>Basemap</DropdownMenuLabel>
+                {BASEMAPS.map((basemap) => (
+                  <DropdownMenuRadioItem
+                    key={basemap.id}
+                    value={basemap.id}
+                    closeOnClick
+                  >
+                    {basemap.label}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {searchOpen ? (
@@ -1987,118 +2104,145 @@ export function MapWorkspace({
           through, and only the dock it owns is a real element -- so wrapping
           the data panel here does not disturb its absolute positioning. */}
       <PanelStepper anchor={dataPanel}>
-        <FloatingPanel
-          ref={setDataPanel}
-          id={dataPaneId}
-          className={cn(
-            "absolute inset-x-2 bottom-10 top-auto max-h-[55%] w-auto",
-            "lg:inset-x-auto lg:left-4 lg:right-auto lg:top-16 lg:bottom-auto lg:max-h-[calc(100%-10rem)] lg:w-[340px]",
-            // Below lg `pane` decides; from lg up the bar's own disclosure
-            // does, which is what makes that button honest.
-            pane === "data" ? "flex" : "hidden",
-            deskPanels.data ? "lg:flex" : "lg:hidden",
-          )}
+        <BottomTray
+          open={pane === "data"}
+          onOpenChange={(next) => setPane(next ? "data" : null)}
+          snap={traySnap}
+          onSnapChange={setTraySnap}
+          label="Data layers"
+          // bottom-10, not the tray's own bottom-0: MapLibre's attribution
+          // sits bottom-right at z-index 2 and this is z-20, so a tray docked to
+          // the edge hides the credit the tiles are served under. 40px is the
+          // first value that clears the compact badge -- the same number the
+          // docked panel used before the tray existed.
+          className="inset-x-2 bottom-10"
         >
-          <FloatingPanelHeader>
-            <Tabs value={tab} onValueChange={(v) => setTab(v as LayerTab)}>
-              <TabsList>
-                <TabsTrigger value="data">Data</TabsTrigger>
-                <TabsTrigger value="zones">Zones</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <FloatingPanelActions>
-              {/* Opens the library. It had no onClick: the panel already
+          <FloatingPanel
+            ref={setDataPanel}
+            id={dataPaneId}
+            className={cn(
+              // Below lg the tray owns the geometry and this fills it; the
+              // bottom corners go, because the tray is docked to the edge.
+              // pb-8 keeps content clear of MapLibre's attribution, which paints
+              // at z-index 2 over everything in here, and pt-2 clears the
+              // grabber laid over this panel's top edge.
+              "h-full w-full pt-2 pb-8",
+              "lg:inset-x-auto lg:left-4 lg:right-auto lg:top-16 lg:bottom-auto lg:absolute lg:h-auto lg:max-h-[calc(100%-10rem)] lg:w-[340px] lg:pt-0 lg:pb-0",
+              // Below lg `pane` decides; from lg up the bar's own disclosure
+              // does, which is what makes that button honest.
+              //
+              // Kept on the panel even though the tray now carries the box.
+              // `hidden` on the tray gives its children no boxes, but
+              // getComputedStyle on THIS element still reports whatever
+              // display it was given -- so a panel left permanently `flex`
+              // reads as visible to anything inspecting it, and the
+              // responsive suite checks aria-expanded against exactly that.
+              pane === "data" ? "flex" : "hidden",
+              deskPanels.data ? "lg:flex" : "lg:hidden",
+            )}
+          >
+            <FloatingPanelHeader>
+              <Tabs value={tab} onValueChange={(v) => setTab(v as LayerTab)}>
+                <TabsList>
+                  <TabsTrigger value="data">Data</TabsTrigger>
+                  <TabsTrigger value="zones">Zones</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <FloatingPanelActions>
+                {/* Opens the library. It had no onClick: the panel already
                   listed every sample feed, so there was nothing this could
                   add, and it sat there claiming otherwise. */}
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Add data layer"
-                aria-haspopup="dialog"
-                onClick={() => setLibraryOpen(true)}
-              >
-                <Plus />
-              </Button>
-            </FloatingPanelActions>
-          </FloatingPanelHeader>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Add data layer"
+                  aria-haspopup="dialog"
+                  onClick={() => setLibraryOpen(true)}
+                >
+                  <Plus />
+                </Button>
+              </FloatingPanelActions>
+            </FloatingPanelHeader>
 
-          <FloatingPanelBody>
-            {/* p-2, not px-2 pb-2: the body scrolls, so a control flush against
+            <FloatingPanelBody>
+              {/* p-2, not px-2 pb-2: the body scrolls, so a control flush against
               its top edge gets its focus ring sliced off. */}
-            <div className="space-y-2 p-2">
-              <InputGroup>
-                <InputGroupAddon>
-                  <Search />
-                </InputGroupAddon>
-                <InputGroupInput
-                  placeholder={tab === "data" ? "Search data" : "Search zones"}
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-              </InputGroup>
+              <div className="space-y-2 p-2">
+                <InputGroup>
+                  <InputGroupAddon>
+                    <Search />
+                  </InputGroupAddon>
+                  <InputGroupInput
+                    placeholder={
+                      tab === "data" ? "Search data" : "Search zones"
+                    }
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                </InputGroup>
 
-              {/* Zürich, so it belongs with the feeds rather than the
+                {/* Zürich, so it belongs with the feeds rather than the
                   areas -- and it is the only layer here that is not one of
                   the hub's samples. */}
-              {tab === "data" && added.includes(FLOWS_ID) ? (
-                <DataLayerCard
-                  name={LAYER_NAME}
-                  onRemove={() => removeLayer(FLOWS_ID)}
-                  meta={meta}
-                  metaIcon={<Hash />}
-                  visualizationType={viz}
-                  onVisualizationTypeChange={setViz}
-                  unavailableVisualizations={UNAVAILABLE}
-                  unavailableVisualizationReason="this layer is road segments, with no zone polygons and no timestamps"
-                  // Expanded follows visibility, as it does for every sample
-                  // layer below. The card enforces this too; passing it here
-                  // keeps the rule readable at the call site.
-                  expanded={visible}
-                  visible={visible}
-                  onVisibilityChange={setVisible}
-                  filters
-                  filterCount={conditions || undefined}
-                  onColorize={() => setColorizeOpen((open) => !open)}
-                  colorizeOpen={colorizeOpen}
-                  colorizeTriggerId={colorizeTriggerId}
-                  // The legend describes what is actually painted, which is not
-                  // always what the panel is set to: an aggregate visualisation
-                  // keeps the magnitude ramp even while the panel says "Road type",
-                  // because a grid cell has no single road type. `categorical` is
-                  // already false in that case, so this follows the map by
-                  // construction rather than by remembering to.
-                  legend={
-                    loading ? (
-                      <Skeleton className="h-2.5 w-full" />
-                    ) : categorical && categories.shown.length ? (
-                      <LegendCategorical
-                        items={categories.shown.map((c) => ({
-                          label: c.label,
-                          color: c.color,
-                        }))}
-                      />
-                    ) : (
-                      <LegendRamp
-                        colors={rampColors.length ? rampColors : undefined}
-                        ticks={ticks}
-                        showTicks={Boolean(ticks)}
-                      />
-                    )
-                  }
-                  filtersAction={
-                    <Popover>
-                      <PopoverTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            aria-label="Edit Vehicle Flows filters"
-                          >
-                            <ListFilter />
-                          </Button>
-                        }
-                      />
-                      {/* 440px is wider than a phone. The popup is portalled and
+                {tab === "data" && added.includes(FLOWS_ID) ? (
+                  <DataLayerCard
+                    name={LAYER_NAME}
+                    onRemove={() => removeLayer(FLOWS_ID)}
+                    meta={meta}
+                    metaIcon={<Hash />}
+                    visualizationType={viz}
+                    onVisualizationTypeChange={setViz}
+                    unavailableVisualizations={UNAVAILABLE}
+                    unavailableVisualizationReason="this layer is road segments, with no zone polygons and no timestamps"
+                    // Expanded follows visibility, as it does for every sample
+                    // layer below. The card enforces this too; passing it here
+                    // keeps the rule readable at the call site.
+                    expanded={visible}
+                    visible={visible}
+                    onVisibilityChange={setVisible}
+                    filters
+                    filterCount={conditions || undefined}
+                    onColorize={() => setColorizeOpen((open) => !open)}
+                    colorizeOpen={colorizeOpen}
+                    colorizeTriggerId={colorizeTriggerId}
+                    // The legend describes what is actually painted, which is not
+                    // always what the panel is set to: an aggregate visualisation
+                    // keeps the magnitude ramp even while the panel says "Road type",
+                    // because a grid cell has no single road type. `categorical` is
+                    // already false in that case, so this follows the map by
+                    // construction rather than by remembering to.
+                    legend={
+                      loading ? (
+                        <Skeleton className="h-2.5 w-full" />
+                      ) : categorical && categories.shown.length ? (
+                        <LegendCategorical
+                          items={categories.shown.map((c) => ({
+                            label: c.label,
+                            color: c.color,
+                          }))}
+                        />
+                      ) : (
+                        <LegendRamp
+                          colors={rampColors.length ? rampColors : undefined}
+                          ticks={ticks}
+                          showTicks={Boolean(ticks)}
+                        />
+                      )
+                    }
+                    filtersAction={
+                      <Popover>
+                        <PopoverTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              aria-label="Edit Vehicle Flows filters"
+                            >
+                              <ListFilter />
+                            </Button>
+                          }
+                        />
+                        {/* 440px is wider than a phone. The popup is portalled and
                         fixed-positioned, and Base UI's collision handling SHIFTS
                         it but never SHRINKS it, so at 375px the right-hand ~65px
                         -- the value inputs -- hangs off-screen with no way to
@@ -2106,35 +2250,35 @@ export function MapWorkspace({
                         inherits down to here, so it already accounts for the
                         anchor and the collision padding; a viewport calc() would
                         not. */}
-                      <PopoverContent
-                        align="end"
-                        className="w-[440px] max-w-[var(--available-width)] p-3"
-                      >
-                        <FilterBuilder
-                          fields={FILTER_FIELDS}
+                        <PopoverContent
+                          align="end"
+                          className="w-[440px] max-w-[var(--available-width)] p-3"
+                        >
+                          <FilterBuilder
+                            fields={FILTER_FIELDS}
+                            value={filter}
+                            onValueChange={setFilter}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    }
+                    filtersContent={
+                      loading ? (
+                        <Skeleton className="h-32 w-full" />
+                      ) : (
+                        <FilterFacets
+                          fields={facetFields}
                           value={filter}
                           onValueChange={setFilter}
+                          bounds={bounds}
+                          choices={choices}
                         />
-                      </PopoverContent>
-                    </Popover>
-                  }
-                  filtersContent={
-                    loading ? (
-                      <Skeleton className="h-32 w-full" />
-                    ) : (
-                      <FilterFacets
-                        fields={facetFields}
-                        value={filter}
-                        onValueChange={setFilter}
-                        bounds={bounds}
-                        choices={choices}
-                      />
-                    )
-                  }
-                />
-              ) : null}
+                      )
+                    }
+                  />
+                ) : null}
 
-              {/* The data hub's own sample feeds, as layers. Each card loads
+                {/* The data hub's own sample feeds, as layers. Each card loads
                   its CSV the first time it is switched on, infers its own
                   columns, and so brings its own colorize fields, filters and
                   legend -- a feed added to the catalogue needs no code here.
@@ -2143,56 +2287,57 @@ export function MapWorkspace({
                   Zones tab the areas and the regulations. That is the
                   distinction the hub already draws, and the reason the Zones
                   tab exists. */}
-              {visibleFeeds.map((feed) => (
-                <SampleMapLayer
-                  key={feed.id}
-                  feed={feed}
-                  map={map}
-                  dataUrl={`${BASE_PATH}/data`}
-                  visible={Boolean(layerOn[feed.id])}
-                  onVisibleChange={(on) => setLayerVisible(feed.id, on)}
-                  onSampleChange={onSampleChange}
-                  onRemove={() => removeLayer(feed.id)}
-                />
-              ))}
+                {visibleFeeds.map((feed) => (
+                  <SampleMapLayer
+                    key={feed.id}
+                    feed={feed}
+                    map={map}
+                    dataUrl={`${BASE_PATH}/data`}
+                    visible={Boolean(layerOn[feed.id])}
+                    onVisibleChange={(on) => setLayerVisible(feed.id, on)}
+                    onSampleChange={onSampleChange}
+                    onRemove={() => removeLayer(feed.id)}
+                  />
+                ))}
 
-              {/* Two different emptinesses, and they want different words: a
+                {/* Two different emptinesses, and they want different words: a
                   search that matched nothing is the reader's filter, while a
                   tab with no layers in it is an invitation to add one. Saying
                   "nothing matches" over an empty map would be a dead end. */}
-              {visibleFeeds.length === 0 ? (
-                query.trim() ? (
-                  <p className="text-muted-foreground px-1 py-6 text-center text-sm">
-                    Nothing here matches &ldquo;{query}&rdquo;.
-                  </p>
-                ) : (
-                  <div className="px-1 py-6 text-center">
-                    {/* Three different emptinesses. "No other layers" only
+                {visibleFeeds.length === 0 ? (
+                  query.trim() ? (
+                    <p className="text-muted-foreground px-1 py-6 text-center text-sm">
+                      Nothing here matches &ldquo;{query}&rdquo;.
+                    </p>
+                  ) : (
+                    <div className="px-1 py-6 text-center">
+                      {/* Three different emptinesses. "No other layers" only
                         reads right while the flows card is above it; once that
                         has been removed too, the panel is genuinely bare and
                         should say so. */}
-                    <p className="text-muted-foreground text-sm">
-                      {tab !== "data"
-                        ? "No zones or regulations yet."
-                        : added.includes(FLOWS_ID)
-                          ? "No other layers yet."
-                          : "No data layers yet."}
-                    </p>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="mt-3"
-                      onClick={() => setLibraryOpen(true)}
-                    >
-                      <Plus data-icon="inline-start" />
-                      Add from library
-                    </Button>
-                  </div>
-                )
-              ) : null}
-            </div>
-          </FloatingPanelBody>
-        </FloatingPanel>
+                      <p className="text-muted-foreground text-sm">
+                        {tab !== "data"
+                          ? "No zones or regulations yet."
+                          : added.includes(FLOWS_ID)
+                            ? "No other layers yet."
+                            : "No data layers yet."}
+                      </p>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="mt-3"
+                        onClick={() => setLibraryOpen(true)}
+                      >
+                        <Plus data-icon="inline-start" />
+                        Add from library
+                      </Button>
+                    </div>
+                  )
+                ) : null}
+              </div>
+            </FloatingPanelBody>
+          </FloatingPanel>
+        </BottomTray>
 
         {/* Colorize cascades beside the data PANEL, not beside the legend that
             opens it: anchoring to the control would staircase the chain down
@@ -2292,211 +2437,243 @@ export function MapWorkspace({
         </PanelStep>
       </PanelStepper>
 
-      {/* Charts panel. Same docking rules as the data panel above, including
-          why every inset is spelled out at both tiers. */}
-      <FloatingPanel
-        id={chartsPaneId}
-        className={cn(
-          "absolute inset-x-2 bottom-10 top-auto max-h-[55%] w-auto",
-          "lg:inset-x-auto lg:right-4 lg:left-auto lg:top-16 lg:bottom-auto lg:max-h-[calc(100%-10rem)] lg:w-[340px]",
-          pane === "charts" ? "flex" : "hidden",
-          deskPanels.charts ? "lg:flex" : "lg:hidden",
-        )}
+      {/* Charts panel. Same tray below lg, same docked column from lg up,
+          including why every inset is spelled out at both tiers. */}
+      <BottomTray
+        open={pane === "charts"}
+        onOpenChange={(next) => setPane(next ? "charts" : null)}
+        snap={traySnap}
+        onSnapChange={setTraySnap}
+        label="Charts"
+        // bottom-10, not the tray's own bottom-0: MapLibre's attribution
+        // sits bottom-right at z-index 2 and this is z-20, so a tray docked to
+        // the edge hides the credit the tiles are served under. 40px is the
+        // first value that clears the compact badge -- the same number the
+        // docked panel used before the tray existed.
+        className="inset-x-2 bottom-10"
       >
-        <FloatingPanelHeader className="border-b border-border p-3">
-          <FloatingPanelTitle className="px-0">Charts</FloatingPanelTitle>
-          <FloatingPanelActions>
-            <Button variant="ghost" size="icon-sm" aria-label="Collapse charts">
-              <Minimize2 />
-            </Button>
-            <Button variant="ghost" size="icon-sm" aria-label="Add chart">
-              <Plus />
-            </Button>
-          </FloatingPanelActions>
-        </FloatingPanelHeader>
+        <FloatingPanel
+          id={chartsPaneId}
+          className={cn(
+            "h-full w-full pt-2 pb-8",
+            "lg:inset-x-auto lg:right-4 lg:left-auto lg:top-16 lg:bottom-auto lg:absolute lg:h-auto lg:max-h-[calc(100%-10rem)] lg:w-[340px] lg:pt-0 lg:pb-0",
+            // Truthful display, for the reason given on the data panel.
+            pane === "charts" ? "flex" : "hidden",
+            deskPanels.charts ? "lg:flex" : "lg:hidden",
+          )}
+        >
+          <FloatingPanelHeader className="border-b border-border p-3">
+            <FloatingPanelTitle className="px-0">Charts</FloatingPanelTitle>
+            <FloatingPanelActions>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Collapse charts"
+              >
+                <Minimize2 />
+              </Button>
+              <Button variant="ghost" size="icon-sm" aria-label="Add chart">
+                <Plus />
+              </Button>
+            </FloatingPanelActions>
+          </FloatingPanelHeader>
 
-        <div className="space-y-2 p-2">
-          <Select
-            value={chartLayer}
-            onValueChange={(value) => setChartLayer(value ?? "flows")}
-          >
-            <SelectTrigger className="w-full" aria-label="Chart source layer">
-              {/* Base UI renders the raw value unless given a mapping, which
-                  would show "flows" instead of the layer name. */}
-              <SelectValue>
-                {(value: string) =>
-                  chartSources.find((s) => s.value === value)?.label ?? value
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {chartSources.map(({ value, label }) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <InputGroup>
-            <InputGroupAddon>
-              <Search />
-            </InputGroupAddon>
-            <InputGroupInput placeholder="Search charts" />
-          </InputGroup>
-        </div>
-
-        <FloatingPanelBody>
           <div className="space-y-2 p-2">
-            {chartLayer !== "flows" ? (
-              sampleCharts ? (
-                <>
-                  <ChartCard>
-                    <ChartCardHeader title="Rows on the map" icon={<Hash />} />
-                    <ChartCardMetric
-                      value={plain.format(sampleCharts.shown)}
-                      unit={`of ${plain.format(sampleCharts.total)} · ${
-                        chartSources.find((s) => s.value === chartLayer)
-                          ?.label ?? ""
-                      }`}
-                    />
-                  </ChartCard>
-                  {sampleCharts.breakdowns.map((breakdown) => (
-                    <ChartCard key={breakdown.name}>
+            <Select
+              value={chartLayer}
+              onValueChange={(value) => setChartLayer(value ?? "flows")}
+            >
+              <SelectTrigger className="w-full" aria-label="Chart source layer">
+                {/* Base UI renders the raw value unless given a mapping, which
+                  would show "flows" instead of the layer name. */}
+                <SelectValue>
+                  {(value: string) =>
+                    chartSources.find((s) => s.value === value)?.label ?? value
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {chartSources.map(({ value, label }) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <InputGroup>
+              <InputGroupAddon>
+                <Search />
+              </InputGroupAddon>
+              <InputGroupInput placeholder="Search charts" />
+            </InputGroup>
+          </div>
+
+          <FloatingPanelBody>
+            <div className="space-y-2 p-2">
+              {chartLayer !== "flows" ? (
+                sampleCharts ? (
+                  <>
+                    <ChartCard>
                       <ChartCardHeader
-                        title={`By ${breakdown.label.toLowerCase()}`}
-                        icon={<BarChart3 />}
+                        title="Rows on the map"
+                        icon={<Hash />}
                       />
-                      {breakdown.items.length ? (
-                        <RankedBars items={breakdown.items} />
-                      ) : (
-                        <p className="text-muted-foreground py-4 text-center text-xs">
-                          No rows match these filters.
-                        </p>
-                      )}
+                      <ChartCardMetric
+                        value={plain.format(sampleCharts.shown)}
+                        unit={`of ${plain.format(sampleCharts.total)} · ${
+                          chartSources.find((s) => s.value === chartLayer)
+                            ?.label ?? ""
+                        }`}
+                      />
                     </ChartCard>
-                  ))}
+                    {sampleCharts.breakdowns.map((breakdown) => (
+                      <ChartCard key={breakdown.name}>
+                        <ChartCardHeader
+                          title={`By ${breakdown.label.toLowerCase()}`}
+                          icon={<BarChart3 />}
+                        />
+                        {breakdown.items.length ? (
+                          <RankedBars items={breakdown.items} />
+                        ) : (
+                          <p className="text-muted-foreground py-4 text-center text-xs">
+                            No rows match these filters.
+                          </p>
+                        )}
+                      </ChartCard>
+                    ))}
+                  </>
+                ) : (
+                  <p className="text-muted-foreground px-1 py-6 text-center text-xs">
+                    Loading{" "}
+                    {
+                      chartSources.find((src) => src.value === chartLayer)
+                        ?.label
+                    }
+                    …
+                  </p>
+                )
+              ) : loading ? (
+                <>
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-44 w-full" />
+                  <Skeleton className="h-44 w-full" />
                 </>
               ) : (
-                <p className="text-muted-foreground px-1 py-6 text-center text-xs">
-                  Loading{" "}
-                  {chartSources.find((src) => src.value === chartLayer)?.label}…
-                </p>
-              )
-            ) : loading ? (
-              <>
-                <Skeleton className="h-20 w-full" />
-                <Skeleton className="h-44 w-full" />
-                <Skeleton className="h-44 w-full" />
-              </>
-            ) : (
-              <>
-                <ChartCard>
-                  <ChartCardHeader
-                    title="Total vehicle volume"
-                    icon={<Hash />}
-                  />
-                  {/* A hero number, with no ring drawn round it. A ring encodes
+                <>
+                  <ChartCard>
+                    <ChartCardHeader
+                      title="Total vehicle volume"
+                      icon={<Hash />}
+                    />
+                    {/* A hero number, with no ring drawn round it. A ring encodes
                       a share of something, and a running total is not a share
                       of anything. */}
-                  <ChartCardMetric
-                    value={compact.format(stats.total)}
-                    unit={`vehicles · ${plain.format(features.length)} segments`}
-                  />
-                </ChartCard>
+                    <ChartCardMetric
+                      value={compact.format(stats.total)}
+                      unit={`vehicles · ${plain.format(features.length)} segments`}
+                    />
+                  </ChartCard>
 
-                <ChartCard>
-                  <ChartCardHeader
-                    title="Volume by road type"
-                    icon={<BarChart3 />}
-                  />
-                  {/* Horizontal: "Motorway link" and "Living street" do not fit
+                  <ChartCard>
+                    <ChartCardHeader
+                      title="Volume by road type"
+                      icon={<BarChart3 />}
+                    />
+                    {/* Horizontal: "Motorway link" and "Living street" do not fit
                       under a vertical bar at this width without turning
                       sideways or being cut in half. */}
-                  <ChartContainer
-                    config={VOLUME_CONFIG}
-                    className="h-44 w-full"
-                  >
-                    <BarChart
-                      data={stats.roads}
-                      layout="vertical"
-                      margin={{ left: 4, right: 8 }}
+                    <ChartContainer
+                      config={VOLUME_CONFIG}
+                      className="h-44 w-full"
                     >
-                      <CartesianGrid horizontal={false} />
-                      <XAxis type="number" hide />
-                      <YAxis
-                        type="category"
-                        dataKey="label"
-                        width={88}
-                        tickLine={false}
-                        axisLine={false}
-                      />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Bar
-                        dataKey="volume"
-                        fill="var(--color-volume)"
-                        radius={3}
-                      />
-                    </BarChart>
-                  </ChartContainer>
-                </ChartCard>
+                      <BarChart
+                        data={stats.roads}
+                        layout="vertical"
+                        margin={{ left: 4, right: 8 }}
+                      >
+                        <CartesianGrid horizontal={false} />
+                        <XAxis type="number" hide />
+                        <YAxis
+                          type="category"
+                          dataKey="label"
+                          width={88}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Bar
+                          dataKey="volume"
+                          fill="var(--color-volume)"
+                          radius={3}
+                        />
+                      </BarChart>
+                    </ChartContainer>
+                  </ChartCard>
 
-                <ChartCard>
-                  <ChartCardHeader
-                    title="Volume by speed limit"
-                    icon={<BarChart3 />}
-                  />
-                  <ChartContainer
-                    config={VOLUME_CONFIG}
-                    className="h-40 w-full"
-                  >
-                    {/* No negative left margin: these ticks read "3.2M", and
+                  <ChartCard>
+                    <ChartCardHeader
+                      title="Volume by speed limit"
+                      icon={<BarChart3 />}
+                    />
+                    <ChartContainer
+                      config={VOLUME_CONFIG}
+                      className="h-40 w-full"
+                    >
+                      {/* No negative left margin: these ticks read "3.2M", and
                         pulling the axis outside the plot clips the first
                         character against the panel. */}
-                    <BarChart data={stats.speeds} margin={{ left: 0, top: 4 }}>
-                      <CartesianGrid vertical={false} />
-                      <XAxis
-                        dataKey="label"
-                        tickLine={false}
-                        axisLine={false}
-                        tickMargin={8}
-                      />
-                      <YAxis
-                        tickLine={false}
-                        axisLine={false}
-                        width={52}
-                        tickFormatter={(v: number) => compact.format(v)}
-                      />
-                      <ChartTooltip
-                        content={
-                          <ChartTooltipContent
-                            labelFormatter={(l) => `${l} km/h`}
-                          />
-                        }
-                      />
-                      <Bar
-                        dataKey="volume"
-                        fill="var(--color-volume)"
-                        radius={3}
-                      />
-                    </BarChart>
-                  </ChartContainer>
-                </ChartCard>
+                      <BarChart
+                        data={stats.speeds}
+                        margin={{ left: 0, top: 4 }}
+                      >
+                        <CartesianGrid vertical={false} />
+                        <XAxis
+                          dataKey="label"
+                          tickLine={false}
+                          axisLine={false}
+                          tickMargin={8}
+                        />
+                        <YAxis
+                          tickLine={false}
+                          axisLine={false}
+                          width={52}
+                          tickFormatter={(v: number) => compact.format(v)}
+                        />
+                        <ChartTooltip
+                          content={
+                            <ChartTooltipContent
+                              labelFormatter={(l) => `${l} km/h`}
+                            />
+                          }
+                        />
+                        <Bar
+                          dataKey="volume"
+                          fill="var(--color-volume)"
+                          radius={3}
+                        />
+                      </BarChart>
+                    </ChartContainer>
+                  </ChartCard>
 
-                <ChartCard>
-                  <ChartCardHeader title="Busiest roads" icon={<BarChart3 />} />
-                  {stats.ranked.length ? (
-                    <RankedBars items={stats.ranked} />
-                  ) : (
-                    <p className="py-4 text-center text-xs text-muted-foreground">
-                      No segments match these filters.
-                    </p>
-                  )}
-                </ChartCard>
-              </>
-            )}
-          </div>
-        </FloatingPanelBody>
-      </FloatingPanel>
+                  <ChartCard>
+                    <ChartCardHeader
+                      title="Busiest roads"
+                      icon={<BarChart3 />}
+                    />
+                    {stats.ranked.length ? (
+                      <RankedBars items={stats.ranked} />
+                    ) : (
+                      <p className="py-4 text-center text-xs text-muted-foreground">
+                        No segments match these filters.
+                      </p>
+                    )}
+                  </ChartCard>
+                </>
+              )}
+            </div>
+          </FloatingPanelBody>
+        </FloatingPanel>
+      </BottomTray>
 
       {/* bottom-12, not bottom-4: the basemap attribution is a 24px bar pinned
           to the bottom-right of the canvas, and at bottom-4 it covers the
