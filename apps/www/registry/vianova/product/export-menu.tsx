@@ -107,9 +107,17 @@ export function ExportMenu({
         }
       />
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">
-          {rows.length.toLocaleString("en-GB")} row{rows.length === 1 ? "" : "s"}, as shown
-        </DropdownMenuLabel>
+        {/* Inside a Group, which is not decoration: DropdownMenuLabel renders
+            Base UI's Menu.GroupLabel, and one with no Group around it throws
+            (error #31) the moment the menu opens. This menu did exactly that
+            wherever it was used -- the trigger was clickable, nothing appeared,
+            and nothing failed loudly enough to notice. The same trap is
+            written up in examples/dropdown-menu-default. */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">
+            {rows.length.toLocaleString("en-GB")} row{rows.length === 1 ? "" : "s"}, as shown
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           {formats.includes("csv") ? (
