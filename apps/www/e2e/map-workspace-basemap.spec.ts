@@ -229,16 +229,21 @@ test.describe("basemap switcher on a phone", () => {
   test("is reachable, and not in the corner the panel docks into", async ({ page }) => {
     await open(page);
 
-    // MapControls is hidden below lg, so without its own home the basemap
-    // would simply be unreachable on a phone.
-    const trigger = switcher(page).getByRole("button").first();
-    await expect(trigger).toBeVisible();
+    // MapControls is hidden below lg, so without a home of its own the
+    // basemap would simply be unreachable on a phone. Its home below md is
+    // the toolbar's overflow: 342px holds a title and four controls, and the
+    // basemap is set once, so it is one of the two that moved behind the menu.
+    const overflow = page.getByRole("button", { name: "More map options" });
+    await expect(overflow).toBeVisible();
 
-    const box = (await trigger.boundingBox())!;
+    const box = (await overflow.boundingBox())!;
     const root = (await block(page).boundingBox())!;
-    expect(Math.round(box.y - root.y), "the switcher should sit in the toolbar").toBeLessThan(60);
+    expect(Math.round(box.y - root.y), "the overflow should sit in the toolbar").toBeLessThan(60);
 
-    await choose(page, "Satellite");
+    await overflow.click();
+    // Named, not a swatch: the menu has no room for the thumbnails the
+    // switcher's own popover exists to show.
+    await page.getByRole("menuitemradio", { name: "Satellite" }).click();
     await expect(block(page)).toHaveAttribute("data-map-scheme", "warm");
   });
 });
