@@ -78,67 +78,157 @@ jobs:
       - name: Registry consume smoke test
         run: ./scripts/registry-smoke-test.sh
 
+  # ONE step, deliberately.
+  #
+  # This was seven named steps, one per suite, and the price was a second
+  # wiring point: a spec file only ran if someone remembered to add both a
+  # package script AND a step here. Eight did not get one --
+  # map-workspace-tray, -layers, -library, -colorize, regulations-workspace,
+  # feeds-workspace, panel-stepper, preset-picker -- so the most detailed
+  # contracts in the repo were guarded by a suite CI never ran, while the
+  # checks went green. `playwright test` with no argument runs every spec in
+  # e2e/, so a new file is covered the moment it exists. The named scripts
+  # stay in package.json for running one suite locally.
+  #
+  # What the suites are for, kept from the steps they replace:
+  #
+  #   a11y          axe over every example and block. Every bug it exists
+  #                 for was invisible to typecheck and the unit tests:
+  #                 blank swatches, hydration mismatches, a silently dead
+  #                 map, a component that threw only once its menu opened.
+  #   focus-ring    a ring painted outside a control's box is cut by any
+  #                 ancestor with overflow != visible. Blocks are crawled
+  #                 too -- that is where it was found, by hand.
+  #   control-size  heights live in five class strings across five files;
+  #                 nothing else measures whether they still agree.
+  #   responsive    every other suite runs at the single 900px project
+  #                 viewport. This one sets its own and measures the map
+  #                 blocks at phone, tablet and desktop.
+  #   basemap       the switcher, and the contract that the data ramp
+  #                 follows it -- including the attribution that is the
+  #                 legal obligation attached to the free tile backends.
+  #                 Both backends are stubbed so CI never depends on them.
+  #   foundations   the only page the crawls never reach, because they go
+  #                 through /preview and /blocks. That is how its swatches
+  #                 once shipped 170 contrast failures without going red.
+  #   visual        screenshots. Playwright suffixes them per platform, so
+  #                 macOS baselines are not used on Linux; a new example
+  #                 needs a Linux baseline from the visual-baselines
+  #                 workflow before this can pass.
+  #   the rest      the map workspace's tray, layers, library and colorize
+  #                 chains; the regulations and feeds workspaces; the panel
+  #                 stepper; the preset picker.
+  #
+  # Its own job, and sharded, because of a measured budget rather than taste.
+  # Gating those eight files took the suite from the seven wired-up scripts to
+  # 556 tests, and the first run was CANCELLED at 20m19s with 501 of them
+  # passed and nothing failed -- `timeout-minutes: 20`, not a red test. The
+  # 20 minutes, from that run's own step timestamps:
+  #
+  #   ~1 min   install, tokens, typecheck, unit tests
+  #    2 min   next build
+  #    5 min   playwright install --with-deps (the apt packages, not Chromium)
+  #   13 min   501 tests at 2 workers, then the guillotine
+  #
+  # Splitting it out keeps `verify` -- typecheck, unit tests, the registry
+  # guards -- reporting in 2m38s rather than twenty-two minutes, which is the
+  # part of CI anyone waits on. fail-fast is off: one shard's result is wanted
+  # even when another has already found something.
+  #
+  # ## Why four shards and not two
+  #
+  # Two was not enough, and the reason is one file. Per-file totals from the
+  # two-shard run, inside the shard that took 18m48s:
+  #
+  #   map-workspace-layers.spec.ts    999s   26 tests   <- 55% of the shard
+  #   responsive.spec.ts              226s   64 tests
+  #   map-workspace-colorize.spec.ts  216s   13 tests
+  #   everything else                 376s   84 tests
+  #
+  # (Retries excluded. Counting them, as a first pass at this did, credits the
+  # one failing test with 180s and a phantom 27th case.)
+  #
+  # Playwright balances shards by test COUNT, so a file averaging 38.4s a test
+  # lands as one indivisible lump next to files averaging 3.5s. Four shards
+  # helped -- the worst job went 18m48s to 16m09s -- but far less than the
+  # arithmetic suggested, and the reason is worth writing down because it
+  # makes "add more shards" the wrong instinct.
+  #
+  # Shards are contiguous chunks of the SORTED file list, balanced by count.
+  # Sorted, this suite puts every expensive spec next to every other one, and
+  # the 4-shard run duly handed all of them to shard 3:
+  #
+  #   foundations-colors -> map-workspace-basemap -> -colorize -> -layers
+  #   -> -library -> -tray -> panel-stepper -> preset-picker
+  #   -> regulations-workspace -> responsive
+  #
+  # 139 tests, the same count as the other three shards, and 1674s of the
+  # suite's ~2100s of work -- 14.1 min over two workers. The other three
+  # finished in 3m30, 4m38 and 3m38. Splitting further shrinks that chunk but
+  # cannot go below one file: map-workspace-layers alone is 949s, so ~8 min
+  # over two workers plus setup is the floor no matter how many shards there
+  # are. Four is where the cost of another runner stops buying anything.
+  #
+  # Why that file is expensive, and the obvious next thing: `open()` runs
+  # `addEverything()`, re-adding all eleven catalogue layers through the
+  # dialog before EACH test. Measured locally on its a11y case: 41.2s total,
+  # of which the axe scan was 31.7s, leaving ~9.5s for the navigation and the
+  # clicking -- about half of that file's average test, paid 26 times. It
+  # reads that way because the panel used to list the catalogue on load and
+  # stopped when the data library landed, so the tests restored the old
+  # precondition rather than being rewritten. Paying it once per file is a
+  # rewrite of 26 tests, not a CI change, so it is not in this commit.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build tokens
+        run: pnpm --filter @vianova/tokens build
+
+      # The suites run against the exported files, so the export has to exist.
+      - name: Build docs site
+        run: pnpm --filter @vianova/www build
+
       - name: Install Playwright browser
         run: pnpm --filter @vianova/www exec playwright install --with-deps chromium
 
-      # Every bug this suite exists for was invisible to typecheck and the unit
-      # tests: blank swatches, hydration mismatches, a silently dead map, a
-      # component that threw only once its menu opened.
-      - name: "Accessibility: axe over every example"
-        run: pnpm --filter @vianova/www test:a11y
-
-      # A focus ring painted outside a control's box is cut by any ancestor
-      # with overflow != visible. Nothing about a component in isolation shows
-      # this, so blocks are crawled too -- that is where it was found by hand.
-      - name: "Accessibility: no focus ring is clipped"
-        run: pnpm --filter @vianova/www test:rings
-
-      # Control heights live in five separate class strings across five files.
-      # Nothing except this measures whether they still agree, and a toolbar
-      # that is 4px out of alignment fails no other check.
-      - name: "Controls share one height ladder"
-        run: pnpm --filter @vianova/www test:sizes
-
-      # Every other suite here runs at the single 900px project viewport, which
-      # is one layout out of three. This one sets its own sizes and measures the
-      # map blocks at phone, tablet and desktop: panels that do not stretch or
-      # overlap, a top bar that fits inside a box that would clip it silently,
-      # and an attribution nothing is sitting on.
-      - name: "Map blocks lay out at phone and tablet widths"
-        run: pnpm --filter @vianova/www test:responsive
-
-      # The basemap switcher, and the contract that the data ramp follows it.
-      # No pixels and no tiles: it asserts the `data-map-scheme` the block
-      # resolves to, and the attribution MapLibre derives from the style's
-      # sources -- which is also the one legal obligation that comes with using
-      # Esri's imagery and AWS's elevation for free. Both tile backends are
-      # stubbed in the spec so CI never depends on them.
-      - name: "Basemaps switch, and the data ramp follows"
-        run: pnpm --filter @vianova/www test:basemap
-
-      # Foundations is the only page the crawls above never reach: they go
-      # through /preview and /blocks, and this is a docs route. That is how its
-      # colour swatches once shipped 170 contrast failures without anything
-      # going red. Checks the code labels, the clipboard and the rings.
-      - name: "Foundations colours are labelled, copyable and legible"
-        run: pnpm --filter @vianova/www test:colors
-
-      # Playwright suffixes snapshots per platform, so macOS baselines are not
-      # used on Linux. Until Linux baselines are committed this warns instead of
-      # failing, which is honest about the gap rather than pretending to cover it.
-      - name: Visual regression
-        run: |
-          if ls apps/www/e2e/visual.spec.ts-snapshots/*-linux.png >/dev/null 2>&1; then
-            pnpm --filter @vianova/www test:visual
-          else
-            echo "::warning::No Linux visual baselines yet. Generate them once on Linux with 'pnpm --filter @vianova/www test:visual:update' and commit apps/www/e2e/**/*-linux.png."
-          fi
+      # `exec playwright test`, not the test:e2e script with `-- --shard=`.
+      #
+      # Measured, because the obvious form fails silently. pnpm forwards the
+      # `--` itself to the script -- `typecheck -- --version` runs
+      # `tsc --noEmit -- --version` and tsc says "Unknown compiler option
+      # '--'" -- and playwright does not error on it, it ignores every
+      # argument after it:
+      #
+      #   playwright test --shard=1/2 --list     Total: 2 tests in 1 file
+      #   playwright test -- --shard=1/2 --list  2 passed (315ms)
+      #
+      # The second did not list and did not shard. So `test:e2e -- --shard=`
+      # would have run all 556 tests in BOTH shards and timed out twice,
+      # reported as two unexplained cancellations. The script stays in
+      # package.json for local use; it is the same bare `playwright test`.
+      - name: "End-to-end: shard ${{ matrix.shard }} of 4"
+        run: pnpm --filter @vianova/www exec playwright test --shard=${{ matrix.shard }}/4
 
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          # Per shard: two jobs uploading one name is a collision, and the
+          # artifact that loses is the evidence.
+          name: playwright-report-${{ matrix.shard }}
           path: apps/www/playwright-report
           retention-days: 7
 

@@ -109,9 +109,20 @@ test("zones added from the picker land in the rule", async ({ page }) => {
   await expect(sheet.getByRole("checkbox", { name: "Belém", exact: true })).not.toBeChecked();
 
   // Enter picks the top match without touching the list.
-  await search.fill("Belém");
-  await search.press("Enter");
-  await expect(search).toHaveValue("");
+  //
+  // Retried as a whole, because the picker filters on a useDeferredValue
+  // (zone-picker.tsx:639) and React is allowed to let that lag -- which it
+  // does when the rest of this file is running beside it and MapLibre has the
+  // CPU. Enter then runs against the previous filter, finds no unselected
+  // match, and onDraftCommit returns without clearing the field
+  // (zone-picker.tsx:702-707): a silent no-op, so the keypress is simply lost.
+  // toPass re-presses rather than waiting on a value that will never change;
+  // it still fails if Enter never commits.
+  await expect(async () => {
+    await search.fill("Belém");
+    await search.press("Enter");
+    await expect(search).toHaveValue("");
+  }).toPass({ timeout: 10_000 });
   await expect(sheet.locator("[data-slot=tag-input-chip]", { hasText: "Belém" })).toBeVisible();
   await sheet.getByRole("button", { name: "Add 1 zone" }).click();
 
