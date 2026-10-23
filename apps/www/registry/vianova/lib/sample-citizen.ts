@@ -1,16 +1,32 @@
 /**
  * Sample data and copy for the Citizen Platform workspace.
  *
- * Captured from the Munich tenant of the citizen reporting app on
- * 2026-10-23. The copy tree is the production one verbatim, both locales:
- * the app ships German-first with an EN/DE toggle on every screen, so a
- * single-language demo would misrepresent it. The CAPTCHA strings are the
- * one omission -- the real app gates every data call behind AWS WAF, which
- * is infrastructure rather than design.
+ * Captured from the Munich tenant of the citizen reporting app on 2026-10-23.
+ * The app ships German-first with an EN/DE toggle on every screen, so both
+ * locales are here -- a single-language demo would misrepresent it. The
+ * CAPTCHA strings are the one omission: the real app gates every data call
+ * behind AWS WAF, which is infrastructure rather than design.
+ *
+ * Captured copy is verbatim, plus fourteen strings written here for controls
+ * production does not have -- a selection card, a camera button, a step
+ * marker. Each carries a `Written here, not captured` comment where it sits,
+ * so a reviewer can tell at a glance which strings a translator has already
+ * approved and which have not.
  *
  * Vehicle positions are placed by hand around Marienplatz. There is no live
  * feed here: production reads signed vector tiles that a design-system demo
  * has no business holding credentials for.
+ *
+ * Captured keys the block no longer renders are kept rather than deleted --
+ * this is a record of production's copy, and a key that disappears from the
+ * record is one nobody can diff against. Most are failure and loading states
+ * a demo with no network never reaches. Seven are different: the workspace's
+ * design dropped the screens they belonged to.
+ *
+ *   app.start, qr.prompt.title, qr.prompt.skip   the QR interstitial
+ *   photo.add, photo.continue                    the separate photo screen
+ *   map.listTitle                                the list is a tab, not a screen
+ *   vehicle.search.hint                          promises an Enter key
  */
 
 export type CitizenLocale = "en" | "de";
@@ -127,6 +143,9 @@ export const CITIZEN_COPY = {
       start: "Start a report",
       openMap: "Find the vehicle on the map",
       language: "Deutsch",
+      // Written here, not captured -- production has neither string.
+      switchLanguage: "Switch to German",
+      step: "Step {{n}} of {{max}}",
       apiUnavailable: "The service is not available now. Please try again later.",
     },
     report: {
@@ -145,6 +164,8 @@ export const CITIZEN_COPY = {
       commentHint: "Optional, required for the reason \"Other\". Do not write personal data.",
       count: "{{n}} / {{max}}",
       send: "Send report",
+      // Written here, not captured.
+      addComment: "Add a comment",
       sending: "Sending …",
       errors: {
         vehicleRequired: "Enter the vehicle ID.",
@@ -169,6 +190,9 @@ export const CITIZEN_COPY = {
         title: "Thank you",
         text: "We received your report.",
         reference: "Your report reference:",
+        // Written here, not captured -- the reference had no copy control.
+        copy: "Copy the reference",
+        copied: "Copied",
         new: "New report",
       },
       status: {
@@ -195,12 +219,21 @@ export const CITIZEN_COPY = {
         other: "Other",
       },
       report: "Report this vehicle",
+      // Written here, not captured -- the selection card is new.
+      close: "Close",
+      selected: "Selected: {{operator}} {{type}}, {{id}}",
       locked: "Reported, available again in {{time}}",
       openReport: "This vehicle is already reported. The city handles it.",
       loading: "Loading the vehicle …",
       search: {
         label: "Search a vehicle by its ID",
         hint: "The ID is on the vehicle. Press Enter to search.",
+        /* Written here, not captured: `hint` promises an Enter key, and the
+           search now narrows the list as you type. */
+        hintLive: "The ID is on the vehicle. Matches appear as you type.",
+        // Plural-free on purpose: there is no plural rule in this copy tree,
+        // and "1 vehicles" is the kind of thing a tree without one produces.
+        results: "Matches: {{n}}",
         searching: "Searching …",
       },
       near: {
@@ -255,11 +288,16 @@ export const CITIZEN_COPY = {
       warningPeople: "Do not photograph people, vehicle plates or private property.",
       warningComment: "Do not write personal data in the comment.",
       add: "Add photos",
+      // Written here, not captured -- a phone wants the camera first.
+      take: "Take a photo",
+      choose: "Choose from library",
       continue: "Continue",
       count: "{{n}} of {{max}} photos added",
       uploading: "Sending the photos …",
       added: "Photo {{n}} added",
       remove: "Remove photo {{n}}",
+      // Written here, not captured.
+      trimmed: "Only the first {{max}} photos were added.",
       failure: {
         too_many: "You can add {{max}} photos at most.",
         invalid: "The app cannot use this photo. Please choose another photo.",
@@ -271,6 +309,9 @@ export const CITIZEN_COPY = {
       title: "Find the vehicle",
       listTitle: "List view",
       label: "Map of the available vehicles",
+      // Written here, not captured -- a phone map has no cursor to change,
+      // so the only hint that a dot is a control is to say so.
+      tapHint: "Tap a vehicle to report it.",
       loading: "Loading the map …",
       back: "Back",
       listView: "List view",
@@ -279,6 +320,8 @@ export const CITIZEN_COPY = {
       locateDenied: "Your location is off, so the map stays where it is. You can still use the map, the QR scan and the search.",
       locateUnavailable: "Your position could not be found. You can still use the map, the QR scan and the search.",
       filter: "Filter",
+      // Written here, not captured.
+      filterDone: "Done",
       operator: "Operator",
       type: "Vehicle type",
       allOperators: "All operators",
@@ -304,6 +347,9 @@ export const CITIZEN_COPY = {
       start: "Meldung starten",
       openMap: "Fahrzeug auf der Karte finden",
       language: "English",
+      // Written here, not captured -- production has neither string.
+      switchLanguage: "Auf Englisch umschalten",
+      step: "Schritt {{n}} von {{max}}",
       apiUnavailable: "Der Dienst ist gerade nicht erreichbar. Bitte versuchen Sie es später noch einmal.",
     },
     report: {
@@ -322,6 +368,8 @@ export const CITIZEN_COPY = {
       commentHint: "Optional, beim Meldegrund „Sonstiges“ erforderlich. Bitte schreiben Sie keine persönlichen Daten.",
       count: "{{n}} / {{max}}",
       send: "Meldung senden",
+      // Written here, not captured.
+      addComment: "Kommentar hinzufügen",
       sending: "Wird gesendet …",
       errors: {
         vehicleRequired: "Geben Sie die Fahrzeug-ID ein.",
@@ -346,6 +394,9 @@ export const CITIZEN_COPY = {
         title: "Vielen Dank",
         text: "Wir haben Ihre Meldung erhalten.",
         reference: "Ihre Meldungsnummer:",
+        // Written here, not captured -- the reference had no copy control.
+        copy: "Nummer kopieren",
+        copied: "Kopiert",
         new: "Neue Meldung",
       },
       status: {
@@ -372,12 +423,18 @@ export const CITIZEN_COPY = {
         other: "Sonstiges",
       },
       report: "Dieses Fahrzeug melden",
+      // Written here, not captured -- the selection card is new.
+      close: "Schließen",
+      selected: "Ausgewählt: {{operator}} {{type}}, {{id}}",
       locked: "Gemeldet, wieder verfügbar in {{time}}",
       openReport: "Dieses Fahrzeug ist bereits gemeldet. Die Stadt kümmert sich darum.",
       loading: "Das Fahrzeug wird geladen …",
       search: {
         label: "Fahrzeug über die ID suchen",
         hint: "Die ID steht auf dem Fahrzeug. Drücken Sie die Eingabetaste zum Suchen.",
+        /* Written here, not captured: siehe `hintLive` in `en`. */
+        hintLive: "Die ID steht auf dem Fahrzeug. Treffer erscheinen beim Tippen.",
+        results: "Treffer: {{n}}",
         searching: "Es wird gesucht …",
       },
       near: {
@@ -432,11 +489,16 @@ export const CITIZEN_COPY = {
       warningPeople: "Fotografieren Sie keine Personen, Kfz-Kennzeichen oder Privatgrundstücke.",
       warningComment: "Schreiben Sie keine personenbezogenen Daten in den Kommentar.",
       add: "Fotos hinzufügen",
+      // Written here, not captured -- a phone wants the camera first.
+      take: "Foto aufnehmen",
+      choose: "Aus der Galerie wählen",
       continue: "Weiter",
       count: "{{n}} von {{max}} Fotos hinzugefügt",
       uploading: "Die Fotos werden gesendet …",
       added: "Foto {{n}} hinzugefügt",
       remove: "Foto {{n}} entfernen",
+      // Written here, not captured.
+      trimmed: "Es wurden nur die ersten {{max}} Fotos hinzugefügt.",
       failure: {
         too_many: "Sie können höchstens {{max}} Fotos hinzufügen.",
         invalid: "Die App kann dieses Foto nicht verwenden. Bitte wählen Sie ein anderes Foto.",
@@ -448,6 +510,8 @@ export const CITIZEN_COPY = {
       title: "Fahrzeug finden",
       listTitle: "Listenansicht",
       label: "Karte der verfügbaren Fahrzeuge",
+      // Written here, not captured -- siehe `tapHint` in `en`.
+      tapHint: "Tippen Sie auf ein Fahrzeug, um es zu melden.",
       loading: "Die Karte wird geladen …",
       back: "Zurück",
       listView: "Listenansicht",
@@ -456,6 +520,8 @@ export const CITIZEN_COPY = {
       locateDenied: "Ihr Standort ist nicht freigegeben, die Karte bleibt deshalb, wo sie ist. Karte, QR-Scan und Suche funktionieren weiterhin.",
       locateUnavailable: "Ihr Standort wurde nicht gefunden. Karte, QR-Scan und Suche funktionieren weiterhin.",
       filter: "Filter",
+      // Written here, not captured.
+      filterDone: "Fertig",
       operator: "Anbieter",
       type: "Fahrzeugart",
       allOperators: "Alle Anbieter",

@@ -1,0 +1,430 @@
+import AxeBuilder from "@axe-core/playwright";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+
+import {
+  CITIZEN_CENTER,
+  SAMPLE_VEHICLES,
+} from "../registry/vianova/lib/sample-citizen";
+import { settle } from "./examples";
+
+/**
+ * The Citizen Platform's three ways in, driven end to end.
+ *
+ * This suite exists because of a bug that shipped: the map's dots were not
+ * clickable at all. The handler compared MapLibre's re-encoded coordinates to
+ * the ones that went in, found nothing, and failed silently -- the dots drew,
+ * the tap landed, nothing threw, and the card never opened. It passed the a11y
+ * crawl, the focus-ring crawl, the responsive measurements and the visual
+ * baselines, because not one of them clicks a marker and asserts a selection.
+ *
+ * So the rule here is that every test finishes a real journey: tap a vehicle,
+ * see it named, report it, read the reference back. A spec that only asserts a
+ * screen rendered would have passed that bug too.
+ *
+ * Phone-sized throughout. This is the one block whose only real layout is a
+ * phone, and the block's own height is `75svh`, so the viewport decides how
+ * much map there is to tap.
+ */
+
+test.use({ viewport: { width: 390, height: 844 } });
+
+const BLOCKING = new Set(["serious", "critical"]);
+
+/** Must match the `zoom` MapCanvas is given in the block. */
+const ZOOM = 14.4;
+/** MapLibre's tile size, which sets the scale `project` works in. */
+const TILE = 512;
+
+const REFERENCE = "MUC-7F3K-2908";
+
+/** A real 1x1 PNG, so the file input accepts it and a thumbnail renders. */
+const PHOTO = {
+  name: "scooter.png",
+  mimeType: "image/png",
+  buffer: Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==",
+    "base64",
+  ),
+};
+
+async function open(page: Page) {
+  await page.goto("/blocks/citizen-workspace");
+  await settle(page);
+  const root = page.locator("[data-slot=citizen-workspace]");
+  await expect(root.getByRole("button", { name: "Scan the QR code" })).toBeVisible();
+  return root;
+}
+
+/**
+ * The segmented control's hit area.
+ *
+ * Its radio is visually hidden under its own label, which is how a label and
+ * an input are supposed to work -- but it means Playwright reports the label
+ * as intercepting a click aimed at the input. Tapping the label is what a
+ * finger does; the radio is still what gets asserted.
+ */
+function segment(root: Locator, name: string) {
+  return root.locator(`label[title="${name}"]`);
+}
+
+async function expectNoBlockingViolations(page: Page) {
+  const results = await new AxeBuilder({ page })
+    .include("[data-slot=citizen-workspace]")
+    // MapLibre's own canvas and controls are not ours to fix.
+    .exclude(".maplibregl-canvas, .maplibregl-ctrl")
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  const blocking = results.violations.filter((v) => BLOCKING.has(v.impact ?? ""));
+  expect(blocking.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Finding a dot on a canvas                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Web Mercator, at the block's own zoom.
+ *
+ * The map instance is not on `window` and should not be: a block does not
+ * export its internals so a test can reach them. What the test can do instead
+ * is the same arithmetic MapLibre does. For an unrotated, unpitched map this
+ * is exact, and if the block ever changes its zoom or centre this fails loudly
+ * rather than drifting.
+ */
+function project([lon, lat]: readonly [number, number]) {
+  const scale = TILE * 2 ** ZOOM;
+  const sin = Math.sin((lat * Math.PI) / 180);
+  return {
+    x: ((lon + 180) / 360) * scale,
+    y: (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * scale,
+  };
+}
+
+/** Where a vehicle's dot sits on screen, in CSS pixels. */
+async function dotOf(canvas: Locator, position: readonly [number, number]) {
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("the map canvas never laid out");
+  const centre = project(CITIZEN_CENTER);
+  const point = project(position);
+  return {
+    x: box.x + box.width / 2 + (point.x - centre.x),
+    y: box.y + box.height / 2 + (point.y - centre.y),
+  };
+}
+
+/**
+ * Taps a vehicle until its card opens.
+ *
+ * The retry is for the layer, not for the aim: the dots are added
+ * asynchronously once the style settles, so the first tap can land before
+ * there is anything to hit. A wrong coordinate fails here just as loudly, it
+ * simply takes the full timeout to say so.
+ */
+async function tapVehicle(root: Locator, page: Page, id: string) {
+  const vehicle = SAMPLE_VEHICLES.find((v) => v.id === id)!;
+  const canvas = page.locator(".maplibregl-canvas");
+  await expect(canvas).toBeVisible();
+  const card = root.getByRole("region", { name: "Vehicle", exact: true });
+
+  await expect
+    .poll(
+      async () => {
+        const { x, y } = await dotOf(canvas, vehicle.position);
+        await page.mouse.click(x, y);
+        return (await card.locator(`text=${id}`).count()) > 0;
+      },
+      { timeout: 25_000, message: `tapping ${id} never opened its card` },
+    )
+    .toBe(true);
+
+  return card;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The map path                                                                */
+/* -------------------------------------------------------------------------- */
+
+test("a vehicle is tapped on the map, named, and reported", async ({ page }) => {
+  const root = await open(page);
+
+  // One tap to the map. There is no interstitial in between: production asked
+  // "scan the QR code first?" here, which is the two taps this block removed.
+  await root.getByRole("button", { name: "Find the vehicle on the map" }).click();
+  await expect(root.getByRole("heading", { name: "Find the vehicle" })).toBeVisible();
+  await expect(root.getByRole("radio", { name: "Map" })).toBeChecked();
+  await expect(root.getByText("Tap a vehicle to report it.")).toBeVisible();
+
+  const card = await tapVehicle(root, page, "LIME-QX907");
+
+  // The card says WHICH vehicle, which is the whole point of the tap.
+  await expect(card.getByText("Lime", { exact: true })).toBeVisible();
+  await expect(card.getByText("Scooter", { exact: true })).toBeVisible();
+  await expect(card.getByText("LIME-QX907", { exact: true })).toBeVisible();
+
+  // And it is on screen without scrolling -- the defect this block shipped
+  // with was a card that opened below the fold, so a tap read as nothing.
+  const inView = await card.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    return box.top >= 0 && box.bottom <= window.innerHeight;
+  });
+  expect(inView).toBe(true);
+
+  await expectNoBlockingViolations(page);
+
+  await root.getByRole("button", { name: "Report this vehicle" }).click();
+
+  // Three taps from the start screen to the form: map, dot, report.
+  await expect(root.getByText("Step 2 of 2")).toBeVisible();
+  await expect(root.getByText("A photo is required for this report.")).toBeVisible();
+
+  await root.getByRole("radio", { name: "Bad parking" }).click();
+  await root.locator('input[type="file"][capture]').setInputFiles(PHOTO);
+  await expect(root.getByText("1 of 5 photos added")).toBeVisible();
+
+  await expectNoBlockingViolations(page);
+
+  await root.getByRole("button", { name: "Send report" }).click();
+  await expect(root.getByRole("heading", { name: "Thank you" })).toBeVisible();
+  await expect(root.getByText(REFERENCE)).toBeVisible();
+  await expect(root.getByText("Sent to the city")).toBeVisible();
+
+  await expectNoBlockingViolations(page);
+});
+
+test("the selected dot is marked on the map", async ({ page }) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Find the vehicle on the map" }).click();
+  await tapVehicle(root, page, "TIER-8F42K");
+
+  // Nothing in the DOM says which dot is selected -- the ring is painted into
+  // the WebGL canvas -- so what is asserted is that the tap is announced.
+  // Without this the only feedback is visual, which a screen reader cannot use.
+  await expect(root.getByText("Selected: TIER Scooter, TIER-8F42K")).toBeAttached();
+});
+
+test("Back from the report returns to the map, not to a list", async ({ page }) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Find the vehicle on the map" }).click();
+  await tapVehicle(root, page, "LIME-QX907");
+  await root.getByRole("button", { name: "Report this vehicle" }).click();
+  await expect(root.getByText("Step 2 of 2")).toBeVisible();
+
+  // Production hard-coded this Back to the list view, so reporting a vehicle
+  // picked on the map and changing your mind dropped you somewhere you had
+  // never been.
+  await root.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Find the vehicle" })).toBeVisible();
+  await expect(root.getByRole("radio", { name: "Map" })).toBeChecked();
+
+  await root.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(root.getByRole("button", { name: "Scan the QR code" })).toBeVisible();
+});
+
+/* -------------------------------------------------------------------------- */
+/* The QR path                                                                */
+/* -------------------------------------------------------------------------- */
+
+test("a QR scan skips the photo requirement and sends", async ({ page }) => {
+  const root = await open(page);
+
+  await root.getByRole("button", { name: "Scan the QR code" }).click();
+  await expect(root.getByRole("heading", { name: "Scan the QR code" })).toBeVisible();
+  await expectNoBlockingViolations(page);
+
+  await root.getByRole("button", { name: "Camera view for the QR code scan" }).click();
+
+  // The photo is optional here and nowhere else, which is the only reason the
+  // QR path is shorter.
+  await expect(root.getByText("A photo is optional after a QR scan.")).toBeVisible();
+  await root.getByRole("radio", { name: "Bad parking" }).click();
+  await root.getByRole("button", { name: "Send report" }).click();
+
+  await expect(root.getByRole("heading", { name: "Thank you" })).toBeVisible();
+  await expect(root.getByText(REFERENCE)).toBeVisible();
+});
+
+test("the camera-denied screen offers the three other ways in", async ({ page }) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Scan the QR code" }).click();
+  await root.getByRole("button", { name: "Find the vehicle in another way" }).click();
+
+  await expect(root.getByRole("button", { name: "Use the map" })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Use the list near me" })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Use the search" })).toBeVisible();
+  await expectNoBlockingViolations(page);
+
+  await root.getByRole("button", { name: "Use the map" }).click();
+  await expect(root.getByRole("radio", { name: "Map" })).toBeChecked();
+});
+
+/* -------------------------------------------------------------------------- */
+/* The list and the search                                                     */
+/* -------------------------------------------------------------------------- */
+
+test("a partial id narrows the list as it is typed", async ({ page }) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Use the search" }).click();
+  await expect(root.getByRole("radio", { name: "List view" })).toBeChecked();
+
+  const rows = root.getByRole("listitem");
+  const before = await rows.count();
+  expect(before).toBeGreaterThan(1);
+
+  // `LIME` is a partial. Production matched the whole id, exactly, on submit,
+  // so this found nothing -- indistinguishable from the vehicle not existing.
+  await root.getByRole("searchbox", { name: "Search a vehicle by its ID" }).fill("LIME");
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText("LIME-QX907");
+
+  await expectNoBlockingViolations(page);
+
+  await rows.first().getByRole("button").click();
+  await expect(root.getByText("Step 2 of 2")).toBeVisible();
+  await expect(root.getByText("LIME-QX907")).toBeVisible();
+});
+
+test("an id that matches nothing says so and offers the unlisted form", async ({ page }) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Use the search" }).click();
+  await root
+    .getByRole("searchbox", { name: "Search a vehicle by its ID" })
+    .fill("NOPE-0000");
+
+  await expect(root.getByText("Not found in the live data.")).toBeVisible();
+  await root
+    .getByRole("button", { name: "Report a vehicle that is not on the map" })
+    .click();
+
+  await expect(
+    root.getByRole("heading", { name: "Report a vehicle that is not on the map" }),
+  ).toBeVisible();
+  await expect(root.getByLabel("Operator")).toBeVisible();
+  await expectNoBlockingViolations(page);
+});
+
+test("a vehicle already reported explains itself instead of being dead", async ({
+  page,
+}) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Use the search" }).click();
+  await root.getByRole("searchbox", { name: "Search a vehicle by its ID" }).fill("VOI");
+
+  const row = root.getByRole("listitem").first();
+  const button = row.getByRole("button");
+
+  // Production rendered this row disabled, with the reason in a badge: the
+  // explanation could not be focused, read on its own, or reached by anything
+  // that skips disabled controls.
+  await expect(button).toBeEnabled();
+  await expect(button).toHaveAttribute("aria-expanded", "false");
+
+  await button.click();
+  await expect(button).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    row.getByText("This vehicle is already reported. The city handles it."),
+  ).toBeVisible();
+  // And it did not navigate: there is nothing to report.
+  await expect(root.getByRole("heading", { name: "Find the vehicle" })).toBeVisible();
+});
+
+test("the filters survive the switch between map and list", async ({ page }) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Find the vehicle on the map" }).click();
+
+  await root.getByRole("button", { name: "Filter" }).click();
+  await root.getByLabel("Operator").selectOption("Lime");
+  await root.getByRole("button", { name: "Done" }).click();
+  await expect(root.getByRole("button", { name: "Filter (1)" })).toBeVisible();
+
+  // Production's *List view* was a one-way button into a view with its own
+  // state, so switching reset the filter.
+  await segment(root, "List view").click();
+  await expect(root.getByRole("button", { name: "Filter (1)" })).toBeVisible();
+  await root
+    .getByRole("searchbox", { name: "Search a vehicle by its ID" })
+    .fill("TIER");
+  await expect(root.getByText("Not found in the live data.")).toBeVisible();
+});
+
+/* -------------------------------------------------------------------------- */
+/* The form                                                                    */
+/* -------------------------------------------------------------------------- */
+
+test("submitting an empty report focuses the first thing that is wrong", async ({
+  page,
+}) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Scan the QR code" }).click();
+  await root.getByRole("button", { name: "Camera view for the QR code scan" }).click();
+
+  await root.getByRole("button", { name: "Send report" }).click();
+
+  // Production showed a summary alert and left focus on Send, so a
+  // screen-reader user heard that something was invalid and had to go hunting.
+  await expect(root.getByText("Select a reason.")).toBeVisible();
+  await expect(root.getByRole("radio", { name: "Bad parking" })).toBeFocused();
+});
+
+test("the comment stays collapsed until Other requires it", async ({ page }) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Scan the QR code" }).click();
+  await root.getByRole("button", { name: "Camera view for the QR code scan" }).click();
+
+  await expect(root.getByRole("button", { name: "Add a comment" })).toBeVisible();
+  await expect(root.getByLabel("Comment")).toHaveCount(0);
+
+  await root.getByRole("radio", { name: "Other" }).click();
+  await expect(root.getByLabel("Comment")).toBeVisible();
+
+  await root.getByRole("button", { name: "Send report" }).click();
+  await expect(
+    root.getByText('Describe the problem for the reason "Other".'),
+  ).toBeVisible();
+  await expect(root.getByLabel("Comment")).toBeFocused();
+});
+
+test("a batch over the limit keeps what fits instead of refusing it", async ({
+  page,
+}) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Scan the QR code" }).click();
+  await root.getByRole("button", { name: "Camera view for the QR code scan" }).click();
+
+  // Six photos, five allowed. Production added none of them and showed an
+  // error, which punishes the reporter for the limit rather than applying it.
+  await root
+    .locator('input[type="file"][capture]')
+    .setInputFiles(
+      Array.from({ length: 6 }, (_, i) => ({ ...PHOTO, name: `shot-${i}.png` })),
+    );
+
+  await expect(root.getByText("5 of 5 photos added")).toBeVisible();
+  await expect(root.getByText("Only the first 5 photos were added.")).toBeVisible();
+  await expect(root.getByRole("button", { name: "Remove photo 1" })).toBeVisible();
+
+  await root.getByRole("button", { name: "Remove photo 1" }).click();
+  await expect(root.getByText("4 of 5 photos added")).toBeVisible();
+});
+
+/* -------------------------------------------------------------------------- */
+/* Both locales                                                                */
+/* -------------------------------------------------------------------------- */
+
+test("the language toggle names its action and switches every screen", async ({
+  page,
+}) => {
+  const root = await open(page);
+
+  // The accessible name used to be the target language alone -- "Deutsch" --
+  // which names a language but not an action.
+  const toggle = root.getByRole("button", { name: "Switch to German" });
+  await toggle.click();
+
+  await expect(root.getByRole("button", { name: "QR-Code scannen" })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Auf Englisch umschalten" })).toBeVisible();
+
+  await root.getByRole("button", { name: "Fahrzeug auf der Karte finden" }).click();
+  await expect(root.getByRole("heading", { name: "Fahrzeug finden" })).toBeVisible();
+  await expect(root.getByText("Tippen Sie auf ein Fahrzeug, um es zu melden.")).toBeVisible();
+  await expectNoBlockingViolations(page);
+});
