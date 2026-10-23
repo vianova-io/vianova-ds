@@ -484,7 +484,6 @@
       ],
       "registryDependencies": [
         "@vianova/alert",
-        "@vianova/badge",
         "@vianova/button",
         "@vianova/card",
         "@vianova/category-style",

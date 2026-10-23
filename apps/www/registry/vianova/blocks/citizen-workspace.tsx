@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/registry/vianova/ui/alert";
-import { Badge } from "@/registry/vianova/ui/badge";
 import { Button } from "@/registry/vianova/ui/button";
 import {
   Card,
@@ -180,22 +179,37 @@ function VehicleSummary({
 }) {
   const t = citizenCopy(locale);
   return (
-    <div className="flex flex-col gap-2 rounded-lg border p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{vehicle.operator}</p>
-          <p className="text-muted-foreground truncate font-mono text-xs">
-            {vehicle.id}
-          </p>
-        </div>
-        <Badge variant="outline">{t(`vehicle.types.${vehicle.type}`)}</Badge>
+    <section
+      aria-label={t("vehicle.title")}
+      className="flex flex-col gap-2 rounded-lg border p-3"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold">{t("vehicle.title")}</h2>
+        {vehicle.reported ? (
+          <StatusBadge tone="warning">{t("vehicle.near.reported")}</StatusBadge>
+        ) : null}
       </div>
+      {/*
+        A description list, because that is what this is: three labelled
+        facts. Production labels them too -- `vehicle.operator`, `.type` and
+        `.id` exist for exactly this card -- and an unlabelled operator name
+        over a mono string reads as decoration until you already know which
+        is which.
+      */}
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        <dt className="text-muted-foreground">{t("vehicle.operator")}</dt>
+        <dd className="truncate">{vehicle.operator}</dd>
+        <dt className="text-muted-foreground">{t("vehicle.type")}</dt>
+        <dd>{t(`vehicle.types.${vehicle.type}`)}</dd>
+        <dt className="text-muted-foreground">{t("vehicle.id")}</dt>
+        <dd className="truncate font-mono text-xs">{vehicle.id}</dd>
+      </dl>
       {vehicle.reported ? (
-        <p className="text-muted-foreground text-xs">
+        <p className="text-muted-foreground text-sm">
           {t("vehicle.openReport")}
         </p>
       ) : null}
-    </div>
+    </section>
   );
 }
 
@@ -374,26 +388,58 @@ function MapView({
   // layer id that does not exist yet never fires.
   React.useEffect(() => {
     if (!map) return;
-    const onClick = (event: MapMouseEvent) => {
+
+    /** The dot under this point, or null for a click on bare map. */
+    const vehicleAt = (point: MapMouseEvent["point"]) => {
       let hits;
       try {
-        hits = map.queryRenderedFeatures(event.point, { layers: [DOTS_LAYER] });
+        hits = map.queryRenderedFeatures(point, { layers: [DOTS_LAYER] });
       } catch {
-        return; // the layer is not on the map yet
+        return null; // the layer is not on the map yet
       }
       const feature = hits?.[0];
-      if (!feature || feature.geometry.type !== "Point") return;
+      if (!feature || feature.geometry.type !== "Point") return null;
+
+      // Nearest, not equal. MapLibre re-encodes the GeoJSON through its own
+      // vector tiler, which quantises coordinates to the tile grid -- what
+      // comes back sits within about a metre of what went in and is never
+      // identical to it. Comparing for equality (even to nine decimals) finds
+      // nothing, which is a silent miss: the dot is plainly there, the click
+      // lands on it, and the card simply never opens. A dot was hit, so the
+      // closest vehicle to it is the one meant.
       const [lon, lat] = feature.geometry.coordinates as [number, number];
-      const hit = visible.find(
-        (v) =>
-          Math.abs(v.position[0] - lon) < 1e-9 &&
-          Math.abs(v.position[1] - lat) < 1e-9,
-      );
+      let best: CitizenVehicle | null = null;
+      let bestDistance = Infinity;
+      for (const vehicle of visible) {
+        const dx = vehicle.position[0] - lon;
+        const dy = vehicle.position[1] - lat;
+        const distance = dx * dx + dy * dy;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = vehicle;
+        }
+      }
+      return best;
+    };
+
+    const onClick = (event: MapMouseEvent) => {
+      const hit = vehicleAt(event.point);
       if (hit) setSelected(hit);
     };
+
+    // Without this the dots look like decoration. A pointer is the only hint
+    // on a map that a mark is a control, and the phone frame is shown on a
+    // desktop docs page where there is a cursor to change.
+    const onMove = (event: MapMouseEvent) => {
+      map.getCanvas().style.cursor = vehicleAt(event.point) ? "pointer" : "";
+    };
+
     map.on("click", onClick);
+    map.on("mousemove", onMove);
     return () => {
       map.off("click", onClick);
+      map.off("mousemove", onMove);
+      map.getCanvas().style.cursor = "";
     };
   }, [map, visible]);
 
