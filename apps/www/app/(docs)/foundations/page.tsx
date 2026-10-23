@@ -914,9 +914,12 @@ export default function FoundationsPage() {
           <code className="text-foreground">strokeWidth</code> and{" "}
           <code className="text-foreground">className</code> like any Lucide
           icon. In product they sit inside{" "}
-          <code className="text-foreground">RuleTypeIcon</code>, white on the
-          rule&rsquo;s map colour, shown beside each. Hover to download the SVG
-          or copy the import.
+          <code className="text-foreground">RuleTypeIcon</code>, on the
+          rule&rsquo;s map colour from production&rsquo;s own regulation
+          palette, shown beside each. The glyph is white or near-black
+          depending on which clears 3:1 against that fill &mdash; four of the
+          six production colours are too light for white. Hover to download the
+          SVG or copy the import.
         </p>
         <RegulationIconGrid />
       </section>

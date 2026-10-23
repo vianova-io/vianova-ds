@@ -16,7 +16,11 @@ import {
   RegulationParking,
 } from "@/registry/vianova/product/regulation-type-icons";
 
-import { CATEGORY_PALETTE } from "@/registry/vianova/lib/category-style";
+import {
+  contrastBetween,
+  luminance,
+  parseHex,
+} from "@/registry/vianova/lib/category-style";
 import { cn } from "@/registry/vianova/lib/utils";
 
 export type RuleType =
@@ -34,27 +38,37 @@ export type RuleType =
   | "multi_parking";
 
 /*
- * Rule colours are map layer colours, so they come from the categorical
- * palette rather than from the theme: the zone a rule draws on the map and the
- * icon that names it in a list have to be the same colour, and the map cannot
- * read a CSS variable.
+ * Rule colours are PRODUCTION's regulation palette, given as literal hexes.
  *
- * Grouped by what a rule does to a vehicle, not one colour per type. Twelve
- * types would exhaust an eight-stop palette and the pairs it reused would be
- * arbitrary; grouping makes the reuse mean something. Every rule about how
- * many vehicles there are, or what they cost, is the same purple, because on
- * the map they are all "an area with a fleet condition", and the glyph is what
- * tells them apart.
+ * They used to be stops from CATEGORY_PALETTE, which made the design system
+ * disagree with the product it documents: side by side the generated set read
+ * duller, and multi-parking came out blue where production draws it green.
+ * These are the values production actually paints, so a rule list here and a
+ * rule list there are the same picture.
  *
- * The teal first stop is skipped on purpose: it is the product primary, and a
- * rule drawn in it would read as selected or as UI chrome.
+ * Literal hexes rather than tokens because these are MAP LAYER colours: the
+ * zone a rule draws and the icon that names it in a list have to match, and
+ * MapLibre cannot read a CSS variable. They do not change with the theme.
+ *
+ * Grouped by what a rule does to a vehicle, not one colour per type. Every
+ * rule about how many vehicles there are, or what they cost, is the same
+ * purple, because on the map they are all "an area with a fleet condition",
+ * and the glyph is what tells them apart.
  */
-const FLEET = CATEGORY_PALETTE[4]; // purple
-const PARK = CATEGORY_PALETTE[5]; // green
-const NO_PARK = CATEGORY_PALETTE[2]; // amber
-const NO_GO = CATEGORY_PALETTE[6]; // red
-const SLOW = CATEGORY_PALETTE[7]; // cyan
-const MULTI = CATEGORY_PALETTE[1]; // blue
+const FLEET = "#9254DE"; // purple -- cap, floor, fees, max unavailable, no deployment
+const PARK = "#73D13D"; // green -- parking, max parked
+const NO_PARK = "#FAAD14"; // amber
+const NO_GO = "#F5222D"; // red
+const SLOW = "#13A8A8"; // teal
+/*
+ * Multi-parking is the same green as parking, which is what production shows
+ * and what it is: a set of parking and no-parking areas managed together.
+ *
+ * The brief said "keep Multi-parking green" without giving a sixth hex, so it
+ * takes parking's. If production turns out to use a distinct green, this is
+ * the one line to change.
+ */
+const MULTI = PARK;
 
 export const RULE_TYPES: Record<
   RuleType,
@@ -171,17 +185,54 @@ const SIZES = {
   lg: { box: 32, glyph: 21, stroke: 2, top: 2.3 },
 } as const;
 
+/** The dark ink, when white would not read. Matches category-style's own. */
+const INK_DARK = "#111827";
+const INK_LIGHT = "#ffffff";
+/** WCAG 1.4.11, a graphic. The same bar as category-style's MIN_LOGO_CONTRAST. */
+const MIN_GLYPH_CONTRAST = 3;
+
 /**
- * A rule type as a small shield: the type's map colour, with its glyph in white.
+ * The glyph's ink for a given fill, measured rather than assumed.
+ *
+ * This used to be `text-white`, unconditionally, and that was defensible while
+ * the fills came from CATEGORY_PALETTE: white cleared 3:1 on all six, the
+ * tightest being green at 3.01:1. Production's palette is lighter and white
+ * does not survive it -- measured against these exact values:
+ *
+ *   purple  #9254DE   white 4.62:1   PASS
+ *   red     #F5222D   white 4.08:1   PASS
+ *   teal    #13A8A8   white 2.92:1   fails
+ *   green   #73D13D   white 1.92:1   fails
+ *   amber   #FAAD14   white 1.90:1   fails
+ *
+ * Four of six below the bar, and the green one at 1.92:1 is a glyph you
+ * genuinely cannot make out at 16px. So the ink is chosen per fill, the way
+ * adviseLogo already picks between the same two inks for a logo on a badge.
+ * With #111827 on the three that fail, the worst badge in the set is 4.08:1.
+ *
+ * Keeping the fills exactly as production has them is the point of the change;
+ * the ink is what gives way.
+ */
+function glyphInk(color: string): string {
+  const rgb = parseHex(color);
+  // A fill we cannot read is left to white, which is what it was before.
+  if (!rgb) return INK_LIGHT;
+  const behind = luminance(rgb);
+  const onLight = contrastBetween(luminance(parseHex(INK_LIGHT)!), behind);
+  return onLight >= MIN_GLYPH_CONTRAST ? INK_LIGHT : INK_DARK;
+}
+
+/**
+ * A rule type as a small shield: the type's map colour, with its glyph in the
+ * ink that reads on it.
  *
  * A shield and not a disc so a rule never reads as a category badge, which is
  * a disc in the same palette; the two sit side by side in the map workspace.
  *
- * The glyph is always white because the fill never changes with the theme --
- * it is the map's colour, not the UI's. White clears 3:1 (WCAG 1.4.11, a
- * graphic) on every colour used here; the tightest is green at 3.01:1. That
- * margin is why the stroke never renders under ~1.15px (see SIZES): a thinner
- * line is antialiased into the fill and loses it.
+ * The fill never changes with the theme -- it is the map's colour, not the
+ * UI's -- so the ink does not either; it is fixed per fill by `glyphInk`.
+ * The stroke never renders under ~1.15px (see SIZES) because a thinner line
+ * is antialiased into the fill and loses it.
  *
  * The glyphs are the DS's own custom regulation type icons
  * (`regulation-type-icons`), shown on the Foundations page.
@@ -225,11 +276,16 @@ export function RuleTypeIcon({
           fill={color}
         />
       </svg>
-      {/* text-white rather than a token on purpose -- see above. */}
+      {/* A literal ink rather than a token on purpose -- see glyphInk. */}
       <Glyph
         aria-hidden
-        className="absolute left-1/2 -translate-x-1/2 text-white"
-        style={{ top: s.top, width: s.glyph, height: s.glyph }}
+        className="absolute left-1/2 -translate-x-1/2"
+        style={{
+          top: s.top,
+          width: s.glyph,
+          height: s.glyph,
+          color: glyphInk(color),
+        }}
         strokeWidth={s.stroke}
       />
     </span>
