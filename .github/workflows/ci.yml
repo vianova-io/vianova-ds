@@ -149,11 +149,25 @@ jobs:
   # one failing test with 180s and a phantom 27th case.)
   #
   # Playwright balances shards by test COUNT, so a file averaging 38.4s a test
-  # lands as one indivisible lump next to files averaging 3.5s. Four shards do
-  # not split that file -- nothing here can, sharding is per file -- but they
-  # stop the other suites queueing behind it, which puts the worst shard at
-  # roughly 999s over two workers plus setup rather than that plus everything
-  # else. Its floor is about 12 minutes, so 25 is headroom rather than hope.
+  # lands as one indivisible lump next to files averaging 3.5s. Four shards
+  # helped -- the worst job went 18m48s to 16m09s -- but far less than the
+  # arithmetic suggested, and the reason is worth writing down because it
+  # makes "add more shards" the wrong instinct.
+  #
+  # Shards are contiguous chunks of the SORTED file list, balanced by count.
+  # Sorted, this suite puts every expensive spec next to every other one, and
+  # the 4-shard run duly handed all of them to shard 3:
+  #
+  #   foundations-colors -> map-workspace-basemap -> -colorize -> -layers
+  #   -> -library -> -tray -> panel-stepper -> preset-picker
+  #   -> regulations-workspace -> responsive
+  #
+  # 139 tests, the same count as the other three shards, and 1674s of the
+  # suite's ~2100s of work -- 14.1 min over two workers. The other three
+  # finished in 3m30, 4m38 and 3m38. Splitting further shrinks that chunk but
+  # cannot go below one file: map-workspace-layers alone is 949s, so ~8 min
+  # over two workers plus setup is the floor no matter how many shards there
+  # are. Four is where the cost of another runner stops buying anything.
   #
   # Why that file is expensive, and the obvious next thing: `open()` runs
   # `addEverything()`, re-adding all eleven catalogue layers through the
