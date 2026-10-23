@@ -81,58 +81,48 @@ jobs:
       - name: Install Playwright browser
         run: pnpm --filter @vianova/www exec playwright install --with-deps chromium
 
-      # Every bug this suite exists for was invisible to typecheck and the unit
-      # tests: blank swatches, hydration mismatches, a silently dead map, a
-      # component that threw only once its menu opened.
-      - name: "Accessibility: axe over every example"
-        run: pnpm --filter @vianova/www test:a11y
-
-      # A focus ring painted outside a control's box is cut by any ancestor
-      # with overflow != visible. Nothing about a component in isolation shows
-      # this, so blocks are crawled too -- that is where it was found by hand.
-      - name: "Accessibility: no focus ring is clipped"
-        run: pnpm --filter @vianova/www test:rings
-
-      # Control heights live in five separate class strings across five files.
-      # Nothing except this measures whether they still agree, and a toolbar
-      # that is 4px out of alignment fails no other check.
-      - name: "Controls share one height ladder"
-        run: pnpm --filter @vianova/www test:sizes
-
-      # Every other suite here runs at the single 900px project viewport, which
-      # is one layout out of three. This one sets its own sizes and measures the
-      # map blocks at phone, tablet and desktop: panels that do not stretch or
-      # overlap, a top bar that fits inside a box that would clip it silently,
-      # and an attribution nothing is sitting on.
-      - name: "Map blocks lay out at phone and tablet widths"
-        run: pnpm --filter @vianova/www test:responsive
-
-      # The basemap switcher, and the contract that the data ramp follows it.
-      # No pixels and no tiles: it asserts the `data-map-scheme` the block
-      # resolves to, and the attribution MapLibre derives from the style's
-      # sources -- which is also the one legal obligation that comes with using
-      # Esri's imagery and AWS's elevation for free. Both tile backends are
-      # stubbed in the spec so CI never depends on them.
-      - name: "Basemaps switch, and the data ramp follows"
-        run: pnpm --filter @vianova/www test:basemap
-
-      # Foundations is the only page the crawls above never reach: they go
-      # through /preview and /blocks, and this is a docs route. That is how its
-      # colour swatches once shipped 170 contrast failures without anything
-      # going red. Checks the code labels, the clipboard and the rings.
-      - name: "Foundations colours are labelled, copyable and legible"
-        run: pnpm --filter @vianova/www test:colors
-
-      # Playwright suffixes snapshots per platform, so macOS baselines are not
-      # used on Linux. Until Linux baselines are committed this warns instead of
-      # failing, which is honest about the gap rather than pretending to cover it.
-      - name: Visual regression
-        run: |
-          if ls apps/www/e2e/visual.spec.ts-snapshots/*-linux.png >/dev/null 2>&1; then
-            pnpm --filter @vianova/www test:visual
-          else
-            echo "::warning::No Linux visual baselines yet. Generate them once on Linux with 'pnpm --filter @vianova/www test:visual:update' and commit apps/www/e2e/**/*-linux.png."
-          fi
+      # ONE step, deliberately.
+      #
+      # This was seven named steps, one per suite, and the price was a second
+      # wiring point: a spec file only ran if someone remembered to add both a
+      # package script AND a step here. Eight did not get one --
+      # map-workspace-tray, -layers, -library, -colorize, regulations-workspace,
+      # feeds-workspace, panel-stepper, preset-picker -- so the most detailed
+      # contracts in the repo were guarded by a suite CI never ran, while the
+      # checks went green. `playwright test` with no argument runs every spec in
+      # e2e/, so a new file is covered the moment it exists. The named scripts
+      # stay in package.json for running one suite locally.
+      #
+      # What the suites are for, kept from the steps they replace:
+      #
+      #   a11y          axe over every example and block. Every bug it exists
+      #                 for was invisible to typecheck and the unit tests:
+      #                 blank swatches, hydration mismatches, a silently dead
+      #                 map, a component that threw only once its menu opened.
+      #   focus-ring    a ring painted outside a control's box is cut by any
+      #                 ancestor with overflow != visible. Blocks are crawled
+      #                 too -- that is where it was found, by hand.
+      #   control-size  heights live in five class strings across five files;
+      #                 nothing else measures whether they still agree.
+      #   responsive    every other suite runs at the single 900px project
+      #                 viewport. This one sets its own and measures the map
+      #                 blocks at phone, tablet and desktop.
+      #   basemap       the switcher, and the contract that the data ramp
+      #                 follows it -- including the attribution that is the
+      #                 legal obligation attached to the free tile backends.
+      #                 Both backends are stubbed so CI never depends on them.
+      #   foundations   the only page the crawls never reach, because they go
+      #                 through /preview and /blocks. That is how its swatches
+      #                 once shipped 170 contrast failures without going red.
+      #   visual        screenshots. Playwright suffixes them per platform, so
+      #                 macOS baselines are not used on Linux; a new example
+      #                 needs a Linux baseline from the visual-baselines
+      #                 workflow before this can pass.
+      #   the rest      the map workspace's tray, layers, library and colorize
+      #                 chains; the regulations and feeds workspaces; the panel
+      #                 stepper; the preset picker.
+      - name: "End-to-end: every spec in e2e/"
+        run: pnpm --filter @vianova/www test:e2e
 
       - name: Upload Playwright report on failure
         if: failure()
