@@ -76,6 +76,7 @@ const BLOCK_TITLES: Record<string, string> = {
   "reports-workspace": "Reports workspace",
   "regulations-workspace": "Regulations workspace",
   "feeds-workspace": "Feeds workspace",
+  "citizen-workspace": "Citizen Platform workspace",
 };
 
 const titleCase = (name: string) =>

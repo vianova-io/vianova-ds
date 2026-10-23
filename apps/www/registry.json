@@ -302,6 +302,18 @@
       ]
     },
     {
+      "name": "sample-citizen",
+      "type": "registry:lib",
+      "title": "Sample Citizen",
+      "description": "Sample Citizen helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/sample-citizen.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
       "name": "sample-datasets",
       "type": "registry:lib",
       "title": "Sample Datasets",
@@ -460,6 +472,45 @@
         }
       ],
       "dependencies": []
+    },
+    {
+      "name": "citizen-workspace",
+      "type": "registry:block",
+      "title": "Citizen Platform workspace",
+      "description": "Citizen Platform workspace layout, composed from Vianova components.",
+      "dependencies": [
+        "lucide-react",
+        "maplibre-gl"
+      ],
+      "registryDependencies": [
+        "@vianova/alert",
+        "@vianova/badge",
+        "@vianova/button",
+        "@vianova/card",
+        "@vianova/category-style",
+        "@vianova/choice-card",
+        "@vianova/field",
+        "@vianova/input",
+        "@vianova/item",
+        "@vianova/map-canvas",
+        "@vianova/native-select",
+        "@vianova/phone-frame",
+        "@vianova/sample-citizen",
+        "@vianova/separator",
+        "@vianova/status-badge",
+        "@vianova/textarea",
+        "@vianova/use-category-point-layer",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/blocks/citizen-workspace.tsx",
+          "type": "registry:block"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
     },
     {
       "name": "datahub-workspace",
@@ -3566,6 +3617,27 @@
       "files": [
         {
           "path": "registry/vianova/patterns/pagination-bar.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "phone-frame",
+      "type": "registry:ui",
+      "title": "Phone Frame",
+      "description": "Phone Frame — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "registryDependencies": [
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/phone-frame.tsx",
           "type": "registry:ui"
         }
       ],

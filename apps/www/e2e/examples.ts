@@ -56,5 +56,18 @@ export const NON_MAP_BLOCKS: string[] = [
   "regulations-workspace",
   // A list and a detail view; no map anywhere.
   "feeds-workspace",
+  // Has a map on one of its nine views, but it is a phone surface inside a
+  // PhoneFrame -- no toolbar, no floating panels, and never a desktop layout
+  // to switch to. See LIST_DETAIL_BLOCKS: it has no list to drill into either.
+  "citizen-workspace",
 ];
+
+/**
+ * Of the non-map blocks, the ones that open on a list and drill into a detail.
+ * The responsive suite measures both views; a block that has only the one is
+ * measured once rather than waiting forever for a row that never arrives.
+ */
+export const LIST_DETAIL_BLOCKS: string[] = NON_MAP_BLOCKS.filter(
+  (b) => b !== "citizen-workspace",
+);
 export const MAP_BLOCKS: string[] = BLOCKS.filter((b) => !NON_MAP_BLOCKS.includes(b));

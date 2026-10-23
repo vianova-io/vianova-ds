@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { MAP_BLOCKS, NON_MAP_BLOCKS, settle } from "./examples";
+import { LIST_DETAIL_BLOCKS, MAP_BLOCKS, NON_MAP_BLOCKS, settle } from "./examples";
 
 /**
  * Geometry of the map blocks at phone, tablet and desktop widths.
@@ -668,7 +668,11 @@ for (const block of NON_MAP_BLOCKS) {
             };
           });
 
-        for (const view of ["list", "dataset"] as const) {
+        const views = LIST_DETAIL_BLOCKS.includes(block)
+          ? (["list", "dataset"] as const)
+          : (["list"] as const);
+
+        for (const view of views) {
           // A card in the data hub, a name in the reports or regulations table.
           if (view === "dataset") {
             // The data hub's cards arrive after the page does.
