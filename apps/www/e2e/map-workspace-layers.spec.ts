@@ -455,6 +455,27 @@ test("the layer panel has no serious or critical violations", async ({ page }) =
   ).toBeVisible();
 
   const results = await new AxeBuilder({ page })
+    // Scoped to the block, which is what the test is named after.
+    //
+    // Unscoped this timed out at 90s on CI -- twice, counting the retry --
+    // while passing here, and it was the only failure in the first run that
+    // ever executed this file on a runner. The cause is not the block.
+    // /blocks/map-workspace prints the block's own SOURCE under the demo, and
+    // measured at 1500x950 the page is 12,465 elements of which 11,421 are
+    // that listing and 901 are the block: 92% of what axe walks is a syntax
+    // highlighter's spans.
+    //
+    // The cost of walking them, measured on an idle machine:
+    //
+    //   whole page, as this was   31.7s   0 violations   29 passes
+    //   scoped to the block        1.0s   0 violations   22 passes
+    //
+    // Same answer, 32x faster. The seven extra passes are rules about the
+    // docs chrome -- the nav, the listing -- which this test does not claim
+    // to cover and a11y.spec.ts crawls separately. Every other a11y
+    // assertion in the repo is scoped like this already; this one was the
+    // outlier.
+    .include("[data-map-scheme]")
     // MapLibre's own canvas and attribution are not ours to fix.
     .exclude(".maplibregl-canvas-container")
     .exclude(".maplibregl-ctrl-attrib")

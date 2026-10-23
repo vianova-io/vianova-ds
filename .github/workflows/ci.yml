@@ -130,19 +130,47 @@ jobs:
   #    5 min   playwright install --with-deps (the apt packages, not Chromium)
   #   13 min   501 tests at 2 workers, then the guillotine
   #
-  # So the tests alone are ~15 min and setup is ~7. Two shards put the wall
-  # clock back where it was before this change while leaving headroom for the
-  # specs still to be written, and it keeps `verify` -- typecheck, unit tests,
-  # the registry guards -- reporting in about three minutes instead of
-  # twenty-two. fail-fast is off: shard 2's result is wanted even when shard 1
-  # has already found something.
+  # Splitting it out keeps `verify` -- typecheck, unit tests, the registry
+  # guards -- reporting in 2m38s rather than twenty-two minutes, which is the
+  # part of CI anyone waits on. fail-fast is off: one shard's result is wanted
+  # even when another has already found something.
+  #
+  # ## Why four shards and not two
+  #
+  # Two was not enough, and the reason is one file. Per-file totals from the
+  # two-shard run, inside the shard that took 18m48s:
+  #
+  #   map-workspace-layers.spec.ts    999s   26 tests   <- 55% of the shard
+  #   responsive.spec.ts              226s   64 tests
+  #   map-workspace-colorize.spec.ts  216s   13 tests
+  #   everything else                 376s   84 tests
+  #
+  # (Retries excluded. Counting them, as a first pass at this did, credits the
+  # one failing test with 180s and a phantom 27th case.)
+  #
+  # Playwright balances shards by test COUNT, so a file averaging 38.4s a test
+  # lands as one indivisible lump next to files averaging 3.5s. Four shards do
+  # not split that file -- nothing here can, sharding is per file -- but they
+  # stop the other suites queueing behind it, which puts the worst shard at
+  # roughly 999s over two workers plus setup rather than that plus everything
+  # else. Its floor is about 12 minutes, so 25 is headroom rather than hope.
+  #
+  # Why that file is expensive, and the obvious next thing: `open()` runs
+  # `addEverything()`, re-adding all eleven catalogue layers through the
+  # dialog before EACH test. Measured locally on its a11y case: 41.2s total,
+  # of which the axe scan was 31.7s, leaving ~9.5s for the navigation and the
+  # clicking -- about half of that file's average test, paid 26 times. It
+  # reads that way because the panel used to list the catalogue on load and
+  # stopped when the data library landed, so the tests restored the old
+  # precondition rather than being rewritten. Paying it once per file is a
+  # rewrite of 26 tests, not a CI change, so it is not in this commit.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -177,8 +205,8 @@ jobs:
       # would have run all 556 tests in BOTH shards and timed out twice,
       # reported as two unexplained cancellations. The script stays in
       # package.json for local use; it is the same bare `playwright test`.
-      - name: "End-to-end: shard ${{ matrix.shard }} of 2"
-        run: pnpm --filter @vianova/www exec playwright test --shard=${{ matrix.shard }}/2
+      - name: "End-to-end: shard ${{ matrix.shard }} of 4"
+        run: pnpm --filter @vianova/www exec playwright test --shard=${{ matrix.shard }}/4
 
       - name: Upload Playwright report on failure
         if: failure()
