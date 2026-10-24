@@ -1,7 +1,11 @@
 "use client";
 
 import * as React from "react";
-import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
+import type {
+  GeoJSONSource,
+  Map as MapLibreMap,
+  MapMouseEvent,
+} from "maplibre-gl";
 import {
   ArrowLeft,
   Camera,
@@ -10,19 +14,17 @@ import {
   ImagePlus,
   List,
   MapIcon,
+  Minus,
+  Plus,
   QrCode,
   Search,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/registry/vianova/ui/alert";
 import { Button } from "@/registry/vianova/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/registry/vianova/ui/card";
+import { Card, CardContent } from "@/registry/vianova/ui/card";
 import {
   ChoiceCard,
   ChoiceCardGroup,
@@ -44,13 +46,17 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@/registry/vianova/ui/native-select";
-import { Separator } from "@/registry/vianova/ui/separator";
+import { Spinner } from "@/registry/vianova/ui/spinner";
 import { Textarea } from "@/registry/vianova/ui/textarea";
+import { CopyButton } from "@/registry/vianova/patterns/copy-button";
 import { PhoneFrame } from "@/registry/vianova/patterns/phone-frame";
 import { StatusBadge } from "@/registry/vianova/patterns/status-badge";
+import { Timeline, TimelineItem } from "@/registry/vianova/patterns/timeline";
 import { MapCanvas } from "@/registry/vianova/product/map-canvas";
+import { SegmentedControl } from "@/registry/vianova/product/segmented-control";
 import { useCategoryPointLayer } from "@/registry/vianova/hooks/use-category-point-layer";
 import { resolveStyles } from "@/registry/vianova/lib/category-style";
+import { resolveCssColor } from "@/registry/vianova/lib/css-color";
 import {
   CITIZEN_CENTER,
   CITIZEN_OPERATORS,
@@ -92,34 +98,70 @@ const WORKER_URL = `${BASE_PATH}/maplibre/maplibre-gl-worker.mjs`;
 const POINTS_ID = "citizen-vehicles";
 const DOTS_LAYER = `${POINTS_ID}-dots`;
 
+/** The ring drawn round the chosen vehicle. Local to this block. */
+const SELECTED_SOURCE = "citizen-selected";
+const SELECTED_LAYER = `${SELECTED_SOURCE}-ring`;
+
 /**
- * The view union is production's, name for name.
+ * Half the side of the box a tap is tested against, in screen pixels.
  *
- * It is a union rather than a string plus loose state because several views
- * only make sense carrying something: `list` has to know whether Back goes to
- * the map or the start, and `form` cannot be reached without a vehicle. Keeping
- * the shape identical also means a reviewer can diff this against the real app
- * without first translating between two vocabularies.
+ * A bare `queryRenderedFeatures(point)` is a one-pixel hit test, which a thumb
+ * loses against a small dot often enough to read as the map ignoring you. 12
+ * gives a 24px target around the tap -- close to the 44px recommendation once
+ * the dot's own radius is counted -- and the handler still resolves to the dot
+ * nearest the tap, so a padded box never picks the wrong neighbour.
+ */
+const HIT_PADDING = 12;
+
+/** Long enough for the pending state to be seen, short enough not to annoy. */
+const SEND_DELAY = 700;
+
+/**
+ * How far above the map's centre the chosen vehicle is parked, in pixels.
+ *
+ * The card floats over the lower half of the map, so a dot tapped near the
+ * bottom ends up underneath it -- the one dot you need to see is the one the
+ * card hides. Easing the map lifts it clear. 90px puts it in the upper third
+ * of a phone-sized map, which is above the card at every height this block
+ * is drawn at.
+ */
+const SELECTED_OFFSET_Y = -90;
+
+/**
+ * A picked photo. The object URL is its identity as well as its source: it is
+ * unique per file, which saves inventing a key, and it is what the thumbnail
+ * renders. There is no stored label -- numbering a photo at the moment it is
+ * picked survives neither a removal (photo 3 stays "photo 3" with two photos
+ * left) nor a locale switch (it stays in the language it was added in).
+ */
+type Photo = { id: string; url: string };
+
+/**
+ * Five views, where production has nine.
+ *
+ * Production's flow is this block's starting point, not its specification:
+ * reporting a vehicle found on the map took nine interactions there, two of
+ * them spent declining a QR prompt the reporter had already answered by
+ * choosing the map. Four views were friction or duplication, so four are gone:
+ *
+ * - `prompt` -- the "scan the QR code first" interstitial. The start screen
+ *   now names both ways in, so asking again is asking twice.
+ * - `map` and `list` are one `find` view with a toggle. They are two
+ *   presentations of one set of vehicles, and jumping between them used to
+ *   reset the filters and lose the selection.
+ * - `photo` is folded into `report`. A screen of its own put a Continue
+ *   between the reporter and the only screen that decides anything.
+ * - `unlisted` is `report` with no vehicle, which is what it always was --
+ *   the form already branched on the method rather than on the view.
+ *
+ * What a view carries is still only what it cannot be entered without, so a
+ * reviewer can read the union and tell which screens need a vehicle.
  */
 type View =
   | { name: "start" }
-  | { name: "prompt"; target: "map" | "list" }
   | { name: "scan" }
-  | { name: "map" }
-  | {
-      name: "list";
-      from: "start" | "map";
-      notLive?: boolean;
-      qrNotFound?: boolean;
-    }
-  | { name: "unlisted" }
-  | { name: "photo"; vehicle: CitizenVehicle; method: FindMethod }
-  | {
-      name: "form";
-      vehicle: CitizenVehicle | null;
-      method: FindMethod;
-      photos: string[];
-    }
+  | { name: "find"; tab: "map" | "list" }
+  | { name: "report"; vehicle: CitizenVehicle | null; method: FindMethod }
   | { name: "done"; reportId: string };
 
 /** The vehicle a simulated QR scan lands on. */
@@ -130,58 +172,115 @@ const QR_VEHICLE = SAMPLE_VEHICLES[0]!;
 /* -------------------------------------------------------------------------- */
 
 /**
- * Title, body, Back -- production's one screen wrapper, including the focus
- * move. Each view takes the whole screen on a phone, so without sending focus
- * to the new heading a screen-reader user is left wherever the old screen's
- * button was and never hears that the screen changed.
+ * The one header, above every screen.
+ *
+ * Production put Back at the BOTTOM of each screen, after the content. On the
+ * map and the list that is below the fold of a 390x812 phone: the control that
+ * undoes a wrong turn was the one thing you had to scroll to find. The locale
+ * toggle had the same problem for the opposite reason -- it sat at the top of
+ * the scrolling column, so it left the screen as soon as you read anything.
+ *
+ * Both live here now, in a bar that does not move, and the heading is the
+ * focus target when the view changes: each view fills the screen, so without
+ * moving focus a screen-reader user is left wherever the old screen's button
+ * was and never hears that the screen changed.
  */
-function Screen({
+function AppHeader({
   title,
+  step,
+  headingRef,
   onBack,
   backLabel,
-  children,
+  locale,
+  onLocale,
 }: {
   title: string;
-  onBack: () => void;
+  /** e.g. "Step 2 of 2". Shown under the title while a report is in progress. */
+  step?: string;
+  headingRef: React.RefObject<HTMLHeadingElement | null>;
+  /** Omitted on the screens there is nothing to go back to. */
+  onBack?: () => void;
   backLabel: string;
-  children: React.ReactNode;
+  locale: CitizenLocale;
+  onLocale: () => void;
 }) {
-  const heading = React.useRef<HTMLHeadingElement>(null);
-  React.useEffect(() => {
-    heading.current?.focus();
-  }, []);
+  const t = citizenCopy(locale);
+  const other: CitizenLocale = locale === "de" ? "en" : "de";
 
   return (
-    <div className="flex flex-col gap-4">
-      <h1
-        ref={heading}
-        tabIndex={-1}
-        className="text-base font-semibold tracking-tight outline-none"
+    <div className="bg-background sticky top-0 z-30 flex shrink-0 items-center gap-1 border-b px-2 py-2">
+      {onBack ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-11 shrink-0"
+          aria-label={backLabel}
+          onClick={onBack}
+        >
+          <ArrowLeft />
+        </Button>
+      ) : (
+        <span aria-hidden className="w-2 shrink-0" />
+      )}
+      <div className="min-w-0 flex-1">
+        <h1
+          ref={headingRef}
+          tabIndex={-1}
+          className="truncate text-base font-semibold tracking-tight outline-none"
+        >
+          {title}
+        </h1>
+        {step ? <p className="text-muted-foreground text-xs">{step}</p> : null}
+      </div>
+      {/*
+        The accessible name says what the button DOES. It used to be the
+        target language alone -- "Deutsch" -- which names a language but not an
+        action, and read identically to a label on a static field.
+      */}
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="min-h-11 shrink-0"
+        aria-label={t("app.switchLanguage")}
+        onClick={onLocale}
       >
-        {title}
-      </h1>
-      {children}
-      <Button type="button" variant="ghost" onClick={onBack}>
-        <ArrowLeft />
-        {backLabel}
+        <span lang={other} aria-hidden>
+          {t("app.language")}
+        </span>
       </Button>
     </div>
   );
 }
 
-/** A vehicle as production summarises it: operator, type, ID, and its state. */
+/**
+ * A vehicle as production summarises it: operator, type, ID, and its state.
+ *
+ * `bare` drops the box for a caller that already draws one -- the selection
+ * card over the map, where a second border round this would be two boxes where
+ * the reader sees one.
+ */
 function VehicleSummary({
   vehicle,
   locale,
+  bare = false,
+  className,
 }: {
   vehicle: CitizenVehicle;
   locale: CitizenLocale;
+  bare?: boolean;
+  className?: string;
 }) {
   const t = citizenCopy(locale);
   return (
     <section
       aria-label={t("vehicle.title")}
-      className="flex flex-col gap-2 rounded-lg border p-3"
+      className={cn(
+        "flex flex-col gap-2",
+        !bare && "rounded-lg border p-3",
+        className,
+      )}
     >
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{t("vehicle.title")}</h2>
@@ -190,11 +289,10 @@ function VehicleSummary({
         ) : null}
       </div>
       {/*
-        A description list, because that is what this is: three labelled
-        facts. Production labels them too -- `vehicle.operator`, `.type` and
-        `.id` exist for exactly this card -- and an unlabelled operator name
-        over a mono string reads as decoration until you already know which
-        is which.
+        A description list, because that is what this is: three labelled facts.
+        Production labels them too -- `vehicle.operator`, `.type` and `.id`
+        exist for exactly this card -- and an unlabelled operator name over a
+        mono string reads as decoration until you already know which is which.
       */}
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
         <dt className="text-muted-foreground">{t("vehicle.operator")}</dt>
@@ -213,60 +311,96 @@ function VehicleSummary({
   );
 }
 
+/**
+ * Report, or say why not.
+ *
+ * A reported vehicle used to be a DISABLED button whose label was the reason
+ * it was disabled -- so the explanation could not be focused, read on its own,
+ * or reached by anything that skips disabled controls. The explanation is text
+ * now and the button is simply absent, which is the honest shape: there is no
+ * action to offer.
+ */
+function ReportAction({
+  vehicle,
+  locale,
+  onReport,
+}: {
+  vehicle: CitizenVehicle;
+  locale: CitizenLocale;
+  onReport: () => void;
+}) {
+  const t = citizenCopy(locale);
+  if (vehicle.reported) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        {t("vehicle.locked", {
+          time: formatLockTime(vehicle.lockedForMinutes ?? 0),
+        })}
+      </p>
+    );
+  }
+  return (
+    <Button type="button" className="min-h-11" onClick={onReport}>
+      {t("vehicle.report")}
+    </Button>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
-/* Views                                                                       */
+/* Start                                                                       */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The first screen, and the whole reason the flow got shorter.
+ *
+ * Production offered "Start a report" and "Find the vehicle on the map". The
+ * first does not say that it opens a camera, and the second was followed by a
+ * prompt asking whether you would rather scan after all. So both ways in are
+ * named for what they do, the scan is primary because it is the shortest path
+ * by two steps, and typing an ID -- previously buried in the camera-denied
+ * fallback -- is offered here too.
+ *
+ * `app.start` is left unused: a generic verb was the problem.
+ */
 function StartView({
   locale,
-  onStart,
+  onScan,
   onMap,
+  onList,
 }: {
   locale: CitizenLocale;
-  onStart: () => void;
+  onScan: () => void;
   onMap: () => void;
+  onList: () => void;
 }) {
   const t = citizenCopy(locale);
   return (
+    // No card title: the header above already says "Report a vehicle", and
+    // production said it twice, once in each place.
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{t("app.title")}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="flex flex-col gap-3">
         <p className="text-sm">{t("app.intro")}</p>
-        <Button onClick={onStart}>{t("app.start")}</Button>
-        <Button variant="outline" onClick={onMap}>
+        <Button className="min-h-11" onClick={onScan}>
+          <QrCode />
+          {t("qr.prompt.scan")}
+        </Button>
+        <p className="text-muted-foreground text-xs">{t("qr.prompt.text")}</p>
+        <Button variant="outline" className="min-h-11" onClick={onMap}>
+          <MapIcon />
           {t("app.openMap")}
+        </Button>
+        <Button variant="ghost" className="min-h-11" onClick={onList}>
+          <Search />
+          {t("qr.fallback.search")}
         </Button>
       </CardContent>
     </Card>
   );
 }
 
-function PromptView({
-  locale,
-  onScan,
-  onSkip,
-}: {
-  locale: CitizenLocale;
-  onScan: () => void;
-  onSkip: () => void;
-}) {
-  const t = citizenCopy(locale);
-  return (
-    <div className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold">{t("qr.prompt.title")}</h2>
-      <p className="text-muted-foreground text-sm">{t("qr.prompt.text")}</p>
-      <Button onClick={onScan}>
-        <QrCode />
-        {t("qr.prompt.scan")}
-      </Button>
-      <Button variant="outline" onClick={onSkip}>
-        {t("qr.prompt.skip")}
-      </Button>
-    </div>
-  );
-}
+/* -------------------------------------------------------------------------- */
+/* Scan                                                                        */
+/* -------------------------------------------------------------------------- */
 
 /**
  * The scanner, and the state every desktop browser actually shows.
@@ -274,9 +408,9 @@ function PromptView({
  * No camera can run in a documentation page, and production's own fallback is
  * the richer screen anyway -- it is the one carrying the three ways to find a
  * vehicle without scanning. So both are here and neither is on a timer: the
- * viewfinder is a button that resolves a sample vehicle, and a link switches to
- * the camera-denied state. A timed auto-advance would read as a real scan but
- * would make this block's visual snapshot depend on when it was taken.
+ * viewfinder is a button that resolves a sample vehicle, and a link switches
+ * to the camera-denied state. A timed auto-advance would read as a real scan
+ * but would make this block's visual snapshot depend on when it was taken.
  */
 function ScanView({
   locale,
@@ -298,15 +432,27 @@ function ScanView({
           <AlertDescription>{t("qr.cameraDenied")}</AlertDescription>
         </Alert>
         <h2 className="text-sm font-semibold">{t("qr.fallbackTitle")}</h2>
-        <Button variant="outline" onClick={() => onChooseMethod("map")}>
+        <Button
+          variant="outline"
+          className="min-h-11"
+          onClick={() => onChooseMethod("map")}
+        >
           <MapIcon />
           {t("qr.fallback.map")}
         </Button>
-        <Button variant="outline" onClick={() => onChooseMethod("list")}>
+        <Button
+          variant="outline"
+          className="min-h-11"
+          onClick={() => onChooseMethod("list")}
+        >
           <List />
           {t("qr.fallback.list")}
         </Button>
-        <Button variant="outline" onClick={() => onChooseMethod("list")}>
+        <Button
+          variant="outline"
+          className="min-h-11"
+          onClick={() => onChooseMethod("list")}
+        >
           <Search />
           {t("qr.fallback.search")}
         </Button>
@@ -329,7 +475,11 @@ function ScanView({
         <Camera className="text-muted-foreground size-8" aria-hidden />
       </button>
       <p className="text-muted-foreground text-sm">{t("qr.hint")}</p>
-      <Button variant="ghost" onClick={() => setDenied(true)}>
+      <Button
+        variant="ghost"
+        className="min-h-11"
+        onClick={() => setDenied(true)}
+      >
         <CameraOff />
         {t("qr.fallbackTitle")}
       </Button>
@@ -337,20 +487,42 @@ function ScanView({
   );
 }
 
-function MapView({
+/* -------------------------------------------------------------------------- */
+/* Find: one view, two presentations                                           */
+/* -------------------------------------------------------------------------- */
+
+type LocateState = "idle" | "locating" | "denied" | "failed";
+
+/**
+ * The map and the list, sharing their filters.
+ *
+ * They were two views in production, and *List view* was a one-way button into
+ * a screen with its own independent state: switching lost the operator filter
+ * and whatever you had picked. They are one view with a toggle now, which is
+ * what they always were -- one set of vehicles, drawn two ways.
+ *
+ * The division of labour between them is deliberate. The map is a pointer
+ * surface, where a tap selects and a card confirms before committing, because
+ * a tap near three dots needs confirming. The list is the keyboard and
+ * screen-reader surface, where a row goes straight to the report -- one tap,
+ * nothing to confirm, because a row names exactly one vehicle.
+ */
+function FindView({
   locale,
-  onList,
+  initialTab,
   onReport,
+  onUnlisted,
 }: {
   locale: CitizenLocale;
-  onList: () => void;
-  onReport: (vehicle: CitizenVehicle) => void;
+  initialTab: "map" | "list";
+  onReport: (vehicle: CitizenVehicle, method: FindMethod) => void;
+  onUnlisted: () => void;
 }) {
   const t = citizenCopy(locale);
+  const [tab, setTab] = React.useState<"map" | "list">(initialTab);
   const [operator, setOperator] = React.useState("all");
   const [type, setType] = React.useState<VehicleType | "all">("all");
-  const [map, setMap] = React.useState<MapLibreMap | null>(null);
-  const [selected, setSelected] = React.useState<CitizenVehicle | null>(null);
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
 
   const visible = React.useMemo(
     () =>
@@ -362,13 +534,177 @@ function MapView({
     [operator, type],
   );
 
+  const activeFilters = (operator === "all" ? 0 : 1) + (type === "all" ? 0 : 1);
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center gap-2 px-4 pt-3 pb-2">
+        <SegmentedControl
+          className="min-w-0 flex-1"
+          size="sm"
+          value={tab}
+          onValueChange={(next) => setTab(next as "map" | "list")}
+          items={[
+            { value: "map", label: t("map.canvas") },
+            { value: "list", label: t("map.listView") },
+          ]}
+        />
+        <Button
+          type="button"
+          variant={activeFilters > 0 ? "secondary" : "outline"}
+          size="sm"
+          className="min-h-11 shrink-0"
+          aria-expanded={filtersOpen}
+          onClick={() => setFiltersOpen((open) => !open)}
+        >
+          <SlidersHorizontal />
+          {activeFilters > 0
+            ? `${t("map.filter")} (${activeFilters})`
+            : t("map.filter")}
+        </Button>
+      </div>
+
+      {filtersOpen ? (
+        <FilterPanel
+          locale={locale}
+          operator={operator}
+          type={type}
+          onOperator={setOperator}
+          onType={setType}
+          onDone={() => setFiltersOpen(false)}
+        />
+      ) : null}
+
+      {tab === "map" ? (
+        <MapPane
+          locale={locale}
+          visible={visible}
+          onReport={(vehicle) => onReport(vehicle, "map")}
+        />
+      ) : (
+        <ListPane
+          locale={locale}
+          visible={visible}
+          onReport={onReport}
+          onUnlisted={onUnlisted}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The two filters, behind one button.
+ *
+ * In production they were two always-open selects above the map. On a 390px
+ * screen that is a third of the height spent on controls most reporters never
+ * touch, before they have seen a single vehicle -- and it was the main reason
+ * the selection card ended up below the fold. The count on the Filter button
+ * is what a collapsed control owes the reader: you can see that something is
+ * filtered without opening it.
+ */
+function FilterPanel({
+  locale,
+  operator,
+  type,
+  onOperator,
+  onType,
+  onDone,
+}: {
+  locale: CitizenLocale;
+  operator: string;
+  type: VehicleType | "all";
+  onOperator: (next: string) => void;
+  onType: (next: VehicleType | "all") => void;
+  onDone: () => void;
+}) {
+  const t = citizenCopy(locale);
+  return (
+    <div className="bg-card mx-4 mb-2 flex shrink-0 flex-col gap-3 rounded-lg border p-3">
+      <Field>
+        <FieldLabel htmlFor="citizen-operator">{t("map.operator")}</FieldLabel>
+        <NativeSelect
+          id="citizen-operator"
+          className="w-full"
+          value={operator}
+          onChange={(e) => onOperator(e.target.value)}
+        >
+          <NativeSelectOption value="all">
+            {t("map.allOperators")}
+          </NativeSelectOption>
+          {CITIZEN_OPERATORS.map((o) => (
+            <NativeSelectOption key={o} value={o}>
+              {o}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="citizen-type">{t("map.type")}</FieldLabel>
+        <NativeSelect
+          id="citizen-type"
+          className="w-full"
+          value={type}
+          onChange={(e) => onType(e.target.value as VehicleType | "all")}
+        >
+          <NativeSelectOption value="all">
+            {t("map.allTypes")}
+          </NativeSelectOption>
+          {/*
+            `vehicle.types`, not `map.types`. Production carries both, and in
+            English they disagree: the map filter reads "bicycle, cargo bike"
+            in lower case while the vehicle card reads "Bike, Cargo bike", so
+            the same thing is labelled two ways one tap apart. German has the
+            capitalised set in both. The copy tree keeps `map.types` as
+            captured; this picks the set that is consistent across locales.
+          */}
+          {VEHICLE_TYPES.map((v) => (
+            <NativeSelectOption key={v} value={v}>
+              {t(`vehicle.types.${v}`)}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Field>
+      <Button
+        type="button"
+        variant="outline"
+        className="min-h-11"
+        onClick={onDone}
+      >
+        {t("map.filterDone")}
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * The map, filling the screen, with its own controls over it.
+ *
+ * Production drew a 256px map inside a scrolling column, under a title, two
+ * buttons and two selects, and put the selected vehicle's card BELOW it. On a
+ * 390x812 phone that card opened off-screen, so tapping a dot looked exactly
+ * like tapping nothing: the one piece of feedback the gesture produced was in
+ * the part of the page you could not see. The card floats over the map now,
+ * and the map is the screen.
+ */
+function MapPane({
+  locale,
+  visible,
+  onReport,
+}: {
+  locale: CitizenLocale;
+  visible: CitizenVehicle[];
+  onReport: (vehicle: CitizenVehicle) => void;
+}) {
+  const t = citizenCopy(locale);
+  const [map, setMap] = React.useState<MapLibreMap | null>(null);
+  const [selected, setSelected] = React.useState<CitizenVehicle | null>(null);
+  const [locate, setLocate] = React.useState<LocateState>("idle");
+
   // Colour by operator: it is the axis a resident filters on, and the one a
   // city asks about. `resolveStyles` hands out the house palette in value
   // order, so the same operator is the same colour wherever it is drawn.
-  const styles = React.useMemo(
-    () => resolveStyles([...CITIZEN_OPERATORS]),
-    [],
-  );
+  const styles = React.useMemo(() => resolveStyles([...CITIZEN_OPERATORS]), []);
   const points = React.useMemo(
     () => visible.map((v) => ({ position: v.position, category: v.operator })),
     [visible],
@@ -383,22 +719,143 @@ function MapView({
     id: POINTS_ID,
   });
 
+  // A vehicle filtered out from under the selection must not stay selected:
+  // the card would offer a report on a dot that is no longer drawn.
+  React.useEffect(() => {
+    setSelected((current) =>
+      current && visible.some((v) => v.id === current.id) ? current : null,
+    );
+  }, [visible]);
+
+  /* ---- the ring round the chosen dot ----------------------------------- */
+
+  /**
+   * Created once per map; the data is set by the effect below.
+   *
+   * Two effects rather than one: a single effect keyed on the selection would
+   * tear the layer down and rebuild it on every tap, which flickers and loses
+   * the layer's place in the style's draw order.
+   */
+  React.useEffect(() => {
+    if (!map) return;
+    // No hex fallback: the stroke is the theme's primary, or there is no ring.
+    const stroke = resolveCssColor("--primary");
+    if (!stroke) return;
+    try {
+      if (!map.getSource(SELECTED_SOURCE)) {
+        map.addSource(SELECTED_SOURCE, {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+      }
+      if (!map.getLayer(SELECTED_LAYER)) {
+        map.addLayer(
+          {
+            id: SELECTED_LAYER,
+            type: "circle",
+            source: SELECTED_SOURCE,
+            paint: {
+              "circle-radius": 15,
+              // Fully transparent rather than unset: a circle layer always
+              // paints a fill, and the default is an opaque blue disc that
+              // would hide the dot it is meant to point at.
+              "circle-color": "rgba(0, 0, 0, 0)",
+              "circle-stroke-width": 3,
+              "circle-stroke-color": stroke,
+            },
+          },
+          // Under the dots, so the dot stays legible inside its own ring. The
+          // dots layer is added asynchronously once the style settles, so it
+          // may not exist yet -- in which case the ring goes on top, which is
+          // harmless: its fill is transparent and its radius clears the dot.
+          map.getLayer(DOTS_LAYER) ? DOTS_LAYER : undefined,
+        );
+      }
+    } catch {
+      /* the style is not ready, or the map is being torn down */
+    }
+    return () => {
+      try {
+        if (map.getLayer(SELECTED_LAYER)) map.removeLayer(SELECTED_LAYER);
+        if (map.getSource(SELECTED_SOURCE)) map.removeSource(SELECTED_SOURCE);
+      } catch {
+        /* the map is gone */
+      }
+    };
+  }, [map]);
+
+  React.useEffect(() => {
+    if (!map) return;
+    // Lift the chosen dot clear of the card that is about to cover it.
+    if (selected) {
+      map.easeTo({
+        center: selected.position,
+        offset: [0, SELECTED_OFFSET_Y],
+        duration: 300,
+      });
+    }
+    try {
+      const source = map.getSource(SELECTED_SOURCE) as
+        | GeoJSONSource
+        | undefined;
+      source?.setData({
+        type: "FeatureCollection",
+        features: selected
+          ? [
+              {
+                type: "Feature",
+                geometry: { type: "Point", coordinates: selected.position },
+                properties: {},
+              },
+            ]
+          : [],
+      });
+    } catch {
+      /* the source is not added yet; the effect above will catch up */
+    }
+  }, [map, selected]);
+
+  /* ---- selection -------------------------------------------------------- */
+
   // Selection by hit-test rather than by binding to the layer: the layer is
   // added asynchronously once the style settles, and binding a listener to a
   // layer id that does not exist yet never fires.
   React.useEffect(() => {
     if (!map) return;
 
-    /** The dot under this point, or null for a click on bare map. */
+    /** The dot under this point, or null for a tap on bare map. */
     const vehicleAt = (point: MapMouseEvent["point"]) => {
       let hits;
       try {
-        hits = map.queryRenderedFeatures(point, { layers: [DOTS_LAYER] });
+        hits = map.queryRenderedFeatures(
+          [
+            [point.x - HIT_PADDING, point.y - HIT_PADDING],
+            [point.x + HIT_PADDING, point.y + HIT_PADDING],
+          ],
+          { layers: [DOTS_LAYER] },
+        );
       } catch {
         return null; // the layer is not on the map yet
       }
-      const feature = hits?.[0];
-      if (!feature || feature.geometry.type !== "Point") return null;
+      if (!hits || hits.length === 0) return null;
+
+      // A box can return several dots, and the order it returns them in is
+      // not distance from the tap. Pick the closest in screen space, which is
+      // the one the thumb was aiming at.
+      let hit: [number, number] | null = null;
+      let hitDistance = Infinity;
+      for (const feature of hits) {
+        if (feature.geometry.type !== "Point") continue;
+        const coordinates = feature.geometry.coordinates as [number, number];
+        const projected = map.project(coordinates);
+        const distance =
+          (projected.x - point.x) ** 2 + (projected.y - point.y) ** 2;
+        if (distance < hitDistance) {
+          hitDistance = distance;
+          hit = coordinates;
+        }
+      }
+      if (!hit) return null;
 
       // Nearest, not equal. MapLibre re-encodes the GeoJSON through its own
       // vector tiler, which quantises coordinates to the tile grid -- what
@@ -407,7 +864,7 @@ function MapView({
       // nothing, which is a silent miss: the dot is plainly there, the click
       // lands on it, and the card simply never opens. A dot was hit, so the
       // closest vehicle to it is the one meant.
-      const [lon, lat] = feature.geometry.coordinates as [number, number];
+      const [lon, lat] = hit;
       let best: CitizenVehicle | null = null;
       let bestDistance = Infinity;
       for (const vehicle of visible) {
@@ -423,13 +880,15 @@ function MapView({
     };
 
     const onClick = (event: MapMouseEvent) => {
-      const hit = vehicleAt(event.point);
-      if (hit) setSelected(hit);
+      // A tap on bare map clears, rather than leaving the last card up: the
+      // card covers part of the map, so dismissing it has to be possible
+      // without hunting for the close button.
+      setSelected(vehicleAt(event.point));
     };
 
-    // Without this the dots look like decoration. A pointer is the only hint
-    // on a map that a mark is a control, and the phone frame is shown on a
-    // desktop docs page where there is a cursor to change.
+    // The pointer is the only hint on a map that a mark is a control, and the
+    // phone frame is shown on a desktop docs page where there is a cursor to
+    // change. A real phone has none, which is what `map.tapHint` is for.
     const onMove = (event: MapMouseEvent) => {
       map.getCanvas().style.cursor = vehicleAt(event.point) ? "pointer" : "";
     };
@@ -443,149 +902,221 @@ function MapView({
     };
   }, [map, visible]);
 
+  /* ---- locate ----------------------------------------------------------- */
+
+  /**
+   * Production shipped this control with no handler at all -- it looked like
+   * the way to centre the map on yourself and did nothing when pressed. All
+   * three outcome strings were already written and unused, so all three are
+   * wired: a dead control is worse than no control.
+   */
+  const locateMe = () => {
+    if (!map || typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocate("failed");
+      return;
+    }
+    setLocate("locating");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocate("idle");
+        map.easeTo({
+          center: [position.coords.longitude, position.coords.latitude],
+          zoom: 15,
+        });
+      },
+      (error) =>
+        setLocate(error.code === error.PERMISSION_DENIED ? "denied" : "failed"),
+      { timeout: 8_000 },
+    );
+  };
+
+  const locateMessage =
+    locate === "locating"
+      ? t("map.locating")
+      : locate === "denied"
+        ? t("map.locateDenied")
+        : locate === "failed"
+          ? t("map.locateUnavailable")
+          : null;
+
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={onList}>
-          <List />
-          {t("map.listView")}
+    <div className="relative min-h-0 flex-1">
+      {/*
+        No `cooperativeGesturesBelow`. It exists so an embedded map does not
+        swallow the page scroll -- but this map IS the screen and has no scroll
+        to protect, so below 1024px it was claiming every one-finger pan and
+        telling the reporter to use two fingers to move a full-screen map.
+      */}
+      <MapCanvas
+        className="absolute inset-0"
+        workerUrl={WORKER_URL}
+        center={CITIZEN_CENTER}
+        zoom={14.4}
+        onStyleReady={setMap}
+        aria-label={t("map.label")}
+        fallback={
+          <div className="text-muted-foreground flex h-full items-center justify-center p-4 text-center text-xs">
+            {t("map.loading")}
+          </div>
+        }
+      />
+
+      <div className="absolute top-2 right-2 flex flex-col gap-1">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="bg-background size-11"
+          aria-label={t("map.zoomIn")}
+          onClick={() => map?.zoomIn()}
+        >
+          <Plus />
         </Button>
-        <Button variant="outline" size="sm">
-          <Crosshair />
-          {t("map.locate")}
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="bg-background size-11"
+          aria-label={t("map.zoomOut")}
+          onClick={() => map?.zoomOut()}
+        >
+          <Minus />
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="bg-background size-11"
+          aria-label={t("map.locate")}
+          onClick={locateMe}
+        >
+          {locate === "locating" ? <Spinner /> : <Crosshair />}
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Field>
-          <FieldLabel htmlFor="citizen-operator">{t("map.operator")}</FieldLabel>
-          <NativeSelect
-            id="citizen-operator"
-            className="w-full"
-            size="sm"
-            value={operator}
-            onChange={(e) => setOperator(e.target.value)}
-          >
-            <NativeSelectOption value="all">
-              {t("map.allOperators")}
-            </NativeSelectOption>
-            {CITIZEN_OPERATORS.map((o) => (
-              <NativeSelectOption key={o} value={o}>
-                {o}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="citizen-type">{t("map.type")}</FieldLabel>
-          <NativeSelect
-            id="citizen-type"
-            className="w-full"
-            size="sm"
-            value={type}
-            onChange={(e) => setType(e.target.value as VehicleType | "all")}
-          >
-            <NativeSelectOption value="all">
-              {t("map.allTypes")}
-            </NativeSelectOption>
-            {/*
-              `vehicle.types`, not `map.types`. Production carries both, and in
-              English they disagree: the map filter reads "bicycle, cargo bike"
-              in lower case while the vehicle card reads "Bike, Cargo bike", so
-              the same thing is labelled two ways one tap apart. German has the
-              capitalised set in both. The copy tree keeps `map.types` as
-              captured; this picks the set that is consistent across locales.
-            */}
-            {VEHICLE_TYPES.map((v) => (
-              <NativeSelectOption key={v} value={v}>
-                {t(`vehicle.types.${v}`)}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Field>
-      </div>
-
-      <div className="relative h-64 overflow-hidden rounded-lg border">
-        <MapCanvas
-          className="absolute inset-0"
-          workerUrl={WORKER_URL}
-          center={CITIZEN_CENTER}
-          zoom={14.4}
-          cooperativeGesturesBelow={1024}
-          onStyleReady={setMap}
-          aria-label={t("map.label")}
-          fallback={
-            <div className="text-muted-foreground flex h-full items-center justify-center p-4 text-center text-xs">
-              {t("map.loading")}
-            </div>
-          }
-        />
-      </div>
-
-      {selected ? (
-        <div className="flex flex-col gap-2">
-          <VehicleSummary vehicle={selected} locale={locale} />
-          <Button
-            disabled={selected.reported}
-            onClick={() => onReport(selected)}
-          >
-            {selected.reported
-              ? t("vehicle.locked", {
-                  time: formatLockTime(selected.lockedForMinutes ?? 0),
-                })
-              : t("vehicle.report")}
-          </Button>
+      {locateMessage ? (
+        <div
+          role="status"
+          className="bg-background absolute top-2 left-2 flex max-w-[14rem] items-start gap-1 rounded-md border p-2 text-xs shadow-sm"
+        >
+          <span className="flex-1">{locateMessage}</span>
+          {locate === "locating" ? null : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("vehicle.close")}
+              onClick={() => setLocate("idle")}
+            >
+              <X />
+            </Button>
+          )}
         </div>
       ) : null}
+
+      {/*
+        bottom-10, not bottom-2: MapLibre's compact attribution badge sits
+        bottom-right, and a card docked to the edge covers the credit the tiles
+        are served under. 40px is the number the map workspace settled on for
+        the same reason.
+      */}
+      {selected ? (
+        <div className="bg-card absolute inset-x-2 bottom-10 flex flex-col gap-2 rounded-lg border p-3 shadow-lg">
+          <div className="flex items-start justify-between gap-2">
+            <VehicleSummary
+              vehicle={selected}
+              locale={locale}
+              bare
+              className="min-w-0 flex-1"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("vehicle.close")}
+              onClick={() => setSelected(null)}
+            >
+              <X />
+            </Button>
+          </div>
+          {/*
+            Said here rather than on the next screen. The photo used to be a
+            surprise: you chose a vehicle, pressed Report, and only then met a
+            camera you had to satisfy before the form would open.
+          */}
+          {!selected.reported && photoRequired("map") ? (
+            <p className="text-muted-foreground text-xs">
+              {t("photo.required")}
+            </p>
+          ) : null}
+          <ReportAction
+            vehicle={selected}
+            locale={locale}
+            onReport={() => onReport(selected)}
+          />
+        </div>
+      ) : (
+        <p className="bg-background/90 text-muted-foreground absolute inset-x-2 bottom-10 rounded-md px-2 py-1 text-center text-xs">
+          {t("map.tapHint")}
+        </p>
+      )}
+
+      {/* The tap is confirmed to a screen reader too, not only on screen. */}
+      <div role="status" className="sr-only">
+        {selected
+          ? t("vehicle.selected", {
+              operator: selected.operator,
+              type: t(`vehicle.types.${selected.type}`),
+              id: selected.id,
+            })
+          : ""}
+      </div>
     </div>
   );
 }
 
-function ListView({
+/**
+ * The list, and the search that narrows it.
+ *
+ * Production's search matched the WHOLE id, exactly, and only when the form
+ * was submitted -- with no submit button on screen. Typing `LIME` found
+ * nothing, which is indistinguishable from `LIME` not existing. It filters as
+ * you type now, across the id and the operator, and across every vehicle
+ * rather than only the five near ones: a search whose job is to find one
+ * specific vehicle cannot be scoped to the ones you could already see.
+ */
+function ListPane({
   locale,
-  notLive,
-  qrNotFound,
+  visible,
   onReport,
   onUnlisted,
 }: {
   locale: CitizenLocale;
-  notLive?: boolean;
-  qrNotFound?: boolean;
+  visible: CitizenVehicle[];
   onReport: (vehicle: CitizenVehicle, method: FindMethod) => void;
   onUnlisted: () => void;
 }) {
   const t = citizenCopy(locale);
   const [query, setQuery] = React.useState("");
-  const [found, setFound] = React.useState<CitizenVehicle | null>(null);
-  const [missed, setMissed] = React.useState(false);
-  const near = React.useMemo(() => vehiclesNear(), []);
+  const [expanded, setExpanded] = React.useState<string | null>(null);
 
-  const search = (event: React.FormEvent) => {
-    event.preventDefault();
-    const term = query.trim().toUpperCase();
-    if (!term) return;
-    const hit = SAMPLE_VEHICLES.find((v) => v.id.toUpperCase() === term) ?? null;
-    setFound(hit);
-    setMissed(!hit);
-  };
+  const term = query.trim().toUpperCase();
+  const searching = term.length > 0;
+
+  const rows = React.useMemo(() => {
+    if (!searching) return vehiclesNear(visible);
+    return visible.filter(
+      (v) =>
+        v.id.toUpperCase().includes(term) ||
+        v.operator.toUpperCase().includes(term),
+    );
+  }, [searching, term, visible]);
 
   return (
-    <div className="flex flex-col gap-4">
-      {notLive ? (
-        <Alert variant="destructive">
-          <AlertDescription>
-            {t("report.failure.not_in_live_data")}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {qrNotFound ? (
-        <Alert variant="destructive">
-          <AlertDescription>{t("vehicle.errors.notFound")}</AlertDescription>
-        </Alert>
-      ) : null}
-
+    <div className="flex flex-col gap-4 px-4 pb-4">
       <search>
-        <form onSubmit={search} className="flex flex-col gap-2">
+        {/* The form only stops Enter reloading the page; filtering is live. */}
+        <form onSubmit={(event) => event.preventDefault()}>
           <Field>
             <FieldLabel htmlFor="citizen-search">
               {t("vehicle.search.label")}
@@ -600,62 +1131,75 @@ function ListView({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <FieldDescription>{t("vehicle.search.hint")}</FieldDescription>
+            <FieldDescription>{t("vehicle.search.hintLive")}</FieldDescription>
           </Field>
         </form>
       </search>
 
-      {missed ? (
-        <div className="flex flex-col gap-2">
-          <Alert variant="destructive">
-            <AlertDescription>{t("vehicle.errors.notFound")}</AlertDescription>
-          </Alert>
-          <Button variant="outline" onClick={onUnlisted}>
-            {t("unlisted.link")}
-          </Button>
-        </div>
-      ) : null}
-
-      {found ? (
-        <div className="flex flex-col gap-2">
-          <VehicleSummary vehicle={found} locale={locale} />
-          <Button
-            disabled={found.reported}
-            onClick={() => onReport(found, "search")}
-          >
-            {found.reported
-              ? t("vehicle.locked", {
-                  time: formatLockTime(found.lockedForMinutes ?? 0),
-                })
-              : t("vehicle.report")}
-          </Button>
-        </div>
-      ) : null}
-
-      <Separator />
-
-      <section aria-labelledby="citizen-near" className="flex flex-col gap-2">
-        <h2 id="citizen-near" className="text-sm font-semibold">
-          {t("vehicle.near.title")}
-        </h2>
-        <p className="text-muted-foreground text-sm">
-          {t("vehicle.near.hint", { count: MAX_NEAR })}
+      <section
+        aria-labelledby={searching ? undefined : "citizen-near"}
+        aria-label={searching ? t("vehicle.search.label") : undefined}
+        className="flex flex-col gap-2"
+      >
+        {/*
+          The count, not the list. Making the list itself a live region reads
+          every row out again on every keystroke, which is what a reporter
+          typing a six-character id would hear six times.
+        */}
+        <p role="status" className="sr-only">
+          {searching ? t("vehicle.search.results", { n: rows.length }) : ""}
         </p>
-        {near.length === 0 ? (
-          <p className="text-muted-foreground text-sm">
-            {t("vehicle.near.empty")}
-          </p>
+        {searching ? null : (
+          <>
+            <h2 id="citizen-near" className="text-sm font-semibold">
+              {t("vehicle.near.title")}
+            </h2>
+            <p className="text-muted-foreground text-sm">
+              {t("vehicle.near.hint", { count: MAX_NEAR })}
+            </p>
+          </>
+        )}
+
+        {rows.length === 0 ? (
+          searching ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                {t("vehicle.errors.notFound")}
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              {t("vehicle.near.empty")}
+            </p>
+          )
         ) : (
           <ul role="list" className="flex flex-col gap-2">
-            {near.map((vehicle) => (
-              <li key={vehicle.id}>
+            {rows.map((vehicle) => (
+              <li key={vehicle.id} className="flex flex-col gap-1">
                 <Item
+                  // Outline, not the default transparent border: every row
+                  // here is a control that goes straight to a report, and an
+                  // unbordered row reads as a line of text you happen to be
+                  // able to press.
+                  variant="outline"
                   render={
                     <button
                       type="button"
-                      disabled={vehicle.reported}
-                      onClick={() => onReport(vehicle, "list")}
-                      className="min-h-11 w-full text-left disabled:opacity-60"
+                      // A reported vehicle discloses why instead of
+                      // navigating: there is nothing to report, and
+                      // `aria-expanded` is what tells a screen reader that
+                      // this row behaves differently from its neighbours.
+                      aria-expanded={
+                        vehicle.reported ? expanded === vehicle.id : undefined
+                      }
+                      onClick={() =>
+                        vehicle.reported
+                          ? setExpanded((open) =>
+                              open === vehicle.id ? null : vehicle.id,
+                            )
+                          : onReport(vehicle, searching ? "search" : "list")
+                      }
+                      className="min-h-11 w-full text-left"
                     />
                   }
                 >
@@ -663,7 +1207,8 @@ function ListView({
                     <ItemTitle>{vehicle.operator}</ItemTitle>
                     <ItemDescription>
                       {t(`vehicle.types.${vehicle.type}`)} ·{" "}
-                      {formatDistance(vehicle.distanceM)}
+                      {formatDistance(vehicle.distanceM)} ·{" "}
+                      <span className="font-mono">{vehicle.id}</span>
                     </ItemDescription>
                   </ItemContent>
                   {vehicle.reported ? (
@@ -672,11 +1217,20 @@ function ListView({
                     </StatusBadge>
                   ) : null}
                 </Item>
+                {vehicle.reported && expanded === vehicle.id ? (
+                  <p className="text-muted-foreground px-3 text-sm">
+                    {t("vehicle.openReport")}{" "}
+                    {t("vehicle.locked", {
+                      time: formatLockTime(vehicle.lockedForMinutes ?? 0),
+                    })}
+                  </p>
+                ) : null}
               </li>
             ))}
           </ul>
         )}
-        <Button variant="outline" onClick={onUnlisted}>
+
+        <Button variant="outline" className="min-h-11" onClick={onUnlisted}>
           {t("unlisted.link")}
         </Button>
       </section>
@@ -684,47 +1238,328 @@ function ListView({
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* Report: the photos and the details, on one screen                           */
+/* -------------------------------------------------------------------------- */
+
 /**
- * The photo step.
+ * Everything the report needs, in one screen.
  *
- * `FileDropzone` is the registry's upload affordance, but it is a desktop one:
- * "drop files here" means nothing on a phone, where the control opens the
- * camera roll. So this uses the plain file input the production app uses and
- * keeps the dropzone for the desktop workspaces.
+ * Production split this in two: a photo screen with a Continue button, then
+ * the form. The split bought nothing -- the photo rules are three lines of
+ * text and the reason is six options -- and cost every non-QR reporter a whole
+ * screen plus a Continue. Merged, the reason comes first because it is the
+ * only field most reports need, the camera is a camera rather than a file
+ * field, and Send is always on screen in a bar that does not scroll away.
  */
-function PhotoView({
+function ReportView({
   locale,
+  vehicle,
   method,
-  photos,
-  onPhotos,
-  onContinue,
+  onSent,
 }: {
   locale: CitizenLocale;
+  vehicle: CitizenVehicle | null;
   method: FindMethod;
-  photos: string[];
-  onPhotos: (next: string[]) => void;
-  onContinue: () => void;
+  onSent: (reportId: string) => void;
 }) {
   const t = citizenCopy(locale);
-  const required = photoRequired(method);
-  const full = photos.length >= MAX_PHOTOS;
-  const [tooMany, setTooMany] = React.useState(false);
+  const unlisted = method === "unlisted";
+  const photosRequired = photoRequired(method);
 
-  const add = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const [operator, setOperator] = React.useState("");
+  const [typedId, setTypedId] = React.useState("");
+  const [reason, setReason] = React.useState<ReportReason | "">("");
+  const [comment, setComment] = React.useState("");
+  const [commentOpen, setCommentOpen] = React.useState(false);
+  const [photos, setPhotos] = React.useState<Photo[]>([]);
+  const [trimmed, setTrimmed] = React.useState(false);
+  const [submitted, setSubmitted] = React.useState(false);
+  const [sending, setSending] = React.useState(false);
+
+  const operatorRef = React.useRef<HTMLSelectElement>(null);
+  const idRef = React.useRef<HTMLInputElement>(null);
+  const reasonRef = React.useRef<HTMLDivElement>(null);
+  const photoRef = React.useRef<HTMLButtonElement>(null);
+  const commentRef = React.useRef<HTMLTextAreaElement>(null);
+  const cameraInput = React.useRef<HTMLInputElement>(null);
+  const libraryInput = React.useRef<HTMLInputElement>(null);
+  const sendTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+
+  // The comment is required for "Other", so choosing it has to open the field
+  // rather than leave the requirement behind a disclosure nobody opened.
+  const commentRequired = reason === "other";
+  React.useEffect(() => {
+    if (commentRequired) setCommentOpen(true);
+  }, [commentRequired]);
+
+  /** Object URLs outlive React's render, so they are revoked by hand. */
+  const urls = React.useRef<string[]>([]);
+  React.useEffect(
+    () => () => {
+      for (const url of urls.current) URL.revokeObjectURL(url);
+      clearTimeout(sendTimer.current);
+    },
+    [],
+  );
+
+  const addPhotos = (event: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(event.target.files ?? []);
     event.target.value = "";
     if (picked.length === 0) return;
-    if (photos.length + picked.length > MAX_PHOTOS) {
-      setTooMany(true);
+    // Take what fits instead of refusing the batch. Picking seven photos used
+    // to add none of them and show an error, which punishes the reporter for
+    // the limit rather than applying it.
+    const room = Math.max(0, MAX_PHOTOS - photos.length);
+    const kept = picked.slice(0, room);
+    setTrimmed(kept.length < picked.length);
+    if (kept.length === 0) return;
+    const next = kept.map((file) => {
+      const url = URL.createObjectURL(file);
+      urls.current.push(url);
+      return { id: url, url };
+    });
+    setPhotos([...photos, ...next]);
+  };
+
+  const removePhoto = (id: string) => {
+    const gone = photos.find((photo) => photo.id === id);
+    if (gone) URL.revokeObjectURL(gone.url);
+    setTrimmed(false);
+    setPhotos(photos.filter((photo) => photo.id !== id));
+  };
+
+  const operatorError = submitted && unlisted && !operator;
+  const idError = submitted && unlisted && !typedId.trim();
+  const reasonError = submitted && !reason;
+  const photoError = submitted && photosRequired && photos.length === 0;
+  const commentError = submitted && commentRequired && !comment.trim();
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    setSubmitted(true);
+
+    // Focus the first thing that is wrong, in the order it appears on screen.
+    // Production showed a summary alert and left focus on Send, so a
+    // screen-reader user heard that something was invalid and had to go
+    // looking for it.
+    if (unlisted && !operator) {
+      operatorRef.current?.focus();
       return;
     }
-    setTooMany(false);
-    onPhotos([...photos, ...picked.map((f, i) => `${f.name}-${photos.length + i}`)]);
+    if (unlisted && !typedId.trim()) {
+      idRef.current?.focus();
+      return;
+    }
+    if (!reason) {
+      // ChoiceCard does not forward a ref, so the group's first radio is found
+      // in the DOM. Base UI renders a radio as a button carrying the role.
+      reasonRef.current
+        ?.querySelector<HTMLElement>('[role="radio"], input[type="radio"]')
+        ?.focus();
+      return;
+    }
+    if (photosRequired && photos.length === 0) {
+      photoRef.current?.focus();
+      return;
+    }
+    if (reason === "other" && !comment.trim()) {
+      setCommentOpen(true);
+      commentRef.current?.focus();
+      return;
+    }
+
+    setSending(true);
+    sendTimer.current = setTimeout(() => onSent(sampleReportId()), SEND_DELAY);
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold">{t("photo.title")}</h2>
+    <form noValidate onSubmit={submit} className="flex flex-1 flex-col">
+      <div className="flex flex-col gap-4 px-4 pt-3 pb-4">
+        {unlisted ? (
+          <>
+            <Field data-invalid={operatorError || undefined}>
+              <FieldLabel htmlFor="citizen-unlisted-operator">
+                {t("vehicle.operator")}
+              </FieldLabel>
+              <NativeSelect
+                ref={operatorRef}
+                id="citizen-unlisted-operator"
+                className="w-full"
+                value={operator}
+                aria-invalid={operatorError || undefined}
+                onChange={(e) => setOperator(e.target.value)}
+              >
+                <NativeSelectOption value="">
+                  {t("unlisted.operatorPlaceholder")}
+                </NativeSelectOption>
+                {CITIZEN_OPERATORS.map((o) => (
+                  <NativeSelectOption key={o} value={o}>
+                    {o}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+              {operatorError ? (
+                <FieldError>{t("unlisted.errors.operatorRequired")}</FieldError>
+              ) : null}
+            </Field>
+
+            <Field data-invalid={idError || undefined}>
+              <FieldLabel htmlFor="citizen-typed-id">
+                {t("report.vehicle")}
+              </FieldLabel>
+              <Input
+                ref={idRef}
+                id="citizen-typed-id"
+                value={typedId}
+                autoCapitalize="characters"
+                spellCheck={false}
+                aria-invalid={idError || undefined}
+                onChange={(e) => setTypedId(e.target.value)}
+              />
+              <FieldDescription>{t("report.vehicleHint")}</FieldDescription>
+              {idError ? (
+                <FieldError>{t("report.errors.vehicleRequired")}</FieldError>
+              ) : null}
+            </Field>
+          </>
+        ) : vehicle ? (
+          <VehicleSummary vehicle={vehicle} locale={locale} />
+        ) : null}
+
+        <Field data-invalid={reasonError || undefined}>
+          <FieldLabel htmlFor="citizen-reason">{t("report.reason")}</FieldLabel>
+          <div ref={reasonRef}>
+            <ChoiceCardGroup
+              aria-label={t("report.reason")}
+              value={reason}
+              onValueChange={(value) => setReason(value as ReportReason)}
+            >
+              {REPORT_REASONS.map((value) => (
+                <ChoiceCard
+                  key={value}
+                  value={value}
+                  title={t(`report.reasons.${value}`)}
+                />
+              ))}
+            </ChoiceCardGroup>
+          </div>
+          {reasonError ? (
+            <FieldError>{t("report.errors.reasonRequired")}</FieldError>
+          ) : null}
+        </Field>
+
+        <PhotoField
+          locale={locale}
+          photos={photos}
+          required={photosRequired}
+          trimmed={trimmed}
+          invalid={photoError}
+          takeRef={photoRef}
+          cameraInput={cameraInput}
+          libraryInput={libraryInput}
+          onAdd={addPhotos}
+          onRemove={removePhoto}
+        />
+
+        {commentOpen ? (
+          <Field data-invalid={commentError || undefined}>
+            <FieldLabel htmlFor="citizen-comment">
+              {t("report.comment")}
+            </FieldLabel>
+            <Textarea
+              ref={commentRef}
+              id="citizen-comment"
+              rows={3}
+              maxLength={MAX_COMMENT}
+              value={comment}
+              aria-invalid={commentError || undefined}
+              onChange={(e) => setComment(e.target.value)}
+            />
+            <FieldDescription>
+              {t("report.commentHint")}{" "}
+              {t("report.count", { n: comment.length, max: MAX_COMMENT })}
+            </FieldDescription>
+            {commentError ? (
+              <FieldError>{t("report.errors.commentRequired")}</FieldError>
+            ) : null}
+          </Field>
+        ) : (
+          // Collapsed until wanted. It is optional for five of the six reasons,
+          // and a 500-character box between the reason and Send reads as
+          // something that has to be filled in.
+          <Button
+            type="button"
+            variant="ghost"
+            className="min-h-11 self-start"
+            onClick={() => setCommentOpen(true)}
+          >
+            {t("report.addComment")}
+          </Button>
+        )}
+      </div>
+
+      {/*
+        Send does not scroll away. With the photos, six reasons and a comment on
+        one screen the button would otherwise sit two screenfuls below the first
+        thing you decide.
+      */}
+      <div className="bg-background sticky bottom-0 mt-auto border-t px-4 py-3">
+        <Button type="submit" className="min-h-11 w-full" disabled={sending}>
+          {sending ? <Spinner /> : null}
+          {sending ? t("report.sending") : t("report.send")}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * The camera, then the library, then what you took.
+ *
+ * Production used one `<input type="file">` labelled "Add photos", which is a
+ * desktop control: on a phone the thing you want is a button that opens the
+ * camera, and the picker second. `FileDropzone` is the registry's upload
+ * affordance and is not it -- "drop files here" means nothing on a phone --
+ * which is why this draws its own.
+ */
+function PhotoField({
+  locale,
+  photos,
+  required,
+  trimmed,
+  invalid,
+  takeRef,
+  cameraInput,
+  libraryInput,
+  onAdd,
+  onRemove,
+}: {
+  locale: CitizenLocale;
+  photos: Photo[];
+  required: boolean;
+  trimmed: boolean;
+  invalid: boolean;
+  takeRef: React.RefObject<HTMLButtonElement | null>;
+  cameraInput: React.RefObject<HTMLInputElement | null>;
+  libraryInput: React.RefObject<HTMLInputElement | null>;
+  onAdd: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onRemove: (id: string) => void;
+}) {
+  const t = citizenCopy(locale);
+  const full = photos.length >= MAX_PHOTOS;
+
+  return (
+    <div
+      role="group"
+      aria-labelledby="citizen-photo-heading"
+      className="flex flex-col gap-3"
+    >
+      <h2 id="citizen-photo-heading" className="text-sm font-semibold">
+        {t("photo.title")}
+      </h2>
 
       <div
         id="citizen-photo-warning"
@@ -742,23 +1577,70 @@ function PhotoView({
         {required ? t("photo.required") : t("photo.optional")}
       </p>
 
-      <Field>
-        <FieldLabel htmlFor="citizen-photo">{t("photo.add")}</FieldLabel>
-        <Input
-          id="citizen-photo"
-          type="file"
-          accept="image/*"
-          multiple
+      {/*
+        Hidden inputs driven by the buttons. `capture="environment"` is what
+        makes the first one the camera rather than the picker; both accept
+        several files so a reporter can add two angles in one go.
+      */}
+      <input
+        ref={cameraInput}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        multiple
+        tabIndex={-1}
+        aria-hidden
+        className="hidden"
+        onChange={onAdd}
+      />
+      <input
+        ref={libraryInput}
+        type="file"
+        accept="image/*"
+        multiple
+        tabIndex={-1}
+        aria-hidden
+        className="hidden"
+        onChange={onAdd}
+      />
+
+      <div className="flex flex-col gap-2">
+        <Button
+          ref={takeRef}
+          type="button"
+          variant="outline"
+          className="min-h-11"
           disabled={full}
           aria-describedby="citizen-photo-warning citizen-photo-requirement"
-          onChange={add}
-        />
-      </Field>
+          onClick={() => cameraInput.current?.click()}
+        >
+          <Camera />
+          {t("photo.take")}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="min-h-11"
+          disabled={full}
+          onClick={() => libraryInput.current?.click()}
+        >
+          <ImagePlus />
+          {t("photo.choose")}
+        </Button>
+      </div>
 
-      {tooMany ? (
+      {trimmed ? (
+        <Alert>
+          <AlertDescription>
+            {t("photo.trimmed", { max: MAX_PHOTOS })}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {invalid ? (
         <Alert variant="destructive">
           <AlertDescription>
-            {t("photo.failure.too_many", { max: MAX_PHOTOS })}
+            {t("report.failure.photo_required")}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -768,26 +1650,26 @@ function PhotoView({
           <p className="text-sm">
             {t("photo.count", { n: photos.length, max: MAX_PHOTOS })}
           </p>
-          <ul className="flex flex-col gap-2">
+          {/* The photo itself, not its filename: a reporter checks that the
+              problem is in frame, which only the image can answer. */}
+          <ul role="list" className="grid grid-cols-3 gap-2">
             {photos.map((photo, index) => (
-              <li
-                key={photo}
-                className="flex items-center justify-between gap-2"
-              >
-                <span className="flex min-w-0 items-center gap-2 text-sm">
-                  <ImagePlus className="text-muted-foreground size-4 shrink-0" aria-hidden />
-                  <span className="truncate">
-                    {t("photo.added", { n: index + 1 })}
-                  </span>
-                </span>
+              <li key={photo.id} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element -- a
+                    blob URL from the camera has no intrinsic size to give
+                    next/image, and nothing for it to optimise. */}
+                <img
+                  src={photo.url}
+                  alt={t("photo.added", { n: index + 1 })}
+                  className="aspect-square w-full rounded-md border object-cover"
+                />
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="sm"
+                  variant="secondary"
+                  size="icon-sm"
+                  className="absolute top-1 right-1"
                   aria-label={t("photo.remove", { n: index + 1 })}
-                  onClick={() =>
-                    onPhotos(photos.filter((_, i) => i !== index))
-                  }
+                  onClick={() => onRemove(photo.id)}
                 >
                   <X />
                 </Button>
@@ -796,153 +1678,23 @@ function PhotoView({
           </ul>
         </>
       ) : null}
-
-      <Button disabled={required && photos.length === 0} onClick={onContinue}>
-        {t("photo.continue")}
-      </Button>
     </div>
   );
 }
 
-function FormView({
-  locale,
-  vehicle,
-  method,
-  onSent,
-}: {
-  locale: CitizenLocale;
-  vehicle: CitizenVehicle | null;
-  method: FindMethod;
-  onSent: (reportId: string) => void;
-}) {
-  const t = citizenCopy(locale);
-  const unlisted = method === "unlisted";
-  const [operator, setOperator] = React.useState("");
-  const [typedId, setTypedId] = React.useState("");
-  const [reason, setReason] = React.useState<ReportReason | "">("");
-  const [comment, setComment] = React.useState("");
-  const [submitted, setSubmitted] = React.useState(false);
+/* -------------------------------------------------------------------------- */
+/* Done                                                                        */
+/* -------------------------------------------------------------------------- */
 
-  const operatorError = submitted && unlisted && !operator;
-  const idError = submitted && unlisted && !typedId.trim();
-  const reasonError = submitted && !reason;
-  const commentError = submitted && reason === "other" && !comment.trim();
-  const invalid = operatorError || idError || reasonError || commentError;
-
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault();
-    setSubmitted(true);
-    if (
-      (unlisted && (!operator || !typedId.trim())) ||
-      !reason ||
-      (reason === "other" && !comment.trim())
-    ) {
-      return;
-    }
-    onSent(sampleReportId());
-  };
-
-  return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-4">
-      {unlisted ? (
-        <>
-          <Field data-invalid={operatorError || undefined}>
-            <FieldLabel htmlFor="citizen-unlisted-operator">
-              {t("vehicle.operator")}
-            </FieldLabel>
-            <NativeSelect
-              id="citizen-unlisted-operator"
-              className="w-full"
-              value={operator}
-              aria-invalid={operatorError || undefined}
-              onChange={(e) => setOperator(e.target.value)}
-            >
-              <NativeSelectOption value="">
-                {t("unlisted.operatorPlaceholder")}
-              </NativeSelectOption>
-              {CITIZEN_OPERATORS.map((o) => (
-                <NativeSelectOption key={o} value={o}>
-                  {o}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-            {operatorError ? (
-              <FieldError>{t("unlisted.errors.operatorRequired")}</FieldError>
-            ) : null}
-          </Field>
-
-          <Field data-invalid={idError || undefined}>
-            <FieldLabel htmlFor="citizen-typed-id">
-              {t("report.vehicle")}
-            </FieldLabel>
-            <Input
-              id="citizen-typed-id"
-              value={typedId}
-              autoCapitalize="characters"
-              spellCheck={false}
-              aria-invalid={idError || undefined}
-              onChange={(e) => setTypedId(e.target.value)}
-            />
-            <FieldDescription>{t("report.vehicleHint")}</FieldDescription>
-            {idError ? (
-              <FieldError>{t("report.errors.vehicleRequired")}</FieldError>
-            ) : null}
-          </Field>
-        </>
-      ) : vehicle ? (
-        <VehicleSummary vehicle={vehicle} locale={locale} />
-      ) : null}
-
-      <Field data-invalid={reasonError || undefined}>
-        <FieldLabel htmlFor="citizen-reason">{t("report.reason")}</FieldLabel>
-        <ChoiceCardGroup
-          aria-label={t("report.reason")}
-          value={reason}
-          onValueChange={(value) => setReason(value as ReportReason)}
-        >
-          {REPORT_REASONS.map((value) => (
-            <ChoiceCard
-              key={value}
-              value={value}
-              title={t(`report.reasons.${value}`)}
-            />
-          ))}
-        </ChoiceCardGroup>
-        {reasonError ? (
-          <FieldError>{t("report.errors.reasonRequired")}</FieldError>
-        ) : null}
-      </Field>
-
-      <Field data-invalid={commentError || undefined}>
-        <FieldLabel htmlFor="citizen-comment">{t("report.comment")}</FieldLabel>
-        <Textarea
-          id="citizen-comment"
-          rows={3}
-          maxLength={MAX_COMMENT}
-          value={comment}
-          aria-invalid={commentError || undefined}
-          onChange={(e) => setComment(e.target.value)}
-        />
-        <FieldDescription>
-          {t("report.commentHint")}{" "}
-          {t("report.count", { n: comment.length, max: MAX_COMMENT })}
-        </FieldDescription>
-        {commentError ? (
-          <FieldError>{t("report.errors.commentRequired")}</FieldError>
-        ) : null}
-      </Field>
-
-      {invalid ? (
-        <Alert variant="destructive">
-          <AlertDescription>{t("report.failure.invalid")}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      <Button type="submit">{t("report.send")}</Button>
-    </form>
-  );
-}
-
+/**
+ * What happened, and what happens next.
+ *
+ * Production showed one static badge reading "Sent to the city". It carries
+ * six status strings and polls for them, so this screen is a history: the
+ * timeline says the report was received AND passed on, newest first, which is
+ * the order the Timeline pattern asks for. The reference gets a copy button
+ * because it is the one thing here a resident needs to keep.
+ */
 function DoneView({
   locale,
   reportId,
@@ -954,17 +1706,29 @@ function DoneView({
 }) {
   const t = citizenCopy(locale);
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 px-4 pt-3 pb-4">
       <p className="text-sm">{t("report.done.text")}</p>
-      <p className="text-sm">
-        {t("report.done.reference")}
-        <br />
-        <code className="font-mono text-sm break-all">{reportId}</code>
-      </p>
-      <div>
-        <StatusBadge tone="success">{t("report.status.sent")}</StatusBadge>
+
+      <Timeline>
+        <TimelineItem tone="success" title={t("report.status.sent")} />
+        <TimelineItem tone="neutral" title={t("report.status.received")} />
+      </Timeline>
+
+      <div className="flex flex-col gap-1 rounded-lg border p-3">
+        <p className="text-muted-foreground text-sm">
+          {t("report.done.reference")}
+        </p>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 font-mono text-sm break-all">{reportId}</code>
+          <CopyButton
+            value={reportId}
+            label={t("report.done.copy")}
+            copiedLabel={t("report.done.copied")}
+          />
+        </div>
       </div>
-      <Button variant="outline" onClick={onNew}>
+
+      <Button variant="outline" className="min-h-11" onClick={onNew}>
         {t("report.done.new")}
       </Button>
     </div>
@@ -980,52 +1744,74 @@ function DoneView({
  * without an account, on a phone.
  *
  * The one workspace in this registry that is not a desktop surface, so it is
- * the one shown in a `PhoneFrame`. The flow is production's nine views, and the
- * copy is production's own, both locales -- the toggle in the corner is part of
- * the design rather than a demo control, because a Munich resident meets this
- * screen in German and a visitor meets it in English.
+ * the one shown in a `PhoneFrame`. The copy is production's own, both locales
+ * -- the toggle in the header is part of the design rather than a demo
+ * control, because a Munich resident meets this screen in German and a visitor
+ * meets it in English.
+ *
+ * The FLOW is not production's. Reporting a vehicle found on the map took nine
+ * interactions there, two of them spent declining a prompt, and the one piece
+ * of feedback a tap on the map produced appeared below the fold. It takes six
+ * here. Every divergence is commented where it happens, and the five views --
+ * what used to be nine -- are documented on the `View` union.
  *
  * What is deliberately absent: there is no live vehicle feed and no security
  * check. Production gates every data call behind signed tiles and an AWS WAF
- * CAPTCHA, neither of which belongs in a component demo.
+ * CAPTCHA, neither of which belongs in a component demo. `notLive` and
+ * `qrNotFound` went with it -- they were props on the list view that nothing
+ * ever set, so the two error states they drew were unreachable.
  */
 export function CitizenWorkspace({ className }: { className?: string }) {
   const [locale, setLocale] = React.useState<CitizenLocale>("en");
-  const [view, setView] = React.useState<View>({ name: "start" });
-  const [scanned, setScanned] = React.useState(false);
-  const [photos, setPhotos] = React.useState<string[]>([]);
-
-  const t = citizenCopy(locale);
-  const other: CitizenLocale = locale === "de" ? "en" : "de";
-
-  /** Production's `f`: QR skips the photo step, everything else cannot. */
-  const toReport = (vehicle: CitizenVehicle, method: FindMethod) => {
-    setPhotos([]);
-    setView(
-      photoRequired(method)
-        ? { name: "photo", vehicle, method }
-        : { name: "form", vehicle, method, photos: [] },
-    );
-  };
 
   /**
-   * The QR prompt is shown once per session, then the chosen method is taken
-   * at its word -- production's `l` flag. Asking a second time reads as the
-   * app not having listened.
+   * A stack, not a view.
+   *
+   * Production hard-coded each screen's Back target, and three of them were
+   * wrong: Back from the photo, the form and the unlisted form all went to
+   * `{ list, from: "start" }`, so reporting a vehicle picked on the map and
+   * then pressing Back dropped you in a list you had never opened -- and Back
+   * from the form skipped the photo step, discarding the photos. A stack
+   * cannot be wrong about where you came from.
    */
-  const chooseMethod = (target: "map" | "list") => {
-    if (scanned) {
-      setView(target === "map" ? { name: "map" } : { name: "list", from: "start" });
+  const [stack, setStack] = React.useState<View[]>([{ name: "start" }]);
+  const view = stack[stack.length - 1]!;
+
+  const go = (next: View) => setStack((current) => [...current, next]);
+  const back = () =>
+    setStack((current) => (current.length > 1 ? current.slice(0, -1) : current));
+
+  const t = citizenCopy(locale);
+
+  const heading = React.useRef<HTMLHeadingElement>(null);
+  const firstRender = React.useRef(true);
+  React.useEffect(() => {
+    // Not on the first render: this block sits on a documentation page, and
+    // focusing its heading on load would scroll the page to the phone and take
+    // focus off whatever the reader was doing.
+    if (firstRender.current) {
+      firstRender.current = false;
       return;
     }
-    setScanned(true);
-    setView({ name: "prompt", target });
-  };
+    heading.current?.focus();
+  }, [view.name]);
 
-  const startScan = () => {
-    setScanned(true);
-    setView({ name: "scan" });
-  };
+  /** QR skips the photo requirement; everything else cannot. Production's rule. */
+  const toReport = (vehicle: CitizenVehicle, method: FindMethod) =>
+    go({ name: "report", vehicle, method });
+
+  const title =
+    view.name === "scan"
+      ? t("qr.title")
+      : view.name === "find"
+        ? t("map.title")
+        : view.name === "report"
+          ? view.method === "unlisted"
+            ? t("unlisted.title")
+            : t("app.title")
+          : view.name === "done"
+            ? t("report.done.title")
+            : t("app.title");
 
   return (
     <div
@@ -1033,175 +1819,78 @@ export function CitizenWorkspace({ className }: { className?: string }) {
       className={cn("h-[max(480px,75svh)] md:h-[700px]", className)}
     >
       <PhoneFrame label={t("app.title")}>
-        <div className="mx-auto flex min-h-full max-w-md flex-col gap-4 p-4">
-          <div className="flex justify-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setLocale(other)}
-              aria-label={`${t("app.language")}`}
-            >
-              <span lang={other}>{t("app.language")}</span>
-            </Button>
-          </div>
+        <div className="flex min-h-full flex-col">
+          <AppHeader
+            title={title}
+            // Two steps: find the vehicle, then describe the problem. Shown on
+            // both of them rather than only on the form -- "Step 2 of 2" on a
+            // screen reached from one that said nothing reads as though
+            // something was missed, where the pair reads as a short flow with
+            // one screen left.
+            step={
+              view.name === "scan" || view.name === "find"
+                ? t("app.step", { n: 1, max: 2 })
+                : view.name === "report"
+                  ? t("app.step", { n: 2, max: 2 })
+                  : undefined
+            }
+            headingRef={heading}
+            onBack={stack.length > 1 ? back : undefined}
+            backLabel={t("map.back")}
+            locale={locale}
+            onLocale={() => setLocale(locale === "de" ? "en" : "de")}
+          />
 
           {view.name === "start" ? (
-            <StartView
+            <div className="p-4">
+              <StartView
+                locale={locale}
+                onScan={() => go({ name: "scan" })}
+                onMap={() => go({ name: "find", tab: "map" })}
+                onList={() => go({ name: "find", tab: "list" })}
+              />
+            </div>
+          ) : null}
+
+          {view.name === "scan" ? (
+            <div className="p-4">
+              <ScanView
+                locale={locale}
+                onResolved={(vehicle) => toReport(vehicle, "qr")}
+                onChooseMethod={(method) => go({ name: "find", tab: method })}
+              />
+            </div>
+          ) : null}
+
+          {view.name === "find" ? (
+            <FindView
               locale={locale}
-              onStart={startScan}
-              onMap={() => chooseMethod("map")}
+              initialTab={view.tab}
+              onReport={toReport}
+              onUnlisted={() =>
+                go({ name: "report", vehicle: null, method: "unlisted" })
+              }
             />
-          ) : (
-            <Card>
-              <CardContent className="pt-6">
-                {view.name === "prompt" ? (
-                  <Screen
-                    title={t("app.title")}
-                    backLabel={t("map.back")}
-                    onBack={() => setView({ name: "start" })}
-                  >
-                    <PromptView
-                      locale={locale}
-                      onScan={startScan}
-                      onSkip={() =>
-                        setView(
-                          view.target === "map"
-                            ? { name: "map" }
-                            : { name: "list", from: "start" },
-                        )
-                      }
-                    />
-                  </Screen>
-                ) : null}
+          ) : null}
 
-                {view.name === "scan" ? (
-                  <Screen
-                    title={t("app.title")}
-                    backLabel={t("map.back")}
-                    onBack={() => setView({ name: "start" })}
-                  >
-                    <ScanView
-                      locale={locale}
-                      onResolved={(vehicle) => toReport(vehicle, "qr")}
-                      onChooseMethod={(method) =>
-                        setView(
-                          method === "map"
-                            ? { name: "map" }
-                            : { name: "list", from: "start" },
-                        )
-                      }
-                    />
-                  </Screen>
-                ) : null}
+          {view.name === "report" ? (
+            <ReportView
+              locale={locale}
+              vehicle={view.vehicle}
+              method={view.method}
+              // The stack is replaced rather than pushed: a sent report is not
+              // somewhere you go Back from, so the only way on is a new one.
+              onSent={(reportId) => setStack([{ name: "done", reportId }])}
+            />
+          ) : null}
 
-                {view.name === "map" ? (
-                  <Screen
-                    title={t("map.title")}
-                    backLabel={t("map.back")}
-                    onBack={() => setView({ name: "start" })}
-                  >
-                    <MapView
-                      locale={locale}
-                      onList={() => setView({ name: "list", from: "map" })}
-                      onReport={(vehicle) => toReport(vehicle, "map")}
-                    />
-                  </Screen>
-                ) : null}
-
-                {view.name === "list" ? (
-                  <Screen
-                    title={t("map.listTitle")}
-                    backLabel={t("map.back")}
-                    onBack={() =>
-                      setView(
-                        view.from === "map"
-                          ? { name: "map" }
-                          : { name: "start" },
-                      )
-                    }
-                  >
-                    <ListView
-                      locale={locale}
-                      notLive={view.notLive}
-                      qrNotFound={view.qrNotFound}
-                      onReport={toReport}
-                      onUnlisted={() => setView({ name: "unlisted" })}
-                    />
-                  </Screen>
-                ) : null}
-
-                {view.name === "unlisted" ? (
-                  <Screen
-                    title={t("unlisted.title")}
-                    backLabel={t("map.back")}
-                    onBack={() => setView({ name: "list", from: "start" })}
-                  >
-                    <FormView
-                      locale={locale}
-                      vehicle={null}
-                      method="unlisted"
-                      onSent={(reportId) => setView({ name: "done", reportId })}
-                    />
-                  </Screen>
-                ) : null}
-
-                {view.name === "photo" ? (
-                  <Screen
-                    title={t("app.title")}
-                    backLabel={t("map.back")}
-                    onBack={() => setView({ name: "list", from: "start" })}
-                  >
-                    <PhotoView
-                      locale={locale}
-                      method={view.method}
-                      photos={photos}
-                      onPhotos={setPhotos}
-                      onContinue={() =>
-                        setView({
-                          name: "form",
-                          vehicle: view.vehicle,
-                          method: view.method,
-                          photos,
-                        })
-                      }
-                    />
-                  </Screen>
-                ) : null}
-
-                {view.name === "form" ? (
-                  <Screen
-                    title={t("app.title")}
-                    backLabel={t("map.back")}
-                    onBack={() => setView({ name: "list", from: "start" })}
-                  >
-                    <FormView
-                      locale={locale}
-                      vehicle={view.vehicle}
-                      method={view.method}
-                      onSent={(reportId) => setView({ name: "done", reportId })}
-                    />
-                  </Screen>
-                ) : null}
-
-                {view.name === "done" ? (
-                  <Screen
-                    title={t("report.done.title")}
-                    backLabel={t("map.back")}
-                    onBack={() => setView({ name: "start" })}
-                  >
-                    <DoneView
-                      locale={locale}
-                      reportId={view.reportId}
-                      onNew={() => {
-                        setPhotos([]);
-                        setView({ name: "start" });
-                      }}
-                    />
-                  </Screen>
-                ) : null}
-              </CardContent>
-            </Card>
-          )}
+          {view.name === "done" ? (
+            <DoneView
+              locale={locale}
+              reportId={view.reportId}
+              onNew={() => setStack([{ name: "start" }])}
+            />
+          ) : null}
         </div>
       </PhoneFrame>
     </div>

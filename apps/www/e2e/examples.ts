@@ -56,9 +56,11 @@ export const NON_MAP_BLOCKS: string[] = [
   "regulations-workspace",
   // A list and a detail view; no map anywhere.
   "feeds-workspace",
-  // Has a map on one of its nine views, but it is a phone surface inside a
-  // PhoneFrame -- no toolbar, no floating panels, and never a desktop layout
-  // to switch to. See LIST_DETAIL_BLOCKS: it has no list to drill into either.
+  // Has a map, but it is a phone surface inside a PhoneFrame -- no toolbar, no
+  // floating panels, and never a desktop layout to switch to. See
+  // LIST_DETAIL_BLOCKS: it opens on a start card, so there is no table row for
+  // the responsive suite's "dataset" step to drill into. Its own flows -- the
+  // map, the QR scan, the search -- are driven by citizen-workspace.spec.ts.
   "citizen-workspace",
 ];
 
