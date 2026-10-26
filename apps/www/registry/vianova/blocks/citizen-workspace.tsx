@@ -111,6 +111,26 @@ const WORKER_URL = `${BASE_PATH}/maplibre/maplibre-gl-worker.mjs`;
 /** The hook names its layers `<id>-dots` and `<id>-logos`. */
 const POINTS_ID = "citizen-vehicles";
 const DOTS_LAYER = `${POINTS_ID}-dots`;
+const LOGOS_LAYER = `${POINTS_ID}-logos`;
+
+/**
+ * The zoom at which `useCategoryPointLayer` hands the dot over to the badge.
+ *
+ * Shared rather than passed inline, because two things here have to agree with
+ * it: the hit test, which must query whichever of the two layers is the one
+ * currently drawn, and the selection ring, whose radius has to clear a marker
+ * whose size changes at this zoom.
+ */
+const LOGO_ZOOM = 15;
+
+/**
+ * The badge image is composed at 64px and added at `pixelRatio: 2`, so it is
+ * 32 CSS px across -- 16px of radius before `icon-size` scales it.
+ */
+const BADGE_RADIUS = 16;
+
+/** Clear air between the marker's edge and the ring drawn round it. */
+const RING_GAP = 6;
 
 /** The ring drawn round the chosen vehicle. Local to this block. */
 const SELECTED_SOURCE = "citizen-selected";
@@ -870,7 +890,7 @@ function MapPane({
     enabled: points.length > 0,
     points,
     styles,
-    logoZoom: 15,
+    logoZoom: LOGO_ZOOM,
     id: POINTS_ID,
   });
 
@@ -910,7 +930,26 @@ function MapPane({
             type: "circle",
             source: SELECTED_SOURCE,
             paint: {
-              "circle-radius": 15,
+              /*
+                The marker is not one size. Below `LOGO_ZOOM` it is a circle
+                that grows 3px -> 9px, and above it a badge of `BADGE_RADIUS`
+                scaled 0.7 -> 1.3 across the next three zooms. A fixed radius
+                was right at exactly one zoom: the ring used to be swallowed
+                whole from about `LOGO_ZOOM` + 1.7, so zooming in to read a
+                plate lost the mark showing which vehicle was chosen. Follow
+                the marker's own curve and keep `RING_GAP` of clear air.
+              */
+              "circle-radius": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                8,
+                3 + RING_GAP,
+                LOGO_ZOOM,
+                BADGE_RADIUS * 0.7 + RING_GAP,
+                LOGO_ZOOM + 3,
+                BADGE_RADIUS * 1.3 + RING_GAP,
+              ],
               // Fully transparent rather than unset: a circle layer always
               // paints a fill, and the default is an opaque blue disc that
               // would hide the dot it is meant to point at.
@@ -919,11 +958,14 @@ function MapPane({
               "circle-stroke-color": stroke,
             },
           },
-          // Under the dots, so the dot stays legible inside its own ring. The
-          // dots layer is added asynchronously once the style settles, so it
-          // may not exist yet -- in which case the ring goes on top, which is
-          // harmless: its fill is transparent and its radius clears the dot.
-          map.getLayer(DOTS_LAYER) ? DOTS_LAYER : undefined,
+          /*
+            On top, not under the markers. The fill is transparent and the
+            radius clears the marker, so nothing is hidden by drawing it last
+            -- and a ring that is last can never be bitten into by the vehicle
+            parked next to the chosen one, which at close zoom reads as a
+            rendering fault rather than as a selection.
+          */
+          undefined,
         );
       }
     } catch {
@@ -950,6 +992,11 @@ function MapPane({
       });
     }
     try {
+      // The marker layers are torn down and re-added whenever the filter
+      // changes or the style reloads, which puts them back above the ring.
+      // Raising the ring with the selection keeps it last without having to
+      // watch the hook for rebuilds.
+      if (map.getLayer(SELECTED_LAYER)) map.moveLayer(SELECTED_LAYER);
       const source = map.getSource(SELECTED_SOURCE) as
         | GeoJSONSource
         | undefined;
@@ -978,19 +1025,30 @@ function MapPane({
   React.useEffect(() => {
     if (!map) return;
 
-    /** The dot under this point, or null for a tap on bare map. */
+    /** The marker under this point, or null for a tap on bare map. */
     const vehicleAt = (point: MapMouseEvent["point"]) => {
       let hits;
       try {
+        // Both marker layers, not the dots alone. The hook draws a vehicle as
+        // a circle below `LOGO_ZOOM` and as a badge above it, and
+        // `queryRenderedFeatures` reports only layers that are actually drawn.
+        // Naming `DOTS_LAYER` by itself made every tap miss from the first
+        // zoom step on: the badge sat plainly under the thumb, the query came
+        // back empty, and because an empty hit also clears the selection,
+        // tapping a vehicle *dismissed* the card instead of opening it.
+        const layers = [DOTS_LAYER, LOGOS_LAYER].filter((layer) =>
+          map.getLayer(layer),
+        );
+        if (layers.length === 0) return null;
         hits = map.queryRenderedFeatures(
           [
             [point.x - HIT_PADDING, point.y - HIT_PADDING],
             [point.x + HIT_PADDING, point.y + HIT_PADDING],
           ],
-          { layers: [DOTS_LAYER] },
+          { layers },
         );
       } catch {
-        return null; // the layer is not on the map yet
+        return null; // the style is not ready yet
       }
       if (!hits || hits.length === 0) return null;
 
