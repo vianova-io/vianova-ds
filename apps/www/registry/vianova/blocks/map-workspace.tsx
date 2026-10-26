@@ -569,6 +569,7 @@ export function MapWorkspace({
   className,
   mapboxToken,
   dataUrl = DEFAULT_DATA_URL,
+  topBar = "shipped",
 }: {
   className?: string;
   /**
@@ -578,6 +579,20 @@ export function MapWorkspace({
   mapboxToken?: string;
   /** GeoJSON LineStrings carrying the properties FILTER_FIELDS names. */
   dataUrl?: string;
+  /**
+   * Which top-bar arrangement to draw.
+   *
+   * "shipped" is this bar as production builds it and as the docs show it.
+   * "edges" is the proposal under review: the panel disclosures pinned to the
+   * two ends of the row, on the sides their panels dock to, the middle third
+   * left to the controls that act on the map, and the basemap out of the bar
+   * and into the corner stack at every width.
+   *
+   * TEMPORARY, and the only reason this prop exists: the arrangement has to be
+   * clickable before it can be chosen. When one wins the other goes, and so
+   * does this.
+   */
+  topBar?: "shipped" | "edges";
 }) {
   const [title, setTitle] = React.useState("Zürich vehicle flows");
   const [all, setAll] = React.useState<FlowFeature[] | null>(null);
@@ -1587,6 +1602,72 @@ export function MapWorkspace({
     setSearchOpen(false);
   };
 
+  /*
+   * The two panel disclosures, named once and placed twice.
+   *
+   * `topBar` is what moves them, and both arrangements render these same two
+   * functions rather than their own copy of the button -- so there is one Data
+   * layers toggle in this file, not two that have to be kept in step while the
+   * arrangement is being judged.
+   *
+   * Which one applies is still a width question, not an arrangement one: from
+   * lg up the panels are independent and `deskPanels` answers "which ones",
+   * below lg they share one tray and `pane` answers "which one". The edges
+   * arrangement moves where the controls sit; it does not merge the two state
+   * models.
+   */
+  const edgeBar = topBar === "edges";
+  const PANEL_META = {
+    data: { label: "Data layers", Icon: Layers, controls: dataPaneId },
+    charts: { label: "Charts", Icon: BarChart3, controls: chartsPaneId },
+  } as const;
+
+  /** lg and up: both panels fit, so each is its own toggle. */
+  const deskPanelToggle = (key: "data" | "charts") => {
+    const { label, Icon, controls } = PANEL_META[key];
+    return (
+      <Button
+        variant={deskPanels[key] ? "default" : "secondary"}
+        size="icon"
+        aria-label={label}
+        aria-expanded={deskPanels[key]}
+        aria-controls={controls}
+        onClick={() =>
+          setDeskPanels((open) => ({ ...open, [key]: !open[key] }))
+        }
+        className="hidden lg:inline-flex"
+      >
+        <Icon />
+      </Button>
+    );
+  };
+
+  /*
+   * Below lg: one tray, so the lit one closes and the other swaps. The same
+   * after:-inset-2 slop the shipped switcher carries -- a 36px box with a 52px
+   * thumb, which is the control-size ladder kept and WCAG 2.2 cleared.
+   *
+   * `lg:hidden` on the button itself rather than on a wrapper, because in the
+   * edges arrangement there is no wrapper: it sits at the end of a column next
+   * to its lg counterpart, and exactly one of the pair is ever displayed.
+   */
+  const trayPanelToggle = (key: "data" | "charts") => {
+    const { label, Icon, controls } = PANEL_META[key];
+    return (
+      <Button
+        variant={pane === key ? "default" : "secondary"}
+        size="icon"
+        aria-label={label}
+        aria-expanded={pane === key}
+        aria-controls={controls}
+        onClick={() => setPane((open) => (open === key ? null : key))}
+        className="relative after:absolute after:-inset-2 after:content-[''] lg:hidden"
+      >
+        <Icon />
+      </Button>
+    );
+  };
+
   return (
     <div
       ref={rootRef}
@@ -1719,6 +1800,12 @@ export function MapWorkspace({
           scrollbar and nothing to show it had gone.
         */}
         <div className="flex min-w-0 grow basis-1/3 items-center gap-2 pr-2">
+          {/* The left edge, in the edges arrangement: the disclosure for the
+              panel that docks on this side, at every width. In the shipped one
+              this control is in the middle cluster at lg and at the far right
+              below it -- two places for the control pressed most. */}
+          {edgeBar ? deskPanelToggle("data") : null}
+          {edgeBar ? trayPanelToggle("data") : null}
           <h2 className="min-w-0">
             <InlineEdit
               value={title}
@@ -1749,19 +1836,9 @@ export function MapWorkspace({
           of which single panel is on screen.
         */}
         <div className="flex shrink-0 items-center gap-2">
-          <Button
-            variant={deskPanels.data ? "default" : "secondary"}
-            size="icon"
-            aria-label="Data layers"
-            aria-expanded={deskPanels.data}
-            aria-controls={dataPaneId}
-            onClick={() =>
-              setDeskPanels((open) => ({ ...open, data: !open.data }))
-            }
-            className="hidden lg:inline-flex"
-          >
-            <Layers />
-          </Button>
+          {/* Edges keeps this third for the controls that act on the map --
+              the field and the drawing tools -- and nothing else. */}
+          {edgeBar ? null : deskPanelToggle("data")}
 
           {/* Behaviour lives in runSearch, which the phone overlay shares.
               Production's field is a fixed 350px; 320 at lg is the nearest
@@ -1822,19 +1899,7 @@ export function MapWorkspace({
             onModeChange={setDrawMode}
           />
 
-          <Button
-            variant={deskPanels.charts ? "default" : "secondary"}
-            size="icon"
-            aria-label="Charts"
-            aria-expanded={deskPanels.charts}
-            aria-controls={chartsPaneId}
-            onClick={() =>
-              setDeskPanels((open) => ({ ...open, charts: !open.charts }))
-            }
-            className="hidden lg:inline-flex"
-          >
-            <BarChart3 />
-          </Button>
+          {edgeBar ? null : deskPanelToggle("charts")}
         </div>
 
         {/*
@@ -1858,34 +1923,24 @@ export function MapWorkspace({
             elementFromPoint resolves a hit on the pseudo-element back to the
             button, so it is testable rather than merely asserted.
           */}
-          <div
-            data-slot="panel-switcher"
-            className="flex items-center gap-2 lg:hidden"
-          >
-            {(
-              [
-                ["data", "Data layers", Layers, dataPaneId],
-                ["charts", "Charts", BarChart3, chartsPaneId],
-              ] as const
-            ).map(([id, label, Icon, controls]) => (
-              <Button
-                key={id}
-                variant={pane === id ? "default" : "secondary"}
-                size="icon"
-                aria-label={label}
-                aria-expanded={pane === id}
-                aria-controls={controls}
-                // A toggle, not a radio: the lit one closes, so the map can be
-                // seen whole. Tapping the other swaps, as before. Below lg
-                // these two ARE the top navigation, so this is the way out of
-                // a tray as well as the way between them.
-                onClick={() => setPane((open) => (open === id ? null : id))}
-                className="relative after:absolute after:-inset-2 after:content-['']"
-              >
-                <Icon />
-              </Button>
-            ))}
-          </div>
+          {/* A toggle each, not a radio pair: the lit one closes, so the map
+              can be seen whole. Below lg these two ARE the top navigation, so
+              they are the way out of a tray as well as the way between them.
+
+              In the edges arrangement this pair is split across the two ends
+              of the row, so there is no switcher to group -- and `data-slot`
+              goes with the group, not the buttons. The responsive suite counts
+              what is in here, which is one more reason the shipped
+              arrangement's markup is left exactly as it was. */}
+          {edgeBar ? null : (
+            <div
+              data-slot="panel-switcher"
+              className="flex items-center gap-2 lg:hidden"
+            >
+              {trayPanelToggle("data")}
+              {trayPanelToggle("charts")}
+            </div>
+          )}
 
           {/* The basemap's phone home, a sibling of the panel switcher rather
               than a member of it -- that slot means the two panel disclosures,
@@ -1896,23 +1951,28 @@ export function MapWorkspace({
               and MapLibre's attribution owns what is left. */}
           {/* md to lg only: below md it is in the overflow menu, and from lg
               up MapControls carries it in the map's corner. */}
-          <BasemapSwitcher
-            className="hidden md:flex lg:hidden"
-            value={basemapId}
-            onValueChange={setBasemapId}
-            side="bottom"
-            align="end"
-            trigger={
-              <Button
-                variant="secondary"
-                size="icon"
-                aria-label={`Basemap: ${BASEMAP_BY_ID[basemapId]?.label ?? ""}`}
-                className="relative after:absolute after:-inset-2 after:content-['']"
-              >
-                <MapIcon />
-              </Button>
-            }
-          />
+          {/* Edges takes the basemap out of the bar entirely -- it has three
+              homes today, and none of them is beside the control it belongs
+              with. See MapControls at the foot of this file. */}
+          {edgeBar ? null : (
+            <BasemapSwitcher
+              className="hidden md:flex lg:hidden"
+              value={basemapId}
+              onValueChange={setBasemapId}
+              side="bottom"
+              align="end"
+              trigger={
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  aria-label={`Basemap: ${BASEMAP_BY_ID[basemapId]?.label ?? ""}`}
+                  className="relative after:absolute after:-inset-2 after:content-['']"
+                >
+                  <MapIcon />
+                </Button>
+              }
+            />
+          )}
 
           {/* Downloads what is on screen -- the filtered flows, including any
               drawn zone -- through the registry's own toCsv/downloadFile. It
@@ -1996,30 +2056,39 @@ export function MapWorkspace({
                 <Sparkles />
                 Export report
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
+              {edgeBar ? null : <DropdownMenuSeparator />}
               {/* The label goes INSIDE the radio group. Base UI's GroupLabel
                   labels the group it is in, and one with no group around it
                   throws (error #31) when the menu opens -- so the menu simply
                   did not appear, with nothing failing anywhere else. */}
-              <DropdownMenuRadioGroup
-                value={basemapId}
-                onValueChange={(value: string) =>
-                  setBasemapId(value as BasemapId)
-                }
-              >
-                <DropdownMenuLabel>Basemap</DropdownMenuLabel>
-                {BASEMAPS.map((basemap) => (
-                  <DropdownMenuRadioItem
-                    key={basemap.id}
-                    value={basemap.id}
-                    closeOnClick
-                  >
-                    {basemap.label}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
+              {edgeBar ? null : (
+                <DropdownMenuRadioGroup
+                  value={basemapId}
+                  onValueChange={(value: string) =>
+                    setBasemapId(value as BasemapId)
+                  }
+                >
+                  <DropdownMenuLabel>Basemap</DropdownMenuLabel>
+                  {BASEMAPS.map((basemap) => (
+                    <DropdownMenuRadioItem
+                      key={basemap.id}
+                      value={basemap.id}
+                      closeOnClick
+                    >
+                      {basemap.label}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* The right edge: the charts panel docks on this side at lg, and
+              the tray it shares below lg is reached from the same corner. The
+              export keeps its place to its left, so the edge itself belongs to
+              the panel rather than to an action that leaves the page. */}
+          {edgeBar ? deskPanelToggle("charts") : null}
+          {edgeBar ? trayPanelToggle("charts") : null}
         </div>
 
         {searchOpen ? (
@@ -2700,7 +2769,25 @@ export function MapWorkspace({
           stays desktop-only: pinch and double-tap are MapLibre's own handlers
           and are what a thumb reaches for. */}
       <MapControls
-        className="absolute bottom-12 right-4 hidden lg:flex"
+        /*
+         * Edges gives this stack the basemap at every width, which is the
+         * whole of change 3: the one control whose job is showing you what you
+         * are choosing between belongs next to zoom, not in a bar that keeps
+         * moving it. The phone gains the zoom pair with it -- pinch and
+         * double-tap are MapLibre's own, but a visible stepper is also how you
+         * discover the map responds at all.
+         *
+         * Top right below lg, not bottom right: the tray docks at
+         * inset-x-2 bottom-10 and spans the full width there, and MapLibre's
+         * attribution owns what is left of that corner. top-16 clears the 56px
+         * bar; from lg up the stack returns to the corner it has today.
+         */
+        className={cn(
+          "absolute",
+          edgeBar
+            ? "right-2 flex max-lg:top-16 lg:right-4 lg:bottom-12"
+            : "right-4 bottom-12 hidden lg:flex",
+        )}
         onZoomIn={() => mapRef.current?.zoomIn()}
         onZoomOut={() => mapRef.current?.zoomOut()}
         basemap={
