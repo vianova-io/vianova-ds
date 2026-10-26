@@ -8,6 +8,7 @@ import {
   ArrowUp,
   Copy,
   Download,
+  ScrollText,
   Globe,
   Info,
   Lock,
@@ -275,6 +276,43 @@ function downloadGeoJson(reg: Regulation, zones: Map<string, PickerZone>) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * The regulation's logs, as a CSV.
+ *
+ * Production fetches these from the logs endpoint, which returns one row per
+ * enforcement event. The sample has no event stream to draw on, so what comes
+ * out here is the regulation as it currently stands -- a row per rule and
+ * zone. A host wiring this block to a real API should replace the body of
+ * this function, not the menu item: the affordance, its name and the case it
+ * is disabled in are what the design system is fixing.
+ */
+function downloadLogs(reg: Regulation, zones: Map<string, PickerZone>) {
+  const cell = (value: string) => `"${value.replace(/"/g, '""')}"`;
+  const rows = [
+    ["regulation", "rule", "rule_type", "zone", "starts", "ends", "status"],
+    ...reg.rules.flatMap((rule) =>
+      rule.zoneIds.map((id) => [
+        reg.name,
+        rule.name,
+        RULE_TYPES[rule.type].label,
+        zones.get(id)?.name ?? id,
+        rule.schedule.start ?? reg.global.start ?? "",
+        rule.schedule.end ?? reg.global.end ?? "",
+        STATUS_LABELS[regulationStatus(reg)],
+      ]),
+    ),
+  ];
+  const blob = new Blob([rows.map((r) => r.map(cell).join(",")).join("\n")], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${reg.name.replace(/[^\p{L}\p{N}]+/gu, "-").toLowerCase()}-logs.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Workspace                                                                   */
 /* -------------------------------------------------------------------------- */
@@ -290,11 +328,9 @@ type View =
  *
  * Rebuilt from production's regulations page on Vianova DS components. What
  * changed on the way, deliberately: one theme throughout rather than a dark
- * list and a light editor; a rule type is chosen and then confirmed, rather
- * than created by the first click on a card; visibility is a status with its
- * action in the menu, not a pill that looks like a toggle; and saving is one
- * bar that says what is unsaved, rather than a button that changes its own
- * label.
+ * list and a light editor; visibility is a status with its action in the
+ * menu, not a pill that looks like a toggle; and saving is one bar that says
+ * what is unsaved, rather than a button that changes its own label.
  */
 export function RegulationsWorkspace({
   className,
@@ -505,7 +541,7 @@ function RegulationList({
         </div>
         <Button onClick={onCreate}>
           <Plus data-icon="inline-start" />
-          New regulation
+          Create regulation
         </Button>
       </header>
 
@@ -603,7 +639,7 @@ function RegulationList({
             ) : (
               <Button onClick={onCreate}>
                 <Plus data-icon="inline-start" />
-                New regulation
+                Create regulation
               </Button>
             )}
           </EmptyContent>
@@ -628,7 +664,7 @@ function RegulationList({
                     {sort === "desc" ? <ArrowDown className="size-3.5" /> : <ArrowUp className="size-3.5" />}
                   </button>
                 </TableHead>
-                <TableHead className="w-12">
+                <TableHead className="w-20">
                   <span className="sr-only">Actions</span>
                 </TableHead>
               </TableRow>
@@ -703,22 +739,38 @@ function RegulationRow({
         {formatDate(reg.createdAt)}
       </TableCell>
       <TableCell>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button variant="ghost" size="icon-sm" aria-label={`Options for ${reg.name}`}>
-                <MoreHorizontal />
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={onOpen}>Open</DropdownMenuItem>
-            <DropdownMenuItem onClick={onDownload}>
-              <Download />
-              Download GeoJSON
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* Two controls side by side, as production's list has and as Save Map
+            does: downloading is the one thing people come to this row to do
+            besides opening it, and behind the ⋯ it cost two clicks to reach a
+            menu that held almost nothing else. It stays in the menu as well --
+            the menu is the full list of what a row can do, the icon is the
+            shortcut past it. */}
+        <div className="flex items-center justify-end gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Download ${reg.name} as GeoJSON`}
+            onClick={onDownload}
+          >
+            <Download />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button variant="ghost" size="icon-sm" aria-label={`Options for ${reg.name}`}>
+                  <MoreHorizontal />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={onOpen}>Open</DropdownMenuItem>
+              <DropdownMenuItem onClick={onDownload}>
+                <Download />
+                Download GeoJSON
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </TableCell>
     </TableRow>
   );
@@ -867,10 +919,16 @@ function CheckList({
 /* -------------------------------------------------------------------------- */
 
 /**
- * The type picker. Production creates on the first click; here a card is a
- * choice and the button is the decision. Arrow keys move through a radio
- * group, and a group that navigated on every arrow press would throw a
- * keyboard user into an editor for the second option they passed.
+ * The type picker. One click on a card creates the regulation and opens the
+ * editor, as production does.
+ *
+ * It used to be a radio group with a Create button below it, because arrow
+ * keys move a radio group's selection and acting on every change would throw
+ * a keyboard user into the editor for an option they were only passing. The
+ * confirm step was paying off that problem for everyone, including the people
+ * using a mouse who never had it. `action` cards are buttons instead: Tab
+ * reaches each one and only a click, Enter or Space commits, so the step buys
+ * nothing and is gone.
  */
 function NewRegulationDialog({
   open,
@@ -881,17 +939,11 @@ function NewRegulationDialog({
   onOpenChange: (open: boolean) => void;
   onCreate: (type: RuleType) => void;
 }) {
-  const [type, setType] = React.useState<RuleType | null>(null);
-
-  React.useEffect(() => {
-    if (!open) setType(null);
-  }, [open]);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
-          <DialogTitle>New regulation</DialogTitle>
+          <DialogTitle>Create regulation</DialogTitle>
           <DialogDescription>
             Choose the kind of rule it starts with. You can add zones, times and vehicles next.
           </DialogDescription>
@@ -899,8 +951,8 @@ function NewRegulationDialog({
         <ChoiceCardGroup
           aria-label="Rule type"
           columns={3}
-          value={type ?? ""}
-          onValueChange={(v) => setType(v as RuleType)}
+          mode="action"
+          onChoose={(value) => onCreate(value as RuleType)}
         >
           {RULE_TYPE_ORDER.map((t) => (
             <ChoiceCard
@@ -915,9 +967,6 @@ function NewRegulationDialog({
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
-          </Button>
-          <Button disabled={!type} onClick={() => type && onCreate(type)}>
-            Create regulation
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1063,6 +1112,7 @@ function RegulationEditor({
               }
               onDuplicate={() => onDuplicate(draft)}
               onDownload={() => downloadGeoJson(draft, zoneIndex)}
+              onDownloadLogs={() => downloadLogs(draft, zoneIndex)}
               onDeactivate={() => setConfirmDeactivate(true)}
               onReactivate={() => update({ deactivated: false })}
             />
@@ -1173,7 +1223,9 @@ function RegulationEditor({
             ) : (
               <GlobalSettings
                 value={draft.global}
+                isPublic={draft.visibility === "public"}
                 onChange={(global) => update({ global })}
+                onDownload={() => downloadGeoJson(draft, zoneIndex)}
               />
             )}
           </div>
@@ -1282,6 +1334,7 @@ function RegulationMenu({
   onToggleVisibility,
   onDuplicate,
   onDownload,
+  onDownloadLogs,
   onDeactivate,
   onReactivate,
 }: {
@@ -1290,9 +1343,18 @@ function RegulationMenu({
   onToggleVisibility: () => void;
   onDuplicate: () => void;
   onDownload: () => void;
+  onDownloadLogs: () => void;
   onDeactivate: () => void;
   onReactivate: () => void;
 }) {
+  /*
+   * A Multi-parking group of more than one rule has no logs to give: the API
+   * reports against a single rule, and Cityscope greys the action out for the
+   * same reason. Shown and disabled rather than hidden, so the answer to
+   * "where did Download logs go" is on screen.
+   */
+  const noLogs = draft.kind === "multi_parking" && draft.rules.length > 1;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -1315,6 +1377,10 @@ function RegulationMenu({
           <Download />
           Download GeoJSON
         </DropdownMenuItem>
+        <DropdownMenuItem disabled={isNew || noLogs} onClick={onDownloadLogs}>
+          <ScrollText />
+          Download logs
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         {draft.deactivated ? (
           <DropdownMenuItem onClick={onReactivate}>
@@ -1334,24 +1400,50 @@ function RegulationMenu({
 
 function GlobalSettings({
   value,
+  isPublic,
   onChange,
+  onDownload,
 }: {
   value: Regulation["global"];
+  isPublic: boolean;
   onChange: (next: Regulation["global"]) => void;
+  onDownload: () => void;
 }) {
   return (
-    <div className="space-y-4 p-4">
-      <div className="space-y-1">
-        <h3 className="text-base font-semibold">Global</h3>
-        <p className="text-muted-foreground text-sm">
-          These dates bound every rule in the regulation. A rule&apos;s own schedule applies inside them.
-        </p>
+    <div className="space-y-6 p-4">
+      <div className="space-y-4">
+        <div className="space-y-1">
+          <h3 className="text-base font-semibold">Global</h3>
+          <p className="text-muted-foreground text-sm">
+            These dates bound every rule in the regulation. A rule&apos;s own schedule applies inside them.
+          </p>
+        </div>
+        <ScheduleEditor
+          showTimes={false}
+          value={{ start: value.start, end: value.end, allDay: true, days: [] }}
+          onChange={(s) => onChange({ start: s.start, end: s.end })}
+        />
       </div>
-      <ScheduleEditor
-        showTimes={false}
-        value={{ start: value.start, end: value.end, allDay: true, days: [] }}
-        onChange={(s) => onChange({ start: s.start, end: s.end })}
-      />
+
+      {/* Production calls this section "Public endpoint" and prints the URL the
+          GeoJSON is served from. The URL belongs to the API, not to a block
+          that has never spoken to one, so what is here is the half the design
+          system can own: the section, its place on the page, and the export
+          itself. A host with a real endpoint should print it above the button
+          and keep the heading production uses. */}
+      <div className="space-y-2 border-t pt-4">
+        <h3 className="text-base font-semibold">Export</h3>
+        <p className="text-muted-foreground text-sm">
+          Every zone of every rule, as one GeoJSON file.
+          {isPublic
+            ? " The same file is served from this regulation's public endpoint."
+            : " This regulation is private, so only people with access to it can fetch the file."}
+        </p>
+        <Button variant="outline" onClick={onDownload}>
+          <Download data-icon="inline-start" />
+          Export as GeoJSON
+        </Button>
+      </div>
     </div>
   );
 }

@@ -27,6 +27,10 @@ export function SaveBar({
   onDiscard,
   message,
   saveLabel = "Save",
+  discardLabel = "Discard",
+  savingLabel = "Saving…",
+  savingMessage = "Saving changes",
+  cleanMessage = "All changes saved",
   className,
 }: {
   dirty: boolean;
@@ -38,16 +42,30 @@ export function SaveBar({
   onDiscard?: () => void;
   /** Shown while dirty. Defaults to "Unsaved changes". */
   message?: string;
+  /*
+   * Every string the bar can say is overridable, because a product that
+   * translates its interface has to translate this one too, and a bar that
+   * reads "Save" beside "Modifications non enregistrées" is worse than one
+   * that was never translated at all. They are separate props rather than one
+   * object so a caller can change only the verb it disagrees with.
+   */
   saveLabel?: string;
+  discardLabel?: string;
+  /** The Save button while `saving`. */
+  savingLabel?: string;
+  /** The status line while `saving`. */
+  savingMessage?: string;
+  /** The status line when there is nothing to save. */
+  cleanMessage?: string;
   className?: string;
 }) {
   const text = error
     ? error
     : saving
-      ? "Saving changes"
+      ? savingMessage
       : dirty
         ? (message ?? "Unsaved changes")
-        : "All changes saved";
+        : cleanMessage;
 
   return (
     <div
@@ -75,14 +93,14 @@ export function SaveBar({
 
       {onDiscard && dirty ? (
         <Button variant="ghost" disabled={saving} onClick={onDiscard}>
-          Discard
+          {discardLabel}
         </Button>
       ) : null}
       <Button disabled={!dirty || saving} onClick={onSave}>
         {saving ? (
           <>
             <Spinner aria-hidden role={undefined} aria-label={undefined} />
-            Saving…
+            {savingLabel}
           </>
         ) : (
           saveLabel

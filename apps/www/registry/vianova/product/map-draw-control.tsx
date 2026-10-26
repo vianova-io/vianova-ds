@@ -42,19 +42,48 @@ export type DrawMode = "freehand" | "circle" | "polygon";
  */
 const SELECT = "select";
 
+/**
+ * Every word the control can say, so a product that translates its interface
+ * can translate this one. The menu is the only place some of these appear, so
+ * leaving them hardcoded would strand a drawing tool in English inside an
+ * otherwise translated map.
+ */
+export type MapDrawLabels = {
+  select: string;
+  freehand: string;
+  circle: string;
+  polygon: string;
+  /** The tool button, and the prefix of its tooltip while idle. */
+  draw: string;
+  /** The prefix of the tool button's tooltip while a drawing is under way. */
+  stop: string;
+  /** The chevron beside it, which opens the menu. */
+  chooseTool: string;
+};
+
+const DEFAULT_LABELS: MapDrawLabels = {
+  select: "Select",
+  freehand: "Free hand",
+  circle: "Circle",
+  polygon: "Polygon",
+  draw: "Draw a zone",
+  stop: "Stop drawing",
+  chooseTool: "Choose a drawing tool",
+};
+
 const MODES: {
   value: DrawMode | null;
-  label: string;
+  id: keyof MapDrawLabels;
   key: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  { value: null, label: "Select", key: "S", icon: MousePointer2 },
-  { value: "freehand", label: "Free hand", key: "F", icon: Spline },
-  { value: "circle", label: "Circle", key: "C", icon: Circle },
+  { value: null, id: "select", key: "S", icon: MousePointer2 },
+  { value: "freehand", id: "freehand", key: "F", icon: Spline },
+  { value: "circle", id: "circle", key: "C", icon: Circle },
   // The polygon glyph, not Lucide's Hexagon: this mode does not draw a
   // hexagon, it drops a vertex per click and closes the ring, and the handles
   // on the corners are what say so.
-  { value: "polygon", label: "Polygon", key: "P", icon: DrawZoneIcon },
+  { value: "polygon", id: "polygon", key: "P", icon: DrawZoneIcon },
 ];
 
 /** `s` maps to null, so membership is tested with `in`, not truthiness. */
@@ -102,10 +131,13 @@ export function MapDrawControl({
   onModeChange,
   shortcuts = true,
   disabled,
+  labels,
   className,
 }: {
   mode: DrawMode | null;
   onModeChange: (mode: DrawMode | null) => void;
+  /** Overrides any of the control's words; the rest keep their defaults. */
+  labels?: Partial<MapDrawLabels>;
   /**
    * F, C and P pick a mode and Esc stops drawing. On by default because the
    * menu shows the keys, and a hint for a key that does nothing is worse than
@@ -117,6 +149,9 @@ export function MapDrawControl({
 }) {
   const [open, setOpen] = React.useState(false);
   const active = mode !== null;
+  // Merged per render rather than memoised: it is four string reads, and a
+  // caller passing an inline object would defeat the memo anyway.
+  const t = { ...DEFAULT_LABELS, ...labels };
 
   // Read through a ref so the listener is attached once, not re-attached on
   // every mode change the reader makes.
@@ -188,15 +223,11 @@ export function MapDrawControl({
         type="button"
         data-part="tool"
         disabled={disabled}
-        aria-label="Draw a zone"
+        aria-label={t.draw}
         // The label stays put while the glyph changes, so a screen reader is
         // not told the button became a different button; `title` and
         // aria-pressed carry the state.
-        title={
-          active
-            ? `Stop drawing (${current.label})`
-            : `Draw a zone (${current.label})`
-        }
+        title={`${active ? t.stop : t.draw} (${t[current.id]})`}
         // aria-pressed says a drawing is under way even with the menu shut,
         // which aria-expanded on its own cannot. The colour change pairs with
         // a border change so it does not rest on hue alone.
@@ -213,8 +244,8 @@ export function MapDrawControl({
             <button
               type="button"
               data-part="chevron"
-              aria-label="Choose a drawing tool"
-              title="Choose a drawing tool"
+              aria-label={t.chooseTool}
+              title={t.chooseTool}
               // -ml-px collapses the two borders between the halves into one.
               className={cn(
                 face,
@@ -235,12 +266,12 @@ export function MapDrawControl({
               onModeChange(value === SELECT ? null : (value as DrawMode))
             }
           >
-            {MODES.map(({ value, label, key, icon: Icon }) => (
+            {MODES.map(({ value, id, key, icon: Icon }) => (
               // closeOnClick: Base UI keeps a menu open after a radio pick by
               // default, which here would leave the menu covering the map the
               // reader is about to draw on.
               <DropdownMenuRadioItem
-                key={label}
+                key={id}
                 value={value ?? SELECT}
                 closeOnClick
                 // No tick on the selected item, as production has none: the
@@ -256,7 +287,7 @@ export function MapDrawControl({
                 className="pr-2 [&_[data-slot=dropdown-menu-radio-item-indicator]]:hidden"
               >
                 <Icon aria-hidden />
-                {label}
+                {t[id]}
                 {shortcuts ? (
                   <Kbd className="ml-auto" aria-hidden>
                     {key}

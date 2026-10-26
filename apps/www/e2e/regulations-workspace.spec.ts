@@ -52,13 +52,13 @@ test("a new regulation is created from a type, edited and saved", async ({ page 
   const root = await open(page);
   const before = await root.locator("[data-slot=regulation-link]").count();
 
-  await root.getByRole("button", { name: "New regulation" }).click();
-  const dialog = page.getByRole("dialog", { name: "New regulation" });
-  const create = dialog.getByRole("button", { name: "Create regulation" });
-  // Choosing is not creating: nothing happens until the button is pressed.
-  await expect(create).toBeDisabled();
-  await dialog.getByRole("radio", { name: "Multi-parking" }).click();
-  await create.click();
+  await root.getByRole("button", { name: "Create regulation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Create regulation" });
+  // One click on a card creates it, as production does. The cards are buttons
+  // rather than radios precisely so this can be true without arrow keys
+  // dropping a keyboard user into the editor for a type they passed.
+  await expect(dialog.getByRole("radio")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Multi-parking", exact: true }).click();
 
   // Multi-parking opens on a parking rule, as production does, with the rail.
   await expect(root.getByRole("tablist", { name: "Rules" })).toBeVisible();
