@@ -18,7 +18,9 @@ import {
   Plus,
   QrCode,
   Search,
+  RotateCw,
   SlidersHorizontal,
+  TriangleAlert,
   X,
 } from "lucide-react";
 
@@ -35,6 +37,14 @@ import {
   FieldError,
   FieldLabel,
 } from "@/registry/vianova/ui/field";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/registry/vianova/ui/empty";
 import { Input } from "@/registry/vianova/ui/input";
 import {
   Item,
@@ -46,6 +56,7 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@/registry/vianova/ui/native-select";
+import { Skeleton } from "@/registry/vianova/ui/skeleton";
 import { Spinner } from "@/registry/vianova/ui/spinner";
 import { Textarea } from "@/registry/vianova/ui/textarea";
 import { CopyButton } from "@/registry/vianova/patterns/copy-button";
@@ -71,11 +82,14 @@ import {
   formatLockTime,
   photoRequired,
   sampleReportId,
+  validVehicleId,
   vehiclesNear,
   type CitizenLocale,
+  type CitizenScenario,
   type CitizenVehicle,
   type FindMethod,
   type ReportReason,
+  type ReportStatus,
   type VehicleType,
 } from "@/registry/vianova/lib/sample-citizen";
 import { cn } from "@/registry/vianova/lib/utils";
@@ -113,8 +127,27 @@ const SELECTED_LAYER = `${SELECTED_SOURCE}-ring`;
  */
 const HIT_PADDING = 12;
 
-/** Long enough for the pending state to be seen, short enough not to annoy. */
+/**
+ * Long enough for a pending state to be seen, short enough not to annoy.
+ *
+ * Every one of these stands in for a round trip the block does not make. They
+ * exist because a state nobody can reach is a state nobody designed: the
+ * spinner on Send, the skeletons under "Vehicles near you" and the status the
+ * done screen settles on are all real screens in production, and all of them
+ * were invisible here until something took time.
+ */
 const SEND_DELAY = 700;
+/** The photos go first; the report cannot be sent without them. */
+const UPLOAD_DELAY = 600;
+/** The camera, then the lookup the scanned code triggers. */
+const CAMERA_DELAY = 500;
+const LOOKUP_DELAY = 600;
+/** The vehicle feed, on first open of a screen that needs it. */
+const FEED_DELAY = 700;
+/** Typing settles before the search runs, as it would against a server. */
+const SEARCH_DEBOUNCE = 250;
+/** The done screen polls until the report stops moving. */
+const STATUS_DELAY = 1_200;
 
 /**
  * How far above the map's centre the chosen vehicle is parked, in pixels.
@@ -162,7 +195,7 @@ type View =
   | { name: "scan" }
   | { name: "find"; tab: "map" | "list" }
   | { name: "report"; vehicle: CitizenVehicle | null; method: FindMethod }
-  | { name: "done"; reportId: string };
+  | { name: "done"; reportId: string; vehicle: CitizenVehicle | null };
 
 /** The vehicle a simulated QR scan lands on. */
 const QR_VEHICLE = SAMPLE_VEHICLES[0]!;
@@ -414,15 +447,49 @@ function StartView({
  */
 function ScanView({
   locale,
+  scenario,
   onResolved,
   onChooseMethod,
 }: {
   locale: CitizenLocale;
+  scenario: CitizenScenario;
   onResolved: (vehicle: CitizenVehicle) => void;
   onChooseMethod: (method: "map" | "list") => void;
 }) {
   const t = citizenCopy(locale);
   const [denied, setDenied] = React.useState(false);
+
+  /**
+   * A scan is three states, and production wrote copy for all three.
+   *
+   * `starting` is the camera waking up, `scanning` is the viewfinder, and
+   * `resolving` is the lookup the code triggers -- which can fail, because a
+   * code can name a vehicle the feed no longer has. Until now this screen
+   * went from nothing to a filled-in form in one frame, so two of the three
+   * strings had nowhere to be.
+   */
+  const [phase, setPhase] = React.useState<
+    "starting" | "scanning" | "resolving" | "notFound"
+  >("starting");
+  const timer = React.useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  React.useEffect(() => {
+    timer.current = setTimeout(() => setPhase("scanning"), CAMERA_DELAY);
+    return () => clearTimeout(timer.current);
+  }, []);
+
+  const scan = () => {
+    setPhase("resolving");
+    timer.current = setTimeout(() => {
+      // The code reads fine; it is the lookup behind it that needs the feed.
+      if (scenario === "vehicles-down") {
+        setPhase("notFound");
+        return;
+      }
+      onResolved(QR_VEHICLE);
+    }, LOOKUP_DELAY);
+  };
 
   if (denied) {
     return (
@@ -460,21 +527,61 @@ function ScanView({
     );
   }
 
+  if (phase === "notFound") {
+    return (
+      <div className="flex flex-col gap-3">
+        <Alert variant="destructive">
+          <AlertDescription>{t("vehicle.errors.notFound")}</AlertDescription>
+        </Alert>
+        <Button
+          className="min-h-11"
+          onClick={() => {
+            setPhase("scanning");
+          }}
+        >
+          <RotateCw />
+          {t("qr.scanAgain")}
+        </Button>
+        <Button
+          variant="outline"
+          className="min-h-11"
+          onClick={() => onChooseMethod("list")}
+        >
+          <Search />
+          {t("qr.fallback.search")}
+        </Button>
+      </div>
+    );
+  }
+
+  const busy = phase === "starting" || phase === "resolving";
+
   return (
     <div className="flex flex-col gap-3">
       <button
         type="button"
         aria-label={t("qr.video")}
-        onClick={() => onResolved(QR_VEHICLE)}
+        disabled={busy}
+        onClick={scan}
         className="border-border bg-muted focus-visible:border-ring focus-visible:ring-ring/50 relative flex aspect-square w-full items-center justify-center rounded-lg border focus-visible:ring-3 focus-visible:outline-none"
       >
         <span
           aria-hidden
           className="border-primary absolute inset-6 rounded-md border-2 border-dashed"
         />
-        <Camera className="text-muted-foreground size-8" aria-hidden />
+        {busy ? (
+          <Spinner className="size-8" />
+        ) : (
+          <Camera className="text-muted-foreground size-8" aria-hidden />
+        )}
       </button>
-      <p className="text-muted-foreground text-sm">{t("qr.hint")}</p>
+      <p role="status" className="text-muted-foreground text-sm">
+        {phase === "starting"
+          ? t("qr.starting")
+          : phase === "resolving"
+            ? t("qr.resolving")
+            : t("qr.hint")}
+      </p>
       <Button
         variant="ghost"
         className="min-h-11"
@@ -509,17 +616,40 @@ type LocateState = "idle" | "locating" | "denied" | "failed";
  */
 function FindView({
   locale,
+  scenario,
   initialTab,
+  notice,
+  onDismissNotice,
   onReport,
   onUnlisted,
 }: {
   locale: CitizenLocale;
+  scenario: CitizenScenario;
   initialTab: "map" | "list";
+  /** Why you are back here, when a send sent you back. */
+  notice?: string;
+  onDismissNotice: () => void;
   onReport: (vehicle: CitizenVehicle, method: FindMethod) => void;
   onUnlisted: () => void;
 }) {
   const t = citizenCopy(locale);
   const [tab, setTab] = React.useState<"map" | "list">(initialTab);
+
+  /**
+   * The feed settles once, briefly, on the way in.
+   *
+   * Two different loading states share one flag. `scenario === "loading"` is
+   * the documented one and never resolves -- it is how a consumer renders
+   * "the feed has not arrived". This short one is how a reader of the docs
+   * meets `vehicle.near.loading` at all, since the sample data is already in
+   * memory and would otherwise appear in the same frame as the screen.
+   */
+  const [settling, setSettling] = React.useState(true);
+  React.useEffect(() => {
+    const timer = setTimeout(() => setSettling(false), FEED_DELAY);
+    return () => clearTimeout(timer);
+  }, []);
+  const feedDown = scenario === "vehicles-down";
   const [operator, setOperator] = React.useState("all");
   const [type, setType] = React.useState<VehicleType | "all">("all");
   const [filtersOpen, setFiltersOpen] = React.useState(false);
@@ -538,6 +668,23 @@ function FindView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {notice ? (
+        <Alert variant="destructive" className="mx-4 mt-3 w-auto">
+          <AlertDescription className="flex items-start justify-between gap-2">
+            <span className="flex-1">{notice}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("vehicle.close")}
+              onClick={onDismissNotice}
+            >
+              <X />
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <div className="flex shrink-0 items-center gap-2 px-4 pt-3 pb-2">
         <SegmentedControl
           className="min-w-0 flex-1"
@@ -578,13 +725,19 @@ function FindView({
       {tab === "map" ? (
         <MapPane
           locale={locale}
-          visible={visible}
+          // The basemap is fine when the feed is not: the map still orients
+          // you, it just has nothing to put on it. Hiding the map too would
+          // take away the one thing that still works.
+          visible={feedDown || scenario === "loading" ? [] : visible}
+          feedDown={feedDown}
           onReport={(vehicle) => onReport(vehicle, "map")}
         />
       ) : (
         <ListPane
           locale={locale}
           visible={visible}
+          loading={scenario === "loading" || settling}
+          feedDown={feedDown}
           onReport={onReport}
           onUnlisted={onUnlisted}
         />
@@ -690,10 +843,12 @@ function FilterPanel({
 function MapPane({
   locale,
   visible,
+  feedDown,
   onReport,
 }: {
   locale: CitizenLocale;
   visible: CitizenVehicle[];
+  feedDown: boolean;
   onReport: (vehicle: CitizenVehicle) => void;
 }) {
   const t = citizenCopy(locale);
@@ -1055,6 +1210,18 @@ function MapPane({
             onReport={() => onReport(selected)}
           />
         </div>
+      ) : feedDown ? (
+        // Destructive, not muted: this is not a hint about an empty map, it
+        // is the reason the map is empty, and a resident who cannot tell the
+        // difference will stand in the street waiting for dots.
+        <Alert
+          variant="destructive"
+          className="bg-background absolute inset-x-2 bottom-10 w-auto"
+        >
+          <AlertDescription>
+            {t("vehicle.errors.liveDataUnavailable")}
+          </AlertDescription>
+        </Alert>
       ) : (
         <p className="bg-background/90 text-muted-foreground absolute inset-x-2 bottom-10 rounded-md px-2 py-1 text-center text-xs">
           {t("map.tapHint")}
@@ -1088,11 +1255,15 @@ function MapPane({
 function ListPane({
   locale,
   visible,
+  loading,
+  feedDown,
   onReport,
   onUnlisted,
 }: {
   locale: CitizenLocale;
   visible: CitizenVehicle[];
+  loading: boolean;
+  feedDown: boolean;
   onReport: (vehicle: CitizenVehicle, method: FindMethod) => void;
   onUnlisted: () => void;
 }) {
@@ -1100,8 +1271,25 @@ function ListPane({
   const [query, setQuery] = React.useState("");
   const [expanded, setExpanded] = React.useState<string | null>(null);
 
-  const term = query.trim().toUpperCase();
+  /**
+   * The typed value and the value the list is filtered by are not the same.
+   *
+   * Filtering on every keystroke is what makes this feel instant, and it is
+   * also why `vehicle.search.searching` had nowhere to live. A debounce gives
+   * the state somewhere to be without giving the search back the latency the
+   * redesign removed: the list still settles a quarter of a second after you
+   * stop typing, not after a round trip.
+   */
+  const [term, setTerm] = React.useState("");
+  React.useEffect(() => {
+    const next = query.trim().toUpperCase();
+    if (next === term) return;
+    const timer = setTimeout(() => setTerm(next), SEARCH_DEBOUNCE);
+    return () => clearTimeout(timer);
+  }, [query, term]);
+
   const searching = term.length > 0;
+  const settlingSearch = query.trim().toUpperCase() !== term;
 
   const rows = React.useMemo(() => {
     if (!searching) return vehiclesNear(visible);
@@ -1131,7 +1319,11 @@ function ListPane({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <FieldDescription>{t("vehicle.search.hintLive")}</FieldDescription>
+            <FieldDescription>
+              {settlingSearch
+                ? t("vehicle.search.searching")
+                : t("vehicle.search.hintLive")}
+            </FieldDescription>
           </Field>
         </form>
       </search>
@@ -1160,7 +1352,47 @@ function ListPane({
           </>
         )}
 
-        {rows.length === 0 ? (
+        {feedDown ? (
+          <Empty className="border">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <TriangleAlert />
+              </EmptyMedia>
+              <EmptyTitle>{t("vehicle.near.title")}</EmptyTitle>
+              <EmptyDescription>
+                {t("vehicle.errors.unavailable")}
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              {/*
+                The unlisted form is the one route that needs no feed: it is a
+                typed operator and a typed id. Offering it here is the
+                difference between "come back later" and "report it anyway".
+              */}
+              <Button variant="outline" className="min-h-11" onClick={onUnlisted}>
+                {t("unlisted.link")}
+              </Button>
+            </EmptyContent>
+          </Empty>
+        ) : loading ? (
+          <div
+            role="status"
+            aria-label={t("vehicle.near.loading")}
+            className="flex flex-col gap-2"
+          >
+            {Array.from({ length: 3 }, (_, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3 rounded-lg border p-3"
+              >
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-3 w-2/3" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : rows.length === 0 ? (
           searching ? (
             <Alert variant="destructive">
               <AlertDescription>
@@ -1230,9 +1462,11 @@ function ListPane({
           </ul>
         )}
 
-        <Button variant="outline" className="min-h-11" onClick={onUnlisted}>
-          {t("unlisted.link")}
-        </Button>
+        {feedDown ? null : (
+          <Button variant="outline" className="min-h-11" onClick={onUnlisted}>
+            {t("unlisted.link")}
+          </Button>
+        )}
       </section>
     </div>
   );
@@ -1254,13 +1488,18 @@ function ListPane({
  */
 function ReportView({
   locale,
+  scenario,
   vehicle,
   method,
+  onStale,
   onSent,
 }: {
   locale: CitizenLocale;
+  scenario: CitizenScenario;
   vehicle: CitizenVehicle | null;
   method: FindMethod;
+  /** The vehicle left the feed while this form was open. */
+  onStale: () => void;
   onSent: (reportId: string) => void;
 }) {
   const t = citizenCopy(locale);
@@ -1275,7 +1514,33 @@ function ReportView({
   const [photos, setPhotos] = React.useState<Photo[]>([]);
   const [trimmed, setTrimmed] = React.useState(false);
   const [submitted, setSubmitted] = React.useState(false);
-  const [sending, setSending] = React.useState(false);
+  const [badPhoto, setBadPhoto] = React.useState(false);
+
+  /**
+   * Sending is three things, and only one of them is "sending".
+   *
+   * The photos go up first and can fail on their own, which is why
+   * `photo.uploading` and `photo.failure.*` exist separately from
+   * `report.sending` and `report.failure.*`. A single boolean could not tell
+   * a reporter which half went wrong, so it told them nothing.
+   */
+  const [phase, setPhase] = React.useState<"idle" | "uploading" | "sending">(
+    "idle",
+  );
+  const [failure, setFailure] = React.useState<string | null>(null);
+  const sending = phase !== "idle";
+
+  /**
+   * The operator list is fetched in production, so the unlisted form has a
+   * moment where it is not yet a form. `unlisted.loading` is for exactly that
+   * moment and had nowhere to be while the list was a constant in memory.
+   */
+  const [formReady, setFormReady] = React.useState(!unlisted);
+  React.useEffect(() => {
+    if (!unlisted) return;
+    const timer = setTimeout(() => setFormReady(true), FEED_DELAY);
+    return () => clearTimeout(timer);
+  }, [unlisted]);
 
   const operatorRef = React.useRef<HTMLSelectElement>(null);
   const idRef = React.useRef<HTMLInputElement>(null);
@@ -1305,7 +1570,21 @@ function ReportView({
     [],
   );
 
-  const addPhotos = (event: React.ChangeEvent<HTMLInputElement>) => {
+  /**
+   * `accept="image/*"` is a hint to the picker, not a guarantee: several
+   * platforms let you choose "All files" past it. Production has
+   * `photo.failure.invalid` for the file that comes back and cannot be
+   * decoded, so the check is a real decode rather than a trusted mime type.
+   */
+  const decodes = (url: string) =>
+    new Promise<boolean>((resolve) => {
+      const image = new Image();
+      image.onload = () => resolve(true);
+      image.onerror = () => resolve(false);
+      image.src = url;
+    });
+
+  const addPhotos = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(event.target.files ?? []);
     event.target.value = "";
     if (picked.length === 0) return;
@@ -1316,23 +1595,35 @@ function ReportView({
     const kept = picked.slice(0, room);
     setTrimmed(kept.length < picked.length);
     if (kept.length === 0) return;
-    const next = kept.map((file) => {
+    const made = kept.map((file) => {
       const url = URL.createObjectURL(file);
       urls.current.push(url);
-      return { id: url, url };
+      return url;
     });
-    setPhotos([...photos, ...next]);
+    const usable = await Promise.all(made.map(decodes));
+    const good = made.filter((_, index) => usable[index]);
+    const bad = made.filter((_, index) => !usable[index]);
+    for (const url of bad) URL.revokeObjectURL(url);
+    setBadPhoto(bad.length > 0);
+    if (good.length === 0) return;
+    setPhotos((current) => [
+      ...current,
+      ...good.map((url) => ({ id: url, url })),
+    ]);
   };
 
   const removePhoto = (id: string) => {
     const gone = photos.find((photo) => photo.id === id);
     if (gone) URL.revokeObjectURL(gone.url);
     setTrimmed(false);
+    setBadPhoto(false);
     setPhotos(photos.filter((photo) => photo.id !== id));
   };
 
   const operatorError = submitted && unlisted && !operator;
-  const idError = submitted && unlisted && !typedId.trim();
+  const idMissing = unlisted && !typedId.trim();
+  const idMalformed = unlisted && !idMissing && !validVehicleId(typedId.trim());
+  const idError = submitted && (idMissing || idMalformed);
   const reasonError = submitted && !reason;
   const photoError = submitted && photosRequired && photos.length === 0;
   const commentError = submitted && commentRequired && !comment.trim();
@@ -1349,7 +1640,7 @@ function ReportView({
       operatorRef.current?.focus();
       return;
     }
-    if (unlisted && !typedId.trim()) {
+    if (idMissing || idMalformed) {
       idRef.current?.focus();
       return;
     }
@@ -1371,14 +1662,82 @@ function ReportView({
       return;
     }
 
-    setSending(true);
-    sendTimer.current = setTimeout(() => onSent(sampleReportId()), SEND_DELAY);
+    setFailure(null);
+    send();
+  };
+
+  /**
+   * Photos first, then the report, because that is the order production uses
+   * and the order the failures are written for: a photo that cannot be sent
+   * stops the report, and the reporter is told which half stopped.
+   */
+  const send = () => {
+    const submitReport = () => {
+      setPhase("sending");
+      sendTimer.current = setTimeout(() => {
+        // Picked from the map, gone from the feed by the time Send was
+        // pressed. Nothing on this form can fix that, so it is not an error
+        // on this form.
+        if (vehicle?.intake === "stale") {
+          setPhase("idle");
+          onStale();
+          return;
+        }
+        if (scenario === "intake-paused") {
+          setPhase("idle");
+          setFailure(
+            unlisted
+              ? t("report.failure.unlisted_disabled")
+              : t("report.failure.intake_paused"),
+          );
+          return;
+        }
+        if (scenario === "rate-limited") {
+          setPhase("idle");
+          setFailure(t("report.failure.rate_limited"));
+          return;
+        }
+        if (scenario === "send-failed") {
+          setPhase("idle");
+          setFailure(t("report.failure.unavailable"));
+          return;
+        }
+        onSent(sampleReportId());
+      }, SEND_DELAY);
+    };
+
+    if (photos.length === 0) {
+      submitReport();
+      return;
+    }
+    setPhase("uploading");
+    sendTimer.current = setTimeout(() => {
+      if (scenario === "photos-failed") {
+        setPhase("idle");
+        setFailure(t("photo.failure.unavailable"));
+        return;
+      }
+      submitReport();
+    }, UPLOAD_DELAY);
   };
 
   return (
     <form noValidate onSubmit={submit} className="flex flex-1 flex-col">
       <div className="flex flex-col gap-4 px-4 pt-3 pb-4">
-        {unlisted ? (
+        {unlisted && !formReady ? (
+          <div
+            role="status"
+            aria-label={t("unlisted.loading")}
+            className="flex flex-col gap-4"
+          >
+            {Array.from({ length: 2 }, (_, i) => (
+              <div key={i} className="flex flex-col gap-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+            ))}
+          </div>
+        ) : unlisted ? (
           <>
             <Field data-invalid={operatorError || undefined}>
               <FieldLabel htmlFor="citizen-unlisted-operator">
@@ -1421,7 +1780,11 @@ function ReportView({
               />
               <FieldDescription>{t("report.vehicleHint")}</FieldDescription>
               {idError ? (
-                <FieldError>{t("report.errors.vehicleRequired")}</FieldError>
+                <FieldError>
+                  {idMissing
+                    ? t("report.errors.vehicleRequired")
+                    : t("report.errors.vehicleFormat")}
+                </FieldError>
               ) : null}
             </Field>
           </>
@@ -1457,6 +1820,7 @@ function ReportView({
           required={photosRequired}
           trimmed={trimmed}
           invalid={photoError}
+          rejected={badPhoto}
           takeRef={photoRef}
           cameraInput={cameraInput}
           libraryInput={libraryInput}
@@ -1506,10 +1870,26 @@ function ReportView({
         one screen the button would otherwise sit two screenfuls below the first
         thing you decide.
       */}
-      <div className="bg-background sticky bottom-0 mt-auto border-t px-4 py-3">
+      <div className="bg-background sticky bottom-0 mt-auto flex flex-col gap-2 border-t px-4 py-3">
+        {/*
+          The failure sits with the control that caused it, not at the top of
+          a form you would have to scroll back up to read. `role="alert"` so
+          it is announced: the button goes back to saying "Send report", and
+          without the announcement the only evidence of a failure is a spinner
+          that stopped.
+        */}
+        {failure ? (
+          <Alert variant="destructive" role="alert">
+            <AlertDescription>{failure}</AlertDescription>
+          </Alert>
+        ) : null}
         <Button type="submit" className="min-h-11 w-full" disabled={sending}>
           {sending ? <Spinner /> : null}
-          {sending ? t("report.sending") : t("report.send")}
+          {phase === "uploading"
+            ? t("photo.uploading")
+            : phase === "sending"
+              ? t("report.sending")
+              : t("report.send")}
         </Button>
       </div>
     </form>
@@ -1531,6 +1911,7 @@ function PhotoField({
   required,
   trimmed,
   invalid,
+  rejected,
   takeRef,
   cameraInput,
   libraryInput,
@@ -1542,6 +1923,8 @@ function PhotoField({
   required: boolean;
   trimmed: boolean;
   invalid: boolean;
+  /** At least one picked file did not decode as an image. */
+  rejected: boolean;
   takeRef: React.RefObject<HTMLButtonElement | null>;
   cameraInput: React.RefObject<HTMLInputElement | null>;
   libraryInput: React.RefObject<HTMLInputElement | null>;
@@ -1637,6 +2020,12 @@ function PhotoField({
         </Alert>
       ) : null}
 
+      {rejected ? (
+        <Alert variant="destructive">
+          <AlertDescription>{t("photo.failure.invalid")}</AlertDescription>
+        </Alert>
+      ) : null}
+
       {invalid ? (
         <Alert variant="destructive">
           <AlertDescription>
@@ -1698,21 +2087,97 @@ function PhotoField({
 function DoneView({
   locale,
   reportId,
+  vehicle,
   onNew,
 }: {
   locale: CitizenLocale;
   reportId: string;
+  /** Whose intake decides what the city does with this report. */
+  vehicle: CitizenVehicle | null;
   onNew: () => void;
 }) {
   const t = citizenCopy(locale);
+
+  /**
+   * The report is received first and passed on second, and the second part
+   * can go wrong.
+   *
+   * Production polls this screen until the report stops moving, and carries
+   * six strings for where it can stop. This block showed one of them, fixed,
+   * the instant the form closed -- so "Delayed, we will retry it" and "Could
+   * not be sent to the city" existed in the copy and nowhere else. Which one
+   * you get is the vehicle's fixture, so it is reachable by reporting that
+   * vehicle rather than by setting a prop.
+   */
+  const outcome: ReportStatus =
+    vehicle?.intake === "parked"
+      ? "parked"
+      : vehicle?.intake === "rejected"
+        ? "rejected"
+        : "sent";
+
+  const [status, setStatus] = React.useState<ReportStatus>("received");
+  React.useEffect(() => {
+    const timer = setTimeout(() => setStatus(outcome), STATUS_DELAY);
+    return () => clearTimeout(timer);
+  }, [outcome]);
+
+  const settled = status !== "received";
+
   return (
     <div className="flex flex-col gap-4 px-4 pt-3 pb-4">
-      <p className="text-sm">{t("report.done.text")}</p>
+      {/*
+        The lead has to agree with the status under it. Production says "We
+        received your report." whatever the poll settles on, so a refused
+        report read as thanks followed by a red line saying it went nowhere,
+        and a resident could not tell whether anything had happened at all.
+      */}
+      <p className="text-sm">
+        {settled && outcome === "rejected"
+          ? t("report.done.textRejected")
+          : t("report.done.text")}
+      </p>
 
-      <Timeline>
-        <TimelineItem tone="success" title={t("report.status.sent")} />
-        <TimelineItem tone="neutral" title={t("report.status.received")} />
+      {/*
+        Newest first, which is the order the Timeline pattern asks for and the
+        order that answers the only question on this screen: where is it now?
+      */}
+      <Timeline aria-live="polite">
+        {/*
+          One item until the poll settles, not two.
+          `report.status.sending` and `.received` are the SAME words in both
+          locales -- production says so in the type's own comment -- so a
+          pending item above a received item read "Received" twice, which
+          looks like a rendering fault rather than a report in flight. The
+          spinner carries "still moving" instead, and `sending` stays unused
+          for the same reason it is a duplicate.
+        */}
+        {settled ? (
+          <TimelineItem
+            tone={
+              outcome === "sent"
+                ? "success"
+                : outcome === "parked"
+                  ? "warning"
+                  : "destructive"
+            }
+            title={t(`report.status.${outcome}`)}
+          />
+        ) : null}
+        <TimelineItem
+          tone="neutral"
+          title={t("report.status.received")}
+          time={settled ? undefined : <Spinner className="size-3" />}
+        />
       </Timeline>
+
+      {/*
+        No second sentence under the timeline. The obvious thing to add was an
+        alert repeating the outcome, and in both locales it came out as the
+        same words twice -- `report.status.rejected` and `.expired` ARE the
+        sentence, and `.parked` already says the app will retry, so an alert
+        beside it would be the screen arguing with itself.
+      */}
 
       <div className="flex flex-col gap-1 rounded-lg border p-3">
         <p className="text-muted-foreground text-sm">
@@ -1755,13 +2220,45 @@ function DoneView({
  * here. Every divergence is commented where it happens, and the five views --
  * what used to be nine -- are documented on the `View` union.
  *
+ * The STATES are production's too, and they are the part a demo normally
+ * loses. A block with no network shows the one path where nothing goes wrong,
+ * which is the path nobody needs help designing. So the rule here is:
+ *
+ *   a state the RESIDENT causes is reachable by causing it
+ *   a state the CITY causes is the `scenario` prop
+ *
+ * Reachable by doing something: the camera starting and the code resolving;
+ * the near-you list settling; a search that has not caught up with the
+ * typing; the unlisted form before its operators arrive; a photo the app
+ * cannot decode; a batch over the limit; an id in the wrong shape; a vehicle
+ * that left the feed while the form was open; a report the city holds, and
+ * one it refuses. The last three are fixtures on the sample vehicles -- the
+ * cargo bike has gone stale, the moped is held, the Dott bike is refused --
+ * so a reader who explores the demo meets them without being told to.
+ *
+ * Behind `scenario`: a feed that is loading or down, a service that is down,
+ * intake paused, rate limiting, a send that fails, photos that fail. See
+ * `CitizenScenario`. It defaults to `ready`, so the docs page shows the
+ * working app, as `FeedsWorkspace`'s `status` does.
+ *
  * What is deliberately absent: there is no live vehicle feed and no security
  * check. Production gates every data call behind signed tiles and an AWS WAF
  * CAPTCHA, neither of which belongs in a component demo. `notLive` and
  * `qrNotFound` went with it -- they were props on the list view that nothing
  * ever set, so the two error states they drew were unreachable.
  */
-export function CitizenWorkspace({ className }: { className?: string }) {
+export function CitizenWorkspace({
+  className,
+  scenario = "ready",
+}: {
+  className?: string;
+  /**
+   * What the service is doing. See `CitizenScenario`: the states a resident
+   * causes are reachable by causing them, and these are the ones only a
+   * server can cause. `FeedsWorkspace` takes a `status` for the same reason.
+   */
+  scenario?: CitizenScenario;
+}) {
   const [locale, setLocale] = React.useState<CitizenLocale>("en");
 
   /**
@@ -1799,6 +2296,20 @@ export function CitizenWorkspace({ className }: { className?: string }) {
   /** QR skips the photo requirement; everything else cannot. Production's rule. */
   const toReport = (vehicle: CitizenVehicle, method: FindMethod) =>
     go({ name: "report", vehicle, method });
+
+  /**
+   * The vehicle was on the map when it was picked and is not in the feed now.
+   *
+   * Production's `not_in_live_data`, and the only failure that sends you
+   * BACKWARDS: there is nothing to correct on the form, because the thing the
+   * form is about has gone. So the report screen is left behind and the find
+   * screen says why, which is also where you can pick another one.
+   */
+  const [staleNotice, setStaleNotice] = React.useState(false);
+  const onStale = () => {
+    setStaleNotice(true);
+    setStack([{ name: "start" }, { name: "find", tab: "map" }]);
+  };
 
   const title =
     view.name === "scan"
@@ -1841,7 +2352,28 @@ export function CitizenWorkspace({ className }: { className?: string }) {
             onLocale={() => setLocale(locale === "de" ? "en" : "de")}
           />
 
-          {view.name === "start" ? (
+          {/*
+            Nothing below this is worth drawing when the service is gone.
+            Production's `app.apiUnavailable` is a whole-app state, not a
+            banner over a form that cannot submit: offering the camera and
+            the map while neither can resolve a vehicle is a worse lie than
+            saying so once.
+          */}
+          {scenario === "service-down" ? (
+            <div className="p-4">
+              <Empty className="border">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <TriangleAlert />
+                  </EmptyMedia>
+                  <EmptyTitle>{t("app.title")}</EmptyTitle>
+                  <EmptyDescription>{t("app.apiUnavailable")}</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            </div>
+          ) : null}
+
+          {scenario !== "service-down" && view.name === "start" ? (
             <div className="p-4">
               <StartView
                 locale={locale}
@@ -1852,42 +2384,56 @@ export function CitizenWorkspace({ className }: { className?: string }) {
             </div>
           ) : null}
 
-          {view.name === "scan" ? (
+          {scenario !== "service-down" && view.name === "scan" ? (
             <div className="p-4">
               <ScanView
                 locale={locale}
+                scenario={scenario}
                 onResolved={(vehicle) => toReport(vehicle, "qr")}
                 onChooseMethod={(method) => go({ name: "find", tab: method })}
               />
             </div>
           ) : null}
 
-          {view.name === "find" ? (
+          {scenario !== "service-down" && view.name === "find" ? (
             <FindView
               locale={locale}
+              scenario={scenario}
               initialTab={view.tab}
-              onReport={toReport}
+              notice={
+                staleNotice ? t("report.failure.not_in_live_data") : undefined
+              }
+              onDismissNotice={() => setStaleNotice(false)}
+              onReport={(vehicle, method) => {
+                setStaleNotice(false);
+                toReport(vehicle, method);
+              }}
               onUnlisted={() =>
                 go({ name: "report", vehicle: null, method: "unlisted" })
               }
             />
           ) : null}
 
-          {view.name === "report" ? (
+          {scenario !== "service-down" && view.name === "report" ? (
             <ReportView
               locale={locale}
+              scenario={scenario}
               vehicle={view.vehicle}
               method={view.method}
+              onStale={onStale}
               // The stack is replaced rather than pushed: a sent report is not
               // somewhere you go Back from, so the only way on is a new one.
-              onSent={(reportId) => setStack([{ name: "done", reportId }])}
+              onSent={(reportId) =>
+                setStack([{ name: "done", reportId, vehicle: view.vehicle }])
+              }
             />
           ) : null}
 
-          {view.name === "done" ? (
+          {scenario !== "service-down" && view.name === "done" ? (
             <DoneView
               locale={locale}
               reportId={view.reportId}
+              vehicle={view.vehicle}
               onNew={() => setStack([{ name: "start" }])}
             />
           ) : null}
