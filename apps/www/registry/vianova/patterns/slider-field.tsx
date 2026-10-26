@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { Info } from "lucide-react";
 
 import { cn } from "@/registry/vianova/lib/utils";
+import { Button } from "@/registry/vianova/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/registry/vianova/ui/field";
 import {
   InputGroup,
@@ -11,6 +13,7 @@ import {
   InputGroupText,
 } from "@/registry/vianova/ui/input-group";
 import { Slider } from "@/registry/vianova/ui/slider";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/registry/vianova/ui/tooltip";
 
 /**
  * Formats a number for display with a real minus sign (U+2212).
@@ -42,6 +45,12 @@ function decimalsOf(step: number) {
  * the text is held as typed, the slider follows every parseable keystroke,
  * and the value is clamped and rounded to `step` only on blur or Enter.
  *
+ * `description` sits under the label and is always read; `hint` folds the
+ * same words into an info tooltip next to it. Prefer `hint` for an
+ * explanation someone needs once -- a sentence that stays on screen pushes
+ * the track down and makes a collapsed section expensive to open. Pass one or
+ * the other, not both.
+ *
  * Marks are placed with the same arithmetic as the thumb. The underlying
  * Slider uses `thumbAlignment="edge"`, which keeps the 12px thumb inside the
  * track, so the thumb centre travels from 6px to `100% - 6px`, not 0 to 100%.
@@ -50,6 +59,7 @@ function decimalsOf(step: number) {
 export function SliderField({
   label,
   description,
+  hint,
   value,
   onValueChange,
   min,
@@ -64,6 +74,8 @@ export function SliderField({
 }: {
   label: React.ReactNode;
   description?: React.ReactNode;
+  /** The same explanation as `description`, behind an info tooltip. */
+  hint?: React.ReactNode;
   value: number;
   onValueChange: (value: number) => void;
   min: number;
@@ -123,9 +135,29 @@ export function SliderField({
 
   return (
     <Field data-slot="slider-field" data-disabled={disabled || undefined} className={cn("gap-3", className)}>
-      <FieldLabel id={labelId} htmlFor={inputId}>
-        {label}
-      </FieldLabel>
+      <div className="flex items-center gap-1">
+        <FieldLabel id={labelId} htmlFor={inputId}>
+          {label}
+        </FieldLabel>
+        {hint ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label="What this setting does"
+                  className="text-muted-foreground"
+                >
+                  <Info />
+                </Button>
+              }
+            />
+            <TooltipContent className="max-w-xs">{hint}</TooltipContent>
+          </Tooltip>
+        ) : null}
+      </div>
       {description ? <FieldDescription className="-mt-1.5">{description}</FieldDescription> : null}
 
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5">

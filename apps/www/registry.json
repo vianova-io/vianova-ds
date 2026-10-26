@@ -3727,10 +3727,15 @@
       "categories": [
         "Patterns"
       ],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
+        "@vianova/button",
         "@vianova/field",
         "@vianova/input-group",
         "@vianova/slider",
+        "@vianova/tooltip",
         "@vianova/utils"
       ],
       "files": [

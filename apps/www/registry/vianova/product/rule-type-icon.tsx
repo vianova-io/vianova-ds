@@ -112,7 +112,7 @@ export const RULE_TYPES: Record<
   },
   max_unavailable: {
     label: "Max unavailable",
-    description: "Maximum share of a fleet that may be broken or in maintenance.",
+    description: "How many devices, or for how long, a fleet may be broken or in maintenance.",
     color: FLEET,
     icon: RegulationMaxUnavailable,
   },
@@ -170,19 +170,25 @@ export function ruleTypeColor(type: RuleType): string {
 }
 
 /*
+ * Production's badge is 16x21, taller than it is wide, so `box` is the width
+ * and the height follows from ASPECT. It was square, which made the shield
+ * read as a rounded tile beside production's.
+ *
  * The glyph fills about two thirds of the badge, as production's does: at
  * half, which is where this started, a 16px badge was mostly colour with a
  * speck in it. `stroke` is in viewBox units and shrinks with the glyph, so it
  * is tuned per size to land on roughly the same rendered line -- 1.15, 1.5 and
  * 1.75px -- rather than thinning to a hairline at 16px.
  *
- * `top` centres the glyph on the shoulders (40% of the box), not the box: the
- * point holds no area, so the box's true centre would sit the glyph low.
+ * `top` centres the glyph on the shoulders (40% of the box's height), not the
+ * box: the point holds no area, so the true centre would sit the glyph low.
  */
+const ASPECT = 21 / 16;
+
 const SIZES = {
-  sm: { box: 16, glyph: 11, stroke: 2.5, top: 0.9 },
-  md: { box: 24, glyph: 16, stroke: 2.25, top: 1.6 },
-  lg: { box: 32, glyph: 21, stroke: 2, top: 2.3 },
+  sm: { box: 16, glyph: 11, stroke: 2.5, top: 2.9 },
+  md: { box: 24, glyph: 16, stroke: 2.25, top: 4.6 },
+  lg: { box: 32, glyph: 21, stroke: 2, top: 6.3 },
 } as const;
 
 /** The dark ink, when white would not read. Matches category-style's own. */
@@ -263,16 +269,16 @@ export function RuleTypeIcon({
       data-type={type}
       {...(label ? { role: "img", "aria-label": label } : { "aria-hidden": true })}
       className={cn("relative inline-flex shrink-0", className)}
-      style={{ width: s.box, height: s.box, ...style }}
+      style={{ width: s.box, height: s.box * ASPECT, ...style }}
       {...props}
     >
-      <svg viewBox="0 0 24 24" className="absolute inset-0 size-full" aria-hidden>
+      <svg viewBox="0 0 16 21" className="absolute inset-0 size-full" aria-hidden>
         {/* A banner with a pointed foot, as production's badge is: square
             shoulders give the glyph room, and the point makes the silhouette
-            its own at 16px. Full width of the box, so the badge does not read
-            smaller than a 24px icon beside it. */}
+            its own at 16px. It fills the viewBox edge to edge, so the 16x21
+            here is 16x21 on screen. */}
         <path
-          d="M4.5 1h15A2.5 2.5 0 0 1 22 3.5v12.2a1.5 1.5 0 0 1-.68 1.26l-8.5 5.6a1.5 1.5 0 0 1-1.64 0l-8.5-5.6A1.5 1.5 0 0 1 2 15.7V3.5A2.5 2.5 0 0 1 4.5 1Z"
+          d="M2 0h12a2 2.435 0 0 1 2 2.435V14.32a1.2 1.461 0 0 1-.544 1.227l-6.8 5.454a1.2 1.461 0 0 1-1.312 0l-6.8-5.454A1.2 1.461 0 0 1 0 14.32V2.435A2 2.435 0 0 1 2 0Z"
           fill={color}
         />
       </svg>
