@@ -377,6 +377,9 @@ export function RegulationsWorkspace({
           zoneIndex={zoneIndex}
           zonesLoading={zonesLoading}
           onZonesCreated={(made) => setZones((all) => [...made, ...all])}
+          onZoneRename={(id, name) =>
+            setZones((all) => all.map((z) => (z.id === id ? { ...z, name } : z)))
+          }
           onSave={(reg) => {
             setRegulations((all) =>
               all.some((r) => r.id === reg.id)
@@ -934,6 +937,7 @@ function RegulationEditor({
   zoneIndex,
   zonesLoading,
   onZonesCreated,
+  onZoneRename,
   onSave,
   onDuplicate,
   onClose,
@@ -945,6 +949,7 @@ function RegulationEditor({
   zoneIndex: Map<string, PickerZone>;
   zonesLoading: boolean;
   onZonesCreated: (zones: PickerZone[]) => void;
+  onZoneRename: (id: string, name: string) => void;
   onSave: (reg: Regulation) => void;
   onDuplicate: (reg: Regulation) => void;
   onClose: (notice?: string) => void;
@@ -1157,6 +1162,7 @@ function RegulationEditor({
                 zonesLoading={zonesLoading}
                 onChange={(next) => updateRule(rule.id, next)}
                 onAddZones={() => setPickerOpen(true)}
+                onZoneRename={onZoneRename}
                 onLocate={(id) => {
                   setPane("map");
                   setFocusZone({ id, at: Date.now() });
@@ -1364,6 +1370,7 @@ function RuleEditor({
   onChange,
   onAddZones,
   onLocate,
+  onZoneRename,
   onDuplicate,
   onDelete,
 }: {
@@ -1375,6 +1382,7 @@ function RuleEditor({
   onChange: (next: Partial<Rule>) => void;
   onAddZones: () => void;
   onLocate: (zoneId: string) => void;
+  onZoneRename: (id: string, name: string) => void;
   /**
    * The rule's own actions, shown below lg only: there the rail is a strip of
    * chips with no ⋯ of their own. From lg up the rail's tiles carry them.
@@ -1489,7 +1497,7 @@ function RuleEditor({
         <RuleSection value="buffer" title="Buffer" summary={`${formatSigned(rule.buffer)} m`}>
           <SliderField
             label="Buffer around each zone"
-            description="Widens or narrows every zone by this much when vehicles are counted, to allow for GPS error. The zones themselves don't change."
+            hint="Widens or narrows every zone by this much when vehicles are counted, to allow for GPS error. The zones themselves don't change."
             min={-20}
             max={20}
             step={1}
@@ -1513,6 +1521,7 @@ function RuleEditor({
             onRemove={(remove) => onChange({ zoneIds: rule.zoneIds.filter((id) => !remove.includes(id)) })}
             onAdd={onAddZones}
             onLocate={onLocate}
+            onRename={onZoneRename}
           />
         </RuleSection>
 
@@ -1679,6 +1688,45 @@ function AllOrSome({
 
 const ZONE_PAGE = 8;
 
+/**
+ * A zone's name, renamed in place.
+ *
+ * A real bordered input, not text that becomes one on click: production
+ * renames from this list, and a borderless field reads as a label nobody
+ * thinks to type into -- which was the report this answers.
+ *
+ * The draft is local so each keystroke is cheap. The rename is published on
+ * blur or Enter, and Escape puts the old name back.
+ */
+function ZoneNameField({ name, onRename }: { name: string; onRename: (name: string) => void }) {
+  const [draft, setDraft] = React.useState<string | null>(null);
+
+  const commit = () => {
+    if (draft === null) return;
+    const next = draft.trim();
+    setDraft(null);
+    // An emptied field is a slip, not a request for a nameless zone.
+    if (next && next !== name) onRename(next);
+  };
+
+  return (
+    <Input
+      aria-label={`Rename ${name}`}
+      className="h-8"
+      value={draft ?? name}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit();
+        }
+        if (e.key === "Escape") setDraft(null);
+      }}
+    />
+  );
+}
+
 function ZoneList({
   ids,
   zoneIndex,
@@ -1686,6 +1734,7 @@ function ZoneList({
   onRemove,
   onAdd,
   onLocate,
+  onRename,
 }: {
   ids: string[];
   zoneIndex: Map<string, PickerZone>;
@@ -1693,6 +1742,7 @@ function ZoneList({
   onRemove: (ids: string[]) => void;
   onAdd: () => void;
   onLocate: (id: string) => void;
+  onRename: (id: string, name: string) => void;
 }) {
   const [checked, setChecked] = React.useState<string[]>([]);
   const [page, setPage] = React.useState(0);
@@ -1774,9 +1824,13 @@ function ZoneList({
                       />
                     </TableCell>
                     <TableCell className="max-w-0">
-                      <span className="block truncate">{name}</span>
+                      {zone ? (
+                        <ZoneNameField name={zone.name} onRename={(next) => onRename(id, next)} />
+                      ) : (
+                        <span className="block truncate">{name}</span>
+                      )}
                       {zone?.tags[0] ? (
-                        <span className="text-muted-foreground block truncate text-xs">{zone.tags[0]}</span>
+                        <span className="text-muted-foreground mt-1 block truncate text-xs">{zone.tags[0]}</span>
                       ) : null}
                     </TableCell>
                     <TableCell className="text-right whitespace-nowrap">
