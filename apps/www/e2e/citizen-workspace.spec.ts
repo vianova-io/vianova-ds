@@ -202,6 +202,41 @@ test("the selected dot is marked on the map", async ({ page }) => {
   await expect(root.getByText("Selected: TIER Scooter, TIER-8F42K")).toBeAttached();
 });
 
+test("a vehicle can still be tapped once the map is zoomed in", async ({ page }) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Find the vehicle on the map" }).click();
+
+  const vehicle = "LIME-QX907";
+  const card = await tapVehicle(root, page, vehicle);
+  await expect(card.getByText(vehicle, { exact: true })).toBeVisible();
+
+  // Selecting eases the map so the vehicle sits SELECTED_OFFSET_Y above the
+  // centre. Let that finish before measuring anything off it.
+  await page.waitForTimeout(500);
+  await root.getByRole("button", { name: "Close" }).click();
+  await expect(card).toBeHidden();
+
+  // The block opens at 14.4 and the dot becomes a badge at 15, so ONE tap of
+  // the zoom control crosses the hand-over. The hit test used to name only the
+  // dots layer, and `queryRenderedFeatures` reports only layers that are
+  // actually drawn -- so from here on every tap missed, and because an empty
+  // hit also clears the selection, tapping a vehicle dismissed its card
+  // instead of opening it.
+  await root.getByRole("button", { name: "Zoom in" }).click();
+  await page.waitForTimeout(800);
+
+  // Zoom is about the centre, so one step doubles the vehicle's distance from
+  // it. That is the whole projection this test needs, and it stays true if the
+  // block ever changes its opening zoom.
+  const canvas = page.locator(".maplibregl-canvas");
+  const box = (await canvas.boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 - 180);
+
+  // One click, not a poll: a miss selects whatever else is under the thumb and
+  // eases the map again, which would move the target out from under a retry.
+  await expect(card.getByText(vehicle, { exact: true })).toBeVisible();
+});
+
 test("Back from the report returns to the map, not to a list", async ({ page }) => {
   const root = await open(page);
   await root.getByRole("button", { name: "Find the vehicle on the map" }).click();
