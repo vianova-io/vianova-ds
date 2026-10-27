@@ -325,6 +325,7 @@
         }
       ],
       "registryDependencies": [
+        "@vianova/category-style",
         "@vianova/csv"
       ]
     },
@@ -529,6 +530,7 @@
         "@vianova/avatar",
         "@vianova/badge",
         "@vianova/button",
+        "@vianova/category-badge",
         "@vianova/category-style",
         "@vianova/category-style-picker",
         "@vianova/confirm-dialog",
@@ -626,6 +628,7 @@
         "@vianova/bottom-tray",
         "@vianova/button",
         "@vianova/button-group",
+        "@vianova/category-badge",
         "@vianova/category-style",
         "@vianova/chart",
         "@vianova/chart-card",
@@ -761,6 +764,7 @@
         "@vianova/markdown-editor",
         "@vianova/popover",
         "@vianova/report-grid",
+        "@vianova/sample-datasets",
         "@vianova/skeleton",
         "@vianova/table",
         "@vianova/textarea",
@@ -3205,6 +3209,7 @@
       ],
       "registryDependencies": [
         "@vianova/button",
+        "@vianova/category-badge",
         "@vianova/category-style",
         "@vianova/color-ramp",
         "@vianova/colorize-panel",
