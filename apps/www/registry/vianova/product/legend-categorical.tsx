@@ -72,6 +72,13 @@ export function LegendCategorical({
         const dot = (
           <span
             aria-hidden
+            // Addressable whatever shape the row takes. The swatch is wrapped
+            // in a sizing box as soon as ANY category has a logo, so a
+            // selector reaching for a direct child of the row finds it on one
+            // legend and not on the next -- and `aria-hidden` alone is no use
+            // either, since CategoryBadge carries it too and its own
+            // background is the ring rather than the category's colour.
+            data-slot="legend-swatch"
             // shrink-0 so a long label never squeezes the swatch into an
             // ellipse, which reads as a different symbol rather than a
             // narrower one.

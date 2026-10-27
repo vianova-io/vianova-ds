@@ -197,7 +197,7 @@ test.describe("colouring by a category", () => {
 
     const swatchColors = () =>
       page
-        .locator('[data-slot="legend-categorical"] li > span[aria-hidden]')
+        .locator('[data-slot="legend-categorical"] [data-slot="legend-swatch"]')
         .evaluateAll((els) =>
           els.map((e) => getComputedStyle(e).backgroundColor),
         );
