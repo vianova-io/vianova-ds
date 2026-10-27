@@ -62,6 +62,27 @@ jobs:
             exit 1
           fi
 
+      # The e2e matrix picks files with two regexes, one of them a negative
+      # lookahead. If a rename stops them partitioning the suite, a spec stops
+      # running and nothing goes red -- which is the exact failure the bare
+      # `playwright test` was adopted to prevent, so it is guarded rather than
+      # trusted. Listing takes about a second and starts no web server.
+      - name: The e2e groups still cover every spec
+        working-directory: apps/www
+        run: |
+          heavy='map-workspace-layers\.spec\.ts'
+          rest='^(?!.*map-workspace-layers\.spec\.ts).*$'
+          count() {
+            pnpm exec playwright test ${1:+"$1"} --list 2>/dev/null |
+              sed -n 's/^Total: \([0-9]*\) tests.*/\1/p'
+          }
+          all=$(count) h=$(count "$heavy") r=$(count "$rest")
+          echo "all=$all heavy=$h rest=$r"
+          if [ -z "$all" ] || [ "$h" -eq 0 ] || [ $((h + r)) -ne "$all" ]; then
+            echo "::error::the e2e matrix selectors no longer partition the suite -- $h + $r != $all"
+            exit 1
+          fi
+
       - name: Typecheck
         run: pnpm --filter @vianova/www typecheck
 
@@ -135,56 +156,82 @@ jobs:
   # part of CI anyone waits on. fail-fast is off: one shard's result is wanted
   # even when another has already found something.
   #
-  # ## Why four shards and not two
+  # ## How the work is split
   #
-  # Two was not enough, and the reason is one file. Per-file totals from the
-  # two-shard run, inside the shard that took 18m48s:
+  # Per-file totals, measured from the four shard logs of the run on #19
+  # (580 tests, 2390s of work, two workers a job):
   #
-  #   map-workspace-layers.spec.ts    999s   26 tests   <- 55% of the shard
-  #   responsive.spec.ts              226s   64 tests
-  #   map-workspace-colorize.spec.ts  216s   13 tests
-  #   everything else                 376s   84 tests
+  #   map-workspace-layers.spec.ts    944s   26 tests   39% of the whole suite
+  #   responsive.spec.ts              237s   68 tests
+  #   focus-ring.spec.ts              230s  136 tests
+  #   a11y.spec.ts                    185s  130 tests
+  #   everything else                 794s  220 tests
   #
-  # (Retries excluded. Counting them, as a first pass at this did, credits the
-  # one failing test with 180s and a phantom 27th case.)
+  # Playwright balances shards by test COUNT, and sorted, this suite puts every
+  # expensive spec next to every other one. Four equal counts therefore gave
+  # four wildly unequal times -- shard 3 took 1687s of the 2390, 14.1 min,
+  # while the others finished in 2.2, 1.9 and 1.7. It spent most of a year one
+  # slow runner away from the 25-minute guillotine, and on #19 it hit it: 25m18s,
+  # 87 tests passed, nothing failed, reported as a red check.
   #
-  # Playwright balances shards by test COUNT, so a file averaging 38.4s a test
-  # lands as one indivisible lump next to files averaging 3.5s. Four shards
-  # helped -- the worst job went 18m48s to 16m09s -- but far less than the
-  # arithmetic suggested, and the reason is worth writing down because it
-  # makes "add more shards" the wrong instinct.
+  # Raising the shard count does not fix that. The boundaries move; the
+  # clustering does not.
   #
-  # Shards are contiguous chunks of the SORTED file list, balanced by count.
-  # Sorted, this suite puts every expensive spec next to every other one, and
-  # the 4-shard run duly handed all of them to shard 3:
+  # An earlier note here concluded that a single file was the floor, on the
+  # belief that shards are chunks of the FILE list. They are not. With
+  # `fullyParallel`, --shard splits by test, inside a file as well:
   #
-  #   foundations-colors -> map-workspace-basemap -> -colorize -> -layers
-  #   -> -library -> -tray -> panel-stepper -> preset-picker
-  #   -> regulations-workspace -> responsive
+  #   playwright test map-workspace-layers.spec.ts --list             26 tests
+  #   playwright test map-workspace-layers.spec.ts --shard=1/2 --list 13 tests
   #
-  # 139 tests, the same count as the other three shards, and 1674s of the
-  # suite's ~2100s of work -- 14.1 min over two workers. The other three
-  # finished in 3m30, 4m38 and 3m38. Splitting further shrinks that chunk but
-  # cannot go below one file: map-workspace-layers alone is 949s, so ~8 min
-  # over two workers plus setup is the floor no matter how many shards there
-  # are. Four is where the cost of another runner stops buying anything.
+  # So the split is by cost rather than by count. The one expensive file takes
+  # two jobs; everything else takes three, selected by a negative lookahead.
+  # That is the part worth guarding: the "rest" group is defined by exclusion,
+  # so A NEW SPEC IS COVERED THE MOMENT IT EXISTS, which is the property the
+  # bare `playwright test` was adopted for and the one a hand-written file list
+  # would have thrown away. `verify` asserts the two selectors still partition
+  # the suite, in about a second, so a rename cannot quietly drop a file out of
+  # CI -- the failure this whole arrangement exists to prevent.
   #
-  # Why that file is expensive, and the obvious next thing: `open()` runs
-  # `addEverything()`, re-adding all eleven catalogue layers through the
-  # dialog before EACH test. Measured locally on its a11y case: 41.2s total,
-  # of which the axe scan was 31.7s, leaving ~9.5s for the navigation and the
-  # clicking -- about half of that file's average test, paid 26 times. It
-  # reads that way because the panel used to list the catalogue on load and
-  # stopped when the data library landed, so the tests restored the old
-  # precondition rather than being rewritten. Paying it once per file is a
-  # rewrite of 26 tests, not a CI change, so it is not in this commit.
+  # Expected from those measurements: 472s, 472s, 482s, 482s, 482s -- about
+  # 4 min of tests a job against 14.1. One more runner than before, which is
+  # now worth it; it was not while one file was believed to be indivisible.
+  #
+  # Deliberately NOT changed here, both separate jobs of work:
+  #
+  #   - Each job runs 2 workers, Playwright's default of half the runner's 4
+  #     cores. Doubling it is the next obvious lever and needs its own
+  #     measurement; map-workspace-layers already carries a 90s timeout that
+  #     the comment at its head blames on four workers sharing a machine.
+  #   - map-workspace-layers is expensive because `open()` re-adds all eleven
+  #     catalogue layers through the dialog before EACH test -- about 9.5s of
+  #     every test, paid 26 times -- restoring a precondition the data library
+  #     removed rather than being rewritten. That is a rewrite of 26 tests.
   e2e:
+    name: e2e (${{ matrix.group }} ${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        include:
+          # The one file that is 39% of the suite, split in half.
+          - group: layers
+            select: 'map-workspace-layers\.spec\.ts'
+            shard: 1/2
+          - group: layers
+            select: 'map-workspace-layers\.spec\.ts'
+            shard: 2/2
+          # Everything else, by exclusion rather than by name.
+          - group: rest
+            select: '^(?!.*map-workspace-layers\.spec\.ts).*$'
+            shard: 1/3
+          - group: rest
+            select: '^(?!.*map-workspace-layers\.spec\.ts).*$'
+            shard: 2/3
+          - group: rest
+            select: '^(?!.*map-workspace-layers\.spec\.ts).*$'
+            shard: 3/3
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -219,8 +266,10 @@ jobs:
       # would have run all 556 tests in BOTH shards and timed out twice,
       # reported as two unexplained cancellations. The script stays in
       # package.json for local use; it is the same bare `playwright test`.
-      - name: "End-to-end: shard ${{ matrix.shard }} of 4"
-        run: pnpm --filter @vianova/www exec playwright test --shard=${{ matrix.shard }}/4
+      # The positional argument is a regex matched against each spec's PATH,
+      # which is what makes the "rest" group expressible as a lookahead.
+      - name: "End-to-end: ${{ matrix.group }} ${{ matrix.shard }}"
+        run: pnpm --filter @vianova/www exec playwright test "${{ matrix.select }}" --shard=${{ matrix.shard }}
 
       - name: Upload Playwright report on failure
         if: failure()
@@ -228,7 +277,9 @@ jobs:
         with:
           # Per shard: two jobs uploading one name is a collision, and the
           # artifact that loses is the evidence.
-          name: playwright-report-${{ matrix.shard }}
+          # job-index, not the shard: "1/3" is not a legal artifact name, and
+          # two groups both have a shard 1.
+          name: playwright-report-${{ matrix.group }}-${{ strategy.job-index }}
           path: apps/www/playwright-report
           retention-days: 7
 
