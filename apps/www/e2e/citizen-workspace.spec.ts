@@ -302,6 +302,9 @@ test("a partial id narrows the list as it is typed", async ({ page }) => {
   await expect(root.getByRole("radio", { name: "List view" })).toBeChecked();
 
   const rows = root.getByRole("listitem");
+  // Wait for the feed to settle first: the list opens on skeletons, so
+  // counting rows straight away counts none of them.
+  await expect(rows.first()).toBeVisible();
   const before = await rows.count();
   expect(before).toBeGreaterThan(1);
 
@@ -461,5 +464,196 @@ test("the language toggle names its action and switches every screen", async ({
   await root.getByRole("button", { name: "Fahrzeug auf der Karte finden" }).click();
   await expect(root.getByRole("heading", { name: "Fahrzeug finden" })).toBeVisible();
   await expect(root.getByText("Tippen Sie auf ein Fahrzeug, um es zu melden.")).toBeVisible();
+  await expectNoBlockingViolations(page);
+});
+
+/* -------------------------------------------------------------------------- */
+/* The states that are not the happy one                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * These are the tests the block existed without.
+ *
+ * A demo with no network shows the one path where nothing goes wrong, which
+ * is the path nobody needs help designing. Everything below reaches a state a
+ * resident can cause: a feed that has not arrived, a code that resolves to
+ * nothing, a file that is not an image, an id in the wrong shape, a vehicle
+ * that left the feed, a report the city holds or refuses.
+ *
+ * The states only a SERVER can cause are the `scenario` prop, and the docs
+ * page renders the block with no props — so they are covered by types and by
+ * the block's own documentation, not from here. `FeedsWorkspace`'s `status`
+ * prop sits the same way.
+ *
+ * A note on the brief states: several assertions below race a timer of a few
+ * hundred milliseconds. Playwright arriving late fails the test rather than
+ * passing it quietly, which is the failure mode to want — if one of these
+ * starts flaking, the delay is too short to be seen by a person either.
+ */
+
+/** Search for a vehicle by id and open its report form. */
+async function reportById(root: Locator, id: string) {
+  await root.getByRole("button", { name: "Use the search" }).click();
+  await root.getByRole("searchbox", { name: "Search a vehicle by its ID" }).fill(id);
+  await root.getByRole("listitem").filter({ hasText: id }).getByRole("button").click();
+  await root.getByText("Step 2 of 2").waitFor();
+}
+
+/** A reason and a photo, which is everything a listed vehicle's report needs. */
+async function fillReport(root: Locator) {
+  await root.getByRole("radio", { name: "Bad parking" }).click();
+  await root.locator('input[type="file"][capture]').setInputFiles(PHOTO);
+  await root.getByText("1 of 5 photos added").waitFor();
+}
+
+test("the scan says what it is doing before it resolves", async ({ page }) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Scan the QR code" }).click();
+
+  // The camera is not instant, and production wrote a string for the wait.
+  await expect(root.getByText("Starting the camera …")).toBeVisible();
+  await expect(root.getByText("Hold the camera over the QR code on the vehicle.")).toBeVisible();
+
+  await root.getByRole("button", { name: "Camera view for the QR code scan" }).click();
+  await expect(root.getByText("Looking up the vehicle …")).toBeVisible();
+  await expect(root.getByText("Step 2 of 2")).toBeVisible();
+});
+
+test("the near-you list shows it is loading before it shows vehicles", async ({
+  page,
+}) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Use the search" }).click();
+
+  await expect(
+    root.getByRole("status", { name: "Loading the vehicles near you …" }),
+  ).toBeVisible();
+  await expect(root.getByRole("listitem").first()).toBeVisible();
+  await expectNoBlockingViolations(page);
+});
+
+test("the search says it is searching while the typing settles", async ({ page }) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Use the search" }).click();
+  await root.getByRole("listitem").first().waitFor();
+
+  await root.getByRole("searchbox", { name: "Search a vehicle by its ID" }).fill("TIER");
+  await expect(root.getByText("Searching …")).toBeVisible();
+  await expect(root.getByText("The ID is on the vehicle. Matches appear as you type.")).toBeVisible();
+});
+
+test("the unlisted form says it is loading before it is a form", async ({ page }) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Use the search" }).click();
+  await root.getByRole("button", { name: "Report a vehicle that is not on the map" }).click();
+
+  await expect(root.getByRole("status", { name: "Loading the form …" })).toBeVisible();
+  await expect(root.getByLabel("Operator")).toBeVisible();
+  await expectNoBlockingViolations(page);
+});
+
+test("an id in the wrong shape is named as the wrong shape", async ({ page }) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Use the search" }).click();
+  await root.getByRole("button", { name: "Report a vehicle that is not on the map" }).click();
+  await root.getByLabel("Operator").waitFor();
+
+  await root.getByLabel("Operator").selectOption("Lime");
+  await root.getByLabel("Vehicle ID").fill("LIME/QX907");
+  await root.getByRole("radio", { name: "Bad parking" }).click();
+  await root.getByRole("button", { name: "Send report" }).click();
+
+  // Not "Enter the vehicle ID" — something WAS entered. Production has a
+  // separate string for the shape, and it had never been reachable.
+  await expect(
+    root.getByText("Use letters, digits, spaces and . _ : - only."),
+  ).toBeVisible();
+  await expect(root.getByLabel("Vehicle ID")).toBeFocused();
+
+  await root.getByLabel("Vehicle ID").fill("LIME-QX907");
+  await expect(
+    root.getByText("Use letters, digits, spaces and . _ : - only."),
+  ).toHaveCount(0);
+});
+
+test("a file that is not an image is refused with a reason", async ({ page }) => {
+  const root = await open(page);
+  await root.getByRole("button", { name: "Scan the QR code" }).click();
+  await root.getByRole("button", { name: "Camera view for the QR code scan" }).click();
+  await root.getByText("Step 2 of 2").waitFor();
+
+  // `accept="image/*"` is a hint to the picker, not a guarantee: the file is
+  // named .png and is not one, which is what the picker can hand back.
+  await root.locator('input[type="file"][capture]').setInputFiles({
+    name: "notes.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("this is text, not an image"),
+  });
+
+  await expect(
+    root.getByText("The app cannot use this photo. Please choose another photo."),
+  ).toBeVisible();
+  await expect(root.getByText("1 of 5 photos added")).toHaveCount(0);
+  await expectNoBlockingViolations(page);
+});
+
+test("sending sends the photos first and says so", async ({ page }) => {
+  const root = await open(page);
+  await reportById(root, "LIME-QX907");
+  await fillReport(root);
+
+  await root.getByRole("button", { name: "Send report" }).click();
+  await expect(root.getByRole("button", { name: "Sending the photos …" })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Sending …" })).toBeVisible();
+  await expect(root.getByRole("heading", { name: "Thank you" })).toBeVisible();
+});
+
+test("a vehicle that left the feed sends you back and says why", async ({ page }) => {
+  const root = await open(page);
+  // The cargo bike is the fixture for this: on the map when it was picked,
+  // gone from the feed by the time Send was pressed.
+  await reportById(root, "MVG-C-0912");
+  await fillReport(root);
+  await root.getByRole("button", { name: "Send report" }).click();
+
+  // Back to finding, because nothing on the form could have fixed it.
+  await expect(root.getByRole("heading", { name: "Find the vehicle" })).toBeVisible();
+  await expect(
+    root.getByText("This vehicle is not in the live data. Please choose the vehicle again."),
+  ).toBeVisible();
+  await expectNoBlockingViolations(page);
+
+  // And it is dismissible, so it does not sit over the map forever.
+  await root.getByRole("alert").getByRole("button", { name: "Close" }).click();
+  await expect(
+    root.getByText("This vehicle is not in the live data. Please choose the vehicle again."),
+  ).toHaveCount(0);
+});
+
+test("a report the city holds says so instead of claiming it was sent", async ({
+  page,
+}) => {
+  const root = await open(page);
+  await reportById(root, "TIER-1A55M");
+  await fillReport(root);
+  await root.getByRole("button", { name: "Send report" }).click();
+
+  await expect(root.getByRole("heading", { name: "Thank you" })).toBeVisible();
+  // Received first, and the outcome only once the poll settles.
+  await expect(root.getByText("Received", { exact: true })).toBeVisible();
+  await expect(root.getByText("Delayed, we will retry it")).toBeVisible();
+  await expect(root.getByText("Sent to the city", { exact: true })).toHaveCount(0);
+  await expectNoBlockingViolations(page);
+});
+
+test("a report the city refuses says so", async ({ page }) => {
+  const root = await open(page);
+  await reportById(root, "DOTT-44F0");
+  await fillReport(root);
+  await root.getByRole("button", { name: "Send report" }).click();
+
+  await expect(root.getByRole("heading", { name: "Thank you" })).toBeVisible();
+  await expect(root.getByText("Could not be sent to the city")).toBeVisible();
+  await expect(root.getByText("Sent to the city", { exact: true })).toHaveCount(0);
   await expectNoBlockingViolations(page);
 });

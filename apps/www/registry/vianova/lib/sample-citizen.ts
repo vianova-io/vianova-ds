@@ -7,7 +7,7 @@
  * CAPTCHA strings are the one omission: the real app gates every data call
  * behind AWS WAF, which is infrastructure rather than design.
  *
- * Captured copy is verbatim, plus fourteen strings written here for controls
+ * Captured copy is verbatim, plus fifteen strings written here for controls
  * production does not have -- a selection card, a camera button, a step
  * marker. Each carries a `Written here, not captured` comment where it sits,
  * so a reviewer can tell at a glance which strings a translator has already
@@ -17,19 +17,84 @@
  * feed here: production reads signed vector tiles that a design-system demo
  * has no business holding credentials for.
  *
- * Captured keys the block no longer renders are kept rather than deleted --
+ * Captured keys the block does not render are kept rather than deleted --
  * this is a record of production's copy, and a key that disappears from the
- * record is one nobody can diff against. Most are failure and loading states
- * a demo with no network never reaches. Seven are different: the workspace's
- * design dropped the screens they belonged to.
+ * record is one nobody can diff against. Every one of them is here, with the
+ * reason, so the list can be checked rather than trusted.
+ *
+ * Retired by the redesign, because the screen they belonged to is gone:
  *
  *   app.start, qr.prompt.title, qr.prompt.skip   the QR interstitial
  *   photo.add, photo.continue                    the separate photo screen
  *   map.listTitle                                the list is a tab, not a screen
  *   vehicle.search.hint                          promises an Enter key
+ *   vehicle.near.back                            the list is never left
+ *   map.types.*                                  production's own casing bug;
+ *                                                `vehicle.types` is used instead
+ *
+ * Unreachable because the block prevents the thing they describe, and making
+ * them reachable would mean designing a worse flow to show a better string:
+ *
+ *   report.failure.vehicle_has_open_report   a reported vehicle offers no Send
+ *   report.failure.vehicle_locked            `vehicle.locked` says it earlier
+ *   report.failure.invalid                   the fields say what is wrong, one by one
+ *   photo.failure.too_many                   a batch over the limit is trimmed
+ *   vehicle.loading                           no screen resolves one vehicle alone
+ *
+ * Belonging to machinery this block deliberately does not have:
+ *
+ *   report.failure.altcha_invalid   no CAPTCHA -- infrastructure, not design
+ *   map.attribution                 MapLibre draws and labels its own credit
+ *
+ * Duplicates of a failure the block already shows, kept for the real client
+ * that will need both halves:
+ *
+ *   report.failure.photo_unknown    the send-time twin of photo.failure.invalid
+ *   photo.failure.rate_limited      a narrower photo.failure.unavailable
+ *   report.status.sending           the same words as `received` in both
+ *                                   locales, by production's own design
+ *   report.status.expired           the same words as `rejected`
  */
 
 export type CitizenLocale = "en" | "de";
+
+/**
+ * What the service is doing, for the states a demo cannot produce by itself.
+ *
+ * The split this block draws, and the reason there is a prop here at all: a
+ * state the RESIDENT causes is reachable by causing it -- picking a vehicle
+ * the feed has dropped, choosing "Other" without a comment, adding a sixth
+ * photo. A state the CITY causes cannot be, because nothing a thumb does
+ * makes a server rate-limit you. Those are this prop, which defaults to the
+ * working service, exactly as `FeedsWorkspace` takes a `status`.
+ */
+export type CitizenScenario =
+  /** Everything works. The default, and what the docs page shows. */
+  | "ready"
+  /** The vehicle feed has not arrived yet. */
+  | "loading"
+  /** The vehicle feed cannot be reached at all. */
+  | "vehicles-down"
+  /** The whole service is unavailable; no screen can do its job. */
+  | "service-down"
+  /** Reports are paused: vehicles browse fine, nothing can be sent. */
+  | "intake-paused"
+  /** This reporter has sent too many reports. */
+  | "rate-limited"
+  /** The send itself failed. */
+  | "send-failed"
+  /** The photos could not be sent, so the report cannot go either. */
+  | "photos-failed";
+
+/**
+ * What the city does with a report, decided per vehicle so the outcome is
+ * reachable by reporting that vehicle rather than by setting a prop.
+ *
+ * `stale` is the one that fails BEFORE sending: the vehicle was on the map
+ * when it was picked and had gone from the feed by the time Send was pressed,
+ * which is production's `not_in_live_data` and the reason that string exists.
+ */
+export type CitizenIntake = "ok" | "stale" | "parked" | "rejected";
 
 /** The six types the production app's `vehicle.types` tree enumerates. */
 export type VehicleType =
@@ -76,6 +141,14 @@ export type CitizenVehicle = {
   reported?: boolean;
   /** Minutes until a reported vehicle can be reported again. */
   lockedForMinutes?: number;
+  /**
+   * What happens when this vehicle is reported. Absent means `ok`.
+   *
+   * Fixtures, not randomness: the visual suite and the e2e suite both need
+   * the same vehicle to behave the same way every run, and a reader who
+   * reports the cargo bike should meet the same failure a reviewer did.
+   */
+  intake?: CitizenIntake;
 };
 
 export const VEHICLE_TYPES: readonly VehicleType[] = [
@@ -130,9 +203,34 @@ export const SAMPLE_VEHICLES: readonly CitizenVehicle[] = [
   },
   { id: "DOTT-77A1", operator: "Dott", type: "bicycle", position: [11.5738, 48.1377], distanceM: 46 },
   { id: "BOLT-5KD92", operator: "Bolt", type: "scooter", position: [11.5773, 48.1365], distanceM: 61 },
-  { id: "MVG-C-0912", operator: "MVG Rad", type: "cargo_bicycle", position: [11.5729, 48.1384], distanceM: 88 },
-  { id: "TIER-1A55M", operator: "TIER", type: "moped", position: [11.5784, 48.1358], distanceM: 134 },
-  { id: "DOTT-44F0", operator: "Dott", type: "bicycle", position: [11.5717, 48.1361], distanceM: 190 },
+  // Dropped from the feed between being picked and being sent: the only way
+  // to meet `report.failure.not_in_live_data` without a server.
+  {
+    id: "MVG-C-0912",
+    operator: "MVG Rad",
+    type: "cargo_bicycle",
+    position: [11.5729, 48.1384],
+    distanceM: 88,
+    intake: "stale",
+  },
+  // Sent, then held: the city did not take it and the app will retry.
+  {
+    id: "TIER-1A55M",
+    operator: "TIER",
+    type: "moped",
+    position: [11.5784, 48.1358],
+    distanceM: 134,
+    intake: "parked",
+  },
+  // Sent and refused. The screen has to say so without blaming the reporter.
+  {
+    id: "DOTT-44F0",
+    operator: "Dott",
+    type: "bicycle",
+    position: [11.5717, 48.1361],
+    distanceM: 190,
+    intake: "rejected",
+  },
 ];
 
 export const CITIZEN_COPY = {
@@ -189,6 +287,10 @@ export const CITIZEN_COPY = {
       done: {
         title: "Thank you",
         text: "We received your report.",
+        // Written here, not captured -- production keeps "We received your
+        // report." above a status that can read "Could not be sent to the
+        // city", which is the screen contradicting itself.
+        textRejected: "We received your report, but the city did not accept it. You can send it again.",
         reference: "Your report reference:",
         // Written here, not captured -- the reference had no copy control.
         copy: "Copy the reference",
@@ -393,6 +495,8 @@ export const CITIZEN_COPY = {
       done: {
         title: "Vielen Dank",
         text: "Wir haben Ihre Meldung erhalten.",
+        // Written here, not captured -- siehe `textRejected` in `en`.
+        textRejected: "Wir haben Ihre Meldung erhalten, die Stadt hat sie aber nicht angenommen. Sie können sie erneut senden.",
         reference: "Ihre Meldungsnummer:",
         // Written here, not captured -- the reference had no copy control.
         copy: "Nummer kopieren",
@@ -583,6 +687,15 @@ export function citizenTree(locale: CitizenLocale): CopyTree {
  */
 export function photoRequired(method: FindMethod): boolean {
   return method !== "qr";
+}
+
+/**
+ * The shape production's `report.errors.vehicleFormat` describes: "letters,
+ * digits, spaces and . _ : - only". Only the typed id on the unlisted form can
+ * be the wrong shape; every other id in this block came from the feed.
+ */
+export function validVehicleId(id: string): boolean {
+  return /^[\p{L}\p{N} ._:-]+$/u.test(id);
 }
 
 /** Metres below a kilometre, matching the "within 50 m" copy's register. */
