@@ -160,6 +160,7 @@ import {
   type CategoryStyleSet,
 } from "@/registry/vianova/lib/category-style";
 import { inferColumns, parseCsv } from "@/registry/vianova/lib/csv";
+import { operatorStyles } from "@/registry/vianova/lib/sample-datasets";
 import {
   WEEKDAY_LABELS,
   change,
@@ -4916,7 +4917,9 @@ export function ReportsWorkspace({
     [states],
   );
   const styles = React.useMemo(
-    () => resolveStyles(operators, saved),
+    // The operators' shipped badges, under anything set in the data hub, so a
+    // report's colours match the map the reader came from.
+    () => resolveStyles(operators, saved, operatorStyles(operators)),
     [operators, saved],
   );
 

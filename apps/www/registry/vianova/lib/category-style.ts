@@ -44,7 +44,8 @@ export type CategoryStyleSet = {
 export const DEFAULT_LOGO_ZOOM = 14;
 
 /** What the badge is filled with: its own colour if it has one, else the dot's. */
-export const badgeColor = (style: CategoryStyle): string => style.badge ?? style.color;
+export const badgeColor = (style: CategoryStyle): string =>
+  style.badge ?? style.color;
 
 /**
  * Distinct from one another rather than from a theme: a category's colour is
@@ -79,20 +80,35 @@ export const CATEGORY_PALETTE = [
 ] as const;
 
 /**
- * A style for every value, falling back to the palette in value order.
+ * A style for every value: what was saved, else what ships for that value,
+ * else the palette in value order.
  *
  * Both sides call this with the same ordered values, so an unstyled value is
  * the same colour in the data hub and on the map without either storing it.
+ *
+ * `shipped` is for values that already have a look before anyone opens a
+ * picker -- an operator's badge, say. It sits BELOW what is stored, so it is a
+ * starting point and never a lock: the moment someone sets a colour or a logo
+ * on a value, theirs is what every surface reads.
+ *
+ * It does not take part in the palette's value-order walk, so a mixed column --
+ * some values shipped, some not -- can hand a palette colour to one value that
+ * a shipped style already uses. The sample data has no such column, and the
+ * alternative, renumbering the walk around whatever is shipped, would repaint
+ * saved datasets the day a default was added.
  */
 export function resolveStyles(
   values: string[],
   stored?: Partial<CategoryStyleSet>,
+  shipped?: Record<string, CategoryStyle>,
 ): Record<string, CategoryStyle> {
   const out: Record<string, CategoryStyle> = {};
   values.forEach((value, i) => {
-    out[value] = stored?.values?.[value] ?? {
-      color: CATEGORY_PALETTE[i % CATEGORY_PALETTE.length] ?? CATEGORY_PALETTE[0],
-    };
+    out[value] = stored?.values?.[value] ??
+      shipped?.[value] ?? {
+        color:
+          CATEGORY_PALETTE[i % CATEGORY_PALETTE.length] ?? CATEGORY_PALETTE[0],
+      };
   });
   return out;
 }
@@ -107,7 +123,11 @@ export function parseHex(color: string): [number, number, number] | null {
   if (!m) return null;
   let h = m[1]!;
   if (h.length === 3) h = [...h].map((c) => c + c).join("");
-  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
+  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)) as [
+    number,
+    number,
+    number,
+  ];
 }
 
 const linear = (channel: number) => {
@@ -117,7 +137,9 @@ const linear = (channel: number) => {
 
 /** WCAG relative luminance. */
 export function luminance(rgb: [number, number, number]): number {
-  return 0.2126 * linear(rgb[0]) + 0.7152 * linear(rgb[1]) + 0.0722 * linear(rgb[2]);
+  return (
+    0.2126 * linear(rgb[0]) + 0.7152 * linear(rgb[1]) + 0.0722 * linear(rgb[2])
+  );
 }
 
 /** WCAG contrast ratio between two luminances, 1 to 21. */
@@ -156,7 +178,8 @@ export function adviseLogo(style: CategoryStyle): LogoAdvice[] {
     return [
       {
         kind: "info",
-        message: "This logo has its own background, so it fills the badge and the colour shows as a ring.",
+        message:
+          "This logo has its own background, so it fills the badge and the colour shows as a ring.",
       },
     ];
   }
@@ -164,7 +187,8 @@ export function adviseLogo(style: CategoryStyle): LogoAdvice[] {
   const advice: LogoAdvice[] = [
     {
       kind: "info",
-      message: "This logo is transparent, so it sits on the badge colour. Pick one it stands out against.",
+      message:
+        "This logo is transparent, so it sits on the badge colour. Pick one it stands out against.",
     },
   ];
 
@@ -172,16 +196,21 @@ export function adviseLogo(style: CategoryStyle): LogoAdvice[] {
   if (!rgb || style.logoLuminance === undefined) return advice;
 
   const behind = luminance(rgb);
-  if (contrastBetween(style.logoLuminance, behind) >= MIN_LOGO_CONTRAST) return advice;
+  if (contrastBetween(style.logoLuminance, behind) >= MIN_LOGO_CONTRAST)
+    return advice;
 
   const best = [LIGHT, DARK]
-    .map((hex) => ({ hex, ratio: contrastBetween(style.logoLuminance!, luminance(parseHex(hex)!)) }))
+    .map((hex) => ({
+      hex,
+      ratio: contrastBetween(style.logoLuminance!, luminance(parseHex(hex)!)),
+    }))
     .sort((a, b) => b.ratio - a.ratio)[0]!;
   advice.push({
     kind: "warning",
     // Not "this logo is dark": what makes it unreadable is that the two are
     // close in tone, whichever way round, and a mid-tone logo is neither.
-    message: "This logo and its badge are too close in tone, so the logo will be hard to read.",
+    message:
+      "This logo and its badge are too close in tone, so the logo will be hard to read.",
     suggestion: best.hex,
   });
   return advice;
@@ -223,7 +252,12 @@ export function readStyleSet(
   store: Store | null = browserStore(),
 ): CategoryStyleSet | undefined {
   const found = readAll(store)[slot(dataset, column)];
-  if (!found || typeof found.logoZoom !== "number" || typeof found.values !== "object") return undefined;
+  if (
+    !found ||
+    typeof found.logoZoom !== "number" ||
+    typeof found.values !== "object"
+  )
+    return undefined;
   return found;
 }
 
@@ -284,7 +318,8 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("That file could not be read as an image."));
+    img.onerror = () =>
+      reject(new Error("That file could not be read as an image."));
     img.src = src;
   });
 }
@@ -330,7 +365,9 @@ export function visibleBounds(
       }
     }
   }
-  return x1 < 0 ? null : { x: x0, y: y0, width: x1 - x0 + 1, height: y1 - y0 + 1 };
+  return x1 < 0
+    ? null
+    : { x: x0, y: y0, width: x1 - x0 + 1, height: y1 - y0 + 1 };
 }
 
 /**
@@ -361,7 +398,10 @@ const MIN_BRAND_SATURATION = 0.25;
  * pale tint of about the same size.
  */
 export function dominantColor(data: Uint8ClampedArray): string | null {
-  const buckets = new Map<number, { score: number; r: number; g: number; b: number; n: number }>();
+  const buckets = new Map<
+    number,
+    { score: number; r: number; g: number; b: number; n: number }
+  >();
   for (let i = 0; i < data.length; i += 4) {
     if (data[i + 3]! < 128) continue;
     const r = data[i]!;
@@ -379,8 +419,15 @@ export function dominantColor(data: Uint8ClampedArray): string | null {
     bucket.n += 1;
     buckets.set(key, bucket);
   }
-  let best: { score: number; r: number; g: number; b: number; n: number } | null = null;
-  for (const bucket of buckets.values()) if (!best || bucket.score > best.score) best = bucket;
+  let best: {
+    score: number;
+    r: number;
+    g: number;
+    b: number;
+    n: number;
+  } | null = null;
+  for (const bucket of buckets.values())
+    if (!best || bucket.score > best.score) best = bucket;
   if (!best) return null;
   const hex = (sum: number) =>
     Math.round(sum / best!.n)
@@ -389,13 +436,17 @@ export function dominantColor(data: Uint8ClampedArray): string | null {
   return `#${hex(best.r)}${hex(best.g)}${hex(best.b)}`;
 }
 
-export async function prepareLogo(file: File, size = LOGO_SIZE): Promise<
+export async function prepareLogo(
+  file: File,
+  size = LOGO_SIZE,
+): Promise<
   Required<Pick<CategoryStyle, "logo" | "logoKind" | "logoLuminance">> & {
     /** The colour the logo is mostly made of, or null if it is only black, white and grey. */
     logoColor: string | null;
   }
 > {
-  if (!file.type.startsWith("image/")) throw new Error("That file is not an image.");
+  if (!file.type.startsWith("image/"))
+    throw new Error("That file is not an image.");
 
   const url = URL.createObjectURL(file);
   try {
@@ -414,12 +465,29 @@ export async function prepareLogo(file: File, size = LOGO_SIZE): Promise<
     source.height = big;
     const sctx = source.getContext("2d", { willReadFrequently: true });
     if (!sctx) throw new Error("This browser cannot process images.");
-    sctx.drawImage(img, Math.round((big - bw) / 2), Math.round((big - bh) / 2), bw, bh);
+    sctx.drawImage(
+      img,
+      Math.round((big - bw) / 2),
+      Math.round((big - bh) / 2),
+      bw,
+      bh,
+    );
 
-    const whole: Bounds = { x: Math.round((big - bw) / 2), y: Math.round((big - bh) / 2), width: bw, height: bh };
-    const found = visibleBounds(sctx.getImageData(0, 0, big, big).data, big, big);
+    const whole: Bounds = {
+      x: Math.round((big - bw) / 2),
+      y: Math.round((big - bh) / 2),
+      width: bw,
+      height: bh,
+    };
+    const found = visibleBounds(
+      sctx.getImageData(0, 0, big, big).data,
+      big,
+      big,
+    );
     const worthTrimming =
-      found && (found.width < whole.width * (1 - MIN_TRIM) || found.height < whole.height * (1 - MIN_TRIM));
+      found &&
+      (found.width < whole.width * (1 - MIN_TRIM) ||
+        found.height < whole.height * (1 - MIN_TRIM));
     const crop = worthTrimming ? found : whole;
 
     // Contain, never crop: a logo cut off at the edge is a different logo.
@@ -432,7 +500,17 @@ export async function prepareLogo(file: File, size = LOGO_SIZE): Promise<
     canvas.height = size;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) throw new Error("This browser cannot process images.");
-    ctx.drawImage(source, crop.x, crop.y, crop.width, crop.height, Math.round((size - dw) / 2), Math.round((size - dh) / 2), dw, dh);
+    ctx.drawImage(
+      source,
+      crop.x,
+      crop.y,
+      crop.width,
+      crop.height,
+      Math.round((size - dw) / 2),
+      Math.round((size - dh) / 2),
+      dw,
+      dh,
+    );
 
     const { data } = ctx.getImageData(0, 0, size, size);
     const x0 = Math.round((size - dw) / 2);
@@ -453,7 +531,12 @@ export async function prepareLogo(file: File, size = LOGO_SIZE): Promise<
     let edgeVisible = 0;
     for (let y = y0; y < y0 + dh; y++) {
       for (let x = x0; x < x0 + dw; x++) {
-        const depth = Math.min(x - x0, x0 + dw - 1 - x, y - y0, y0 + dh - 1 - y);
+        const depth = Math.min(
+          x - x0,
+          x0 + dw - 1 - x,
+          y - y0,
+          y0 + dh - 1 - y,
+        );
         if (depth < EDGE_FROM || depth > EDGE_TO) continue;
         edge++;
         if (data[(y * size + x) * 4 + 3]! >= 128) edgeVisible++;

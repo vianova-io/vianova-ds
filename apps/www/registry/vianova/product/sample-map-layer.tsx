@@ -16,6 +16,7 @@ import {
   type ColorizeField,
 } from "@/registry/vianova/product/colorize-panel";
 import { DataLayerCard } from "@/registry/vianova/product/data-layer-card";
+import { CategoryBadge } from "@/registry/vianova/product/category-badge";
 import { FilterBuilder } from "@/registry/vianova/product/filter-builder";
 import { FilterFacets } from "@/registry/vianova/product/filter-facets";
 import { LegendCategorical } from "@/registry/vianova/product/legend-categorical";
@@ -35,6 +36,7 @@ import {
 import {
   DEFAULT_LOGO_ZOOM,
   STYLE_STORAGE_KEY,
+  badgeColor,
   readStyleSet,
   resolveStyles,
   writeStyleSet,
@@ -54,6 +56,8 @@ import {
   columnLabel,
   defaultCategoryColumn,
   firstPosition,
+  operatorStyle,
+  operatorStyles,
   parseSample,
   pointsBy,
   ringOf,
@@ -68,6 +72,26 @@ import {
   type FilterGroup,
 } from "@/registry/vianova/lib/filter-ast";
 import { compileFilter } from "@/registry/vianova/lib/filter-eval";
+
+/**
+ * An operator's badge at text size, or nothing when the value is not one.
+ *
+ * The filter shows it for the same reason the legend does: the row of names in
+ * a Provider Name facet is the one place a reader picks an operator by hand,
+ * and a badge beside each is what ties that choice to the dots on the map.
+ */
+function operatorBadge(value: string) {
+  const style = operatorStyle(value);
+  if (!style) return undefined;
+  return (
+    <CategoryBadge
+      color={badgeColor(style)}
+      logo={style.logo}
+      logoKind={style.logoKind}
+      size={18}
+    />
+  );
+}
 
 /** Matches the colorize panel's own default, so the two agree about the tail. */
 const MAX_CATEGORIES = 8;
@@ -317,6 +341,18 @@ export function SampleMapLayer({
   }, [preset]);
 
   /**
+   * Whether a shipped style may still choose the colour.
+   *
+   * An operator ships with a disc colour as well as a badge, and that colour
+   * has to give way the moment someone picks a palette -- otherwise the preset
+   * picker appears to do nothing on the one layer most readers open first.
+   * While the layer is on the palette it started with, nobody has chosen
+   * anything, so the shipped colour stands. The badge is not part of this: a
+   * palette says what colour a category is, not which operator it is.
+   */
+  const presetUntouched = preset === CATEGORICAL_PALETTES[0]!.name;
+
+  /**
    * The values present, commonest first, with a colour each.
    *
    * Counted from the FILTERED rows, so narrowing a filter narrows the legend --
@@ -337,10 +373,18 @@ export function SampleMapLayer({
       value,
       color:
         savedStyles?.values?.[value]?.color ??
+        (presetUntouched ? operatorStyle(value)?.color : undefined) ??
         paletteColors[i % paletteColors.length]!,
     }));
     return { shown, total: ranked.length };
-  }, [categorical, colorField, paletteColors, rows, savedStyles]);
+  }, [
+    categorical,
+    colorField,
+    paletteColors,
+    presetUntouched,
+    rows,
+    savedStyles,
+  ]);
 
   const rampStops = React.useMemo(() => {
     if (stops) return stops;
@@ -370,11 +414,38 @@ export function SampleMapLayer({
     [categories],
   );
   const logoZoom = savedStyles?.logoZoom ?? DEFAULT_LOGO_ZOOM;
+
+  /*
+   * Whether the legend draws badges or dots, which is whatever the MAP is
+   * drawing right now.
+   *
+   * The card's legend could not show a logo at all before this: it passed
+   * colours only, so a dataset with operator badges on the map had a legend
+   * of plain dots beside it and no way to tell which badge was which. The
+   * data hub's own legend has followed the zoom since it was written; this is
+   * the same listener, in the block that needed it.
+   *
+   * Following the map rather than always showing logos, because the legend's
+   * job is explaining what is on screen. Below logoZoom the map draws dots, so
+   * a legend of badges would be labelling symbols that are not there.
+   */
+  const [logosShown, setLogosShown] = React.useState(false);
+  React.useEffect(() => {
+    if (!map) return;
+    const update = () => setLogosShown(map.getZoom() >= logoZoom);
+    update();
+    map.on("zoom", update);
+    return () => {
+      map.off("zoom", update);
+    };
+  }, [map, logoZoom]);
   const styles = React.useMemo(() => {
-    const resolved = resolveStyles(styleValues, {
-      logoZoom,
-      values: savedStyles?.values,
-    });
+    const resolved = resolveStyles(
+      styleValues,
+      { logoZoom, values: savedStyles?.values },
+      // The badges the operators ship with, under anything set in the picker.
+      operatorStyles(styleValues),
+    );
     // The palette, not resolveStyles' own sequence: the legend and the panel
     // both show these colours, and three sources of truth is two too many.
     for (const { value, color } of categories.shown) {
@@ -482,10 +553,17 @@ export function SampleMapLayer({
   ) : !sample ? null : categorical ? (
     categories.shown.length ? (
       <LegendCategorical
-        items={categories.shown.map((c) => ({
-          label: c.value,
-          color: c.color,
-        }))}
+        items={categories.shown.map((c) => {
+          const style = styles[c.value];
+          return {
+            label: c.value,
+            color: c.color,
+            logo: style?.logo
+              ? { src: style.logo, solid: style.logoKind === "solid" }
+              : undefined,
+          };
+        })}
+        showLogos={logosShown}
       />
     ) : null
   ) : (
@@ -554,6 +632,7 @@ export function SampleMapLayer({
               fields={filterFields.filter((f) => f.type === "enum")}
               value={filter}
               onValueChange={setFilter}
+              valueIcon={(_field, value) => operatorBadge(value)}
             />
           ) : null
         }

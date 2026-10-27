@@ -17,6 +17,16 @@ export type RankedBarItem = {
   percent: number;
   /** Raw count shown alongside the percentage. */
   count?: string | number;
+  /**
+   * A mark for the thing the row counts -- an operator's badge, a category's
+   * colour -- shown before the label.
+   *
+   * Decorative: the label beside it says the same thing in words, so the
+   * caller passes something already `aria-hidden`, as CategoryBadge is. It
+   * never replaces the label, because a reader matching a chart to a map
+   * legend needs the name as well as the mark.
+   */
+  icon?: React.ReactNode;
 };
 
 /**
@@ -48,11 +58,16 @@ export function RankedBars({
   showRank = true,
   className,
   ...props
-}: React.ComponentProps<"div"> & { items: RankedBarItem[]; showRank?: boolean }) {
+}: React.ComponentProps<"div"> & {
+  items: RankedBarItem[];
+  showRank?: boolean;
+}) {
   const hostRef = React.useRef<HTMLDivElement>(null);
-  const [hover, setHover] = React.useState<
-    { index: number; x: number; y: number } | null
-  >(null);
+  const [hover, setHover] = React.useState<{
+    index: number;
+    x: number;
+    y: number;
+  } | null>(null);
   const [width, setWidth] = React.useState(0);
 
   React.useEffect(() => {
@@ -73,7 +88,9 @@ export function RankedBars({
       className={cn("relative space-y-2.5", className)}
       onPointerLeave={() => setHover(null)}
       onPointerMove={(event) => {
-        const row = (event.target as HTMLElement).closest<HTMLElement>("[data-row]");
+        const row = (event.target as HTMLElement).closest<HTMLElement>(
+          "[data-row]",
+        );
         const host = hostRef.current;
         if (!row || !host) return setHover(null);
         const labelEl = row.querySelector<HTMLElement>("[data-row-label]");
@@ -98,6 +115,12 @@ export function RankedBars({
               {i + 1}
             </span>
           ) : null}
+          {/* Centred on the row, not on the label line: the row is two lines
+              tall and a badge pinned to the first one reads as floating above
+              its own bar. */}
+          {item.icon ? (
+            <span className="flex shrink-0 items-center">{item.icon}</span>
+          ) : null}
           <div className="min-w-0 flex-1 space-y-1">
             <p data-row-label title={item.label} className="truncate text-xs">
               {item.label}
@@ -120,7 +143,9 @@ export function RankedBars({
             </ChartTooltipTitle>
             <ChartTooltipValue
               value={`${hovered.percent}%`}
-              unit={hovered.count !== undefined ? `(${hovered.count})` : undefined}
+              unit={
+                hovered.count !== undefined ? `(${hovered.count})` : undefined
+              }
             />
           </ChartTooltipSurface>
         </ChartTooltipAnchor>

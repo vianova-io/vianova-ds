@@ -371,7 +371,7 @@ test.describe("category colours and logos", () => {
       step.getByRole("button", { name: /^Colour and logo for/ }).first();
     const legendColor = () =>
       page
-        .locator('[data-slot="legend-categorical"] li > span[aria-hidden]')
+        .locator('[data-slot="legend-categorical"] [data-slot="legend-swatch"]')
         .first()
         .evaluate((e) => getComputedStyle(e).backgroundColor);
     const before = await legendColor();

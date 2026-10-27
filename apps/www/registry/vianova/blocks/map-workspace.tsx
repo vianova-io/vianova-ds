@@ -107,6 +107,7 @@ import {
   PanelStepper,
 } from "@/registry/vianova/product/panel-stepper";
 import { PresetPicker } from "@/registry/vianova/product/preset-picker";
+import { CategoryBadge } from "@/registry/vianova/product/category-badge";
 import { RankedBars } from "@/registry/vianova/product/ranked-bars";
 import { SampleMapLayer } from "@/registry/vianova/product/sample-map-layer";
 import type { VisualizationTypeId } from "@/registry/vianova/product/visualization-picker";
@@ -132,12 +133,34 @@ import {
 import {
   SAMPLE_FEEDS,
   columnLabel,
+  operatorStyle,
   type ParsedSample,
   type SampleFeed,
 } from "@/registry/vianova/lib/sample-datasets";
 import { compileFilter } from "@/registry/vianova/lib/filter-eval";
 import { badgeColor } from "@/registry/vianova/lib/category-style";
 import { cn } from "@/registry/vianova/lib/utils";
+
+/**
+ * An operator's badge, at the size a line of text carries, or nothing when the
+ * value is not one of the five.
+ *
+ * Here rather than in CategoryBadge, which knows about colours and logos and
+ * deliberately nothing about which values exist: a product component that
+ * imported the sample data would make every consumer of it carry Lisbon.
+ */
+function operatorBadge(value: string) {
+  const style = operatorStyle(value);
+  if (!style) return undefined;
+  return (
+    <CategoryBadge
+      color={badgeColor(style)}
+      logo={style.logo}
+      logoKind={style.logoKind}
+      size={18}
+    />
+  );
+}
 
 /* -------------------------------------------------------------------------- */
 /* Data                                                                        */
@@ -892,6 +915,12 @@ export function MapWorkspace({
             label,
             percent: Math.round((count / peak) * 100),
             count: plain.format(count),
+            // The same badge the layer's legend and its map symbols draw, so
+            // a bar can be matched to a dot without reading either label.
+            // Undefined for every value that is not an operator, which is
+            // what leaves the other breakdown -- vehicle type, state -- as
+            // plain rows.
+            icon: operatorBadge(label),
           })),
         };
       });
