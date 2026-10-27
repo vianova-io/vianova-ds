@@ -1,4 +1,10 @@
 import {
+  contrastBetween,
+  luminance,
+  parseHex,
+  type CategoryStyle,
+} from "@/registry/vianova/lib/category-style";
+import {
   inferColumns,
   parseCsv,
   type InferredColumn,
@@ -116,7 +122,8 @@ export const SAMPLE_FEEDS: SampleFeed[] = [
     title: "Speed limit · Baixa",
     section: "regulations",
     status: "active",
-    description: "Fake 15 km/h limit for shared vehicles in the centre of Lisbon.",
+    description:
+      "Fake 15 km/h limit for shared vehicles in the centre of Lisbon.",
     rowRepresents: "an area the rule covers",
     domain: "regulations",
     uploadedAt: "2026-02-20T09:00:00Z",
@@ -139,7 +146,8 @@ export const SAMPLE_FEEDS: SampleFeed[] = [
     title: "Fleet cap per operator",
     section: "regulations",
     status: "active",
-    description: "Fake limit on how many vehicles each operator may leave in an area.",
+    description:
+      "Fake limit on how many vehicles each operator may leave in an area.",
     rowRepresents: "an operator's cap in an area",
     domain: "regulations",
     uploadedAt: "2026-05-18T09:00:00Z",
@@ -338,7 +346,9 @@ function geometryOf(parsed: ParsedCsv, geometryAt: number): SampleGeometry {
  * paints the whole layer one colour, which tells you nothing and looks like a
  * bug.
  */
-export function defaultCategoryColumn(sample: ParsedSample): string | undefined {
+export function defaultCategoryColumn(
+  sample: ParsedSample,
+): string | undefined {
   const varies = sample.columns.find(
     (c) => c.type === "category" && (c.values?.length ?? 0) > 1,
   );
@@ -353,7 +363,10 @@ function* geometryRows(sample: ParsedSample, keep?: RowPredicate) {
   for (const row of sample.rows) {
     const cell = row[sample.geometryAt] ?? "";
     if (!cell.trim()) continue;
-    if (keep && !keep(Object.fromEntries(sample.header.map((h, i) => [h, row[i] ?? ""]))))
+    if (
+      keep &&
+      !keep(Object.fromEntries(sample.header.map((h, i) => [h, row[i] ?? ""])))
+    )
       continue;
     yield { row, cell };
   }
@@ -404,6 +417,168 @@ export function numbersIn(sample: ParsedSample, column: string): number[] {
     if (!cell?.trim()) continue;
     const n = Number(cell);
     if (Number.isFinite(n)) out.push(n);
+  }
+  return out;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Operator brands                                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How the five Lisbon operators look wherever they are named.
+ *
+ * `CategoryStyle` lets anyone set a colour and a logo per value, and the data
+ * hub's picker is how that is done -- but what it sets lives in ONE browser's
+ * localStorage. So a reader opening the map, the data hub or a report sees
+ * plain palette dots and a column of names, while production shows a row of
+ * operator badges. These are the same styles, shipped: the starting point
+ * every surface resolves to when nobody has set anything.
+ *
+ * Anything saved in the picker still wins -- see `resolveStyles`. This is a
+ * default, not a lock.
+ *
+ * ## The marks are stand-ins
+ *
+ * Generic glyphs, following `examples/legend-categorical-logos.tsx`: this
+ * repository is public, and it does not carry anyone's trademark. Each one is
+ * the shape the name suggests -- a bolt, a citrus wedge, a dot -- so a row of
+ * them is still read as five different operators at 16px, which is the job.
+ * Replacing them with the operators' own artwork is a change to MARKS below
+ * and nothing else: every surface reads through `operatorStyles`.
+ *
+ * ## Why not the brands' own colours
+ *
+ * Lime and Bolt are both green, and Dott and Voi are close enough in blue and
+ * coral to be one colour to a deuteranope. The house categorical palette is
+ * verified for exactly that (dE2000 >= 8 under Machado and Vienot), so the dot
+ * keeps the palette and the logo carries the brand. `CategoryStyle.badge`
+ * exists for the day that is revisited -- it sets the disc without touching
+ * the dot.
+ */
+export const OPERATORS = ["Bolt", "Dott", "Gira", "Lime", "Voi"] as const;
+
+export type Operator = (typeof OPERATORS)[number];
+
+/** White, or near-black where white would not clear 3:1 on the disc. */
+const INK_LIGHT = "#ffffff";
+const INK_DARK = "#111827";
+
+/**
+ * The glyph, drawn in one ink on a 64px grid.
+ *
+ * An SVG data URL rather than the PNG `prepareLogo` makes: that function
+ * exists to normalise a FILE someone picked, by rasterising, trimming its
+ * margins and measuring its edge. These are drawn to fit already, and an SVG
+ * stays sharp on a retina badge at any size.
+ */
+const MARKS: Record<Operator, (ink: string) => string> = {
+  Bolt: (ink) => `<path d="M36 6 14 36h14l-4 22 26-34H34z" fill="${ink}"/>`,
+  // A citrus segment: one filled wedge, not a drawn fruit. Strokes close up
+  // into a smudge at the 11px the glyph gets inside a 18px badge, so every
+  // mark here is either a filled shape or a stroke of 7 and over.
+  Lime: (ink) =>
+    `<path d="M32 32 32 6A26 26 0 0 1 58 32Z" fill="${ink}"/>` +
+    `<path d="M32 32 6 32A26 26 0 0 0 32 58Z" fill="${ink}"/>`,
+  Dott: (ink) =>
+    `<circle cx="32" cy="32" r="20" fill="none" stroke="${ink}" stroke-width="8"/>` +
+    `<circle cx="32" cy="32" r="7" fill="${ink}"/>`,
+  Voi: (ink) =>
+    `<path d="M14 16 32 50 50 16" fill="none" stroke="${ink}" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>`,
+  // Gira, "it turns": an arc that comes back round, with a head on it.
+  Gira: (ink) =>
+    `<path d="M50 34a18 18 0 1 1-6-15" fill="none" stroke="${ink}" stroke-width="8" stroke-linecap="butt"/>` +
+    `<path d="M48 4v20H28z" fill="${ink}"/>`,
+};
+
+/*
+ * `width` and `height` as well as the viewBox, deliberately.
+ *
+ * The badge on the MAP is drawn through composeBadge, which loads the logo
+ * into an `Image` and puts it on a canvas. An SVG with no intrinsic size has
+ * none to give that Image: Chrome falls back to 300x150 and some browsers
+ * decline to draw it at all, so the dot would simply have no mark on it at
+ * zoom 14 while every `<img>` in the panels looked right.
+ */
+const markUrl = (operator: Operator, ink: string) =>
+  `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">${MARKS[operator](ink)}</svg>`,
+  )}`;
+
+/**
+ * One palette colour each, assigned rather than taken in value order.
+ *
+ * Value order is whatever the file happens to list first, so leaving these to
+ * `resolveStyles` would repaint every operator the day a row moved. Written
+ * down, Lime is the same green in the map legend, the report and the hub's
+ * table.
+ */
+const DISC: Record<Operator, string> = {
+  Bolt: "#0f766e",
+  Dott: "#2c63ec",
+  Gira: "#8339b0",
+  Lime: "#76a151",
+  Voi: "#dd2824",
+};
+
+/**
+ * White unless the disc is too light to hold it.
+ *
+ * 4.5 rather than `MIN_LOGO_CONTRAST`'s 3: every one of the five discs clears
+ * 3:1 with white arithmetically, but the two lightest do it at 3.01 and 3.14 --
+ * a mark that technically passes and still disappears at 16px. Over that line
+ * the ink flips, which puts the worst of the five at 5.65 instead of 3.01.
+ */
+const MIN_INK_CONTRAST = 4.5;
+
+const inkFor = (disc: string): string => {
+  const rgb = parseHex(disc);
+  if (!rgb) return INK_LIGHT;
+  const behind = luminance(rgb);
+  const onLight = contrastBetween(luminance(parseHex(INK_LIGHT)!), behind);
+  return onLight >= MIN_INK_CONTRAST ? INK_LIGHT : INK_DARK;
+};
+
+/** Every operator's shipped style, built once. */
+export const OPERATOR_STYLES: Record<Operator, CategoryStyle> =
+  Object.fromEntries(
+    OPERATORS.map((operator) => {
+      const color = DISC[operator];
+      const ink = inkFor(color);
+      return [
+        operator,
+        {
+          color,
+          logo: markUrl(operator, ink),
+          logoKind: "transparent" as const,
+          logoLuminance: luminance(parseHex(ink)!),
+        },
+      ];
+    }),
+  ) as Record<Operator, CategoryStyle>;
+
+const isOperator = (value: string): value is Operator =>
+  (OPERATORS as readonly string[]).includes(value);
+
+/** The shipped style for one value, or undefined if it is not an operator. */
+export const operatorStyle = (value: string): CategoryStyle | undefined =>
+  isOperator(value) ? OPERATOR_STYLES[value] : undefined;
+
+/**
+ * The shipped styles for whichever of `values` are operators.
+ *
+ * Keyed by the VALUE, not by the dataset and column: an operator is the same
+ * operator in the trips file, the vehicle snapshot, the events feed, the
+ * infringements and the fleet-cap rule, and five dataset-column pairs that all
+ * have to be kept in step is how the next feed quietly ships without badges.
+ * A value that is not one of the five is left to the palette.
+ */
+export function operatorStyles(
+  values: readonly string[],
+): Record<string, CategoryStyle> {
+  const out: Record<string, CategoryStyle> = {};
+  for (const value of values) {
+    if (isOperator(value)) out[value] = OPERATOR_STYLES[value];
   }
   return out;
 }

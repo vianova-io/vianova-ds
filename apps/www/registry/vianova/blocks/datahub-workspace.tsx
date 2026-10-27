@@ -88,6 +88,7 @@ import {
   GeometryThumbnail,
   MapThumbnail as Thumbnail,
 } from "@/registry/vianova/product/map-thumbnail";
+import { CategoryBadge } from "@/registry/vianova/product/category-badge";
 import { CategoryStylePicker } from "@/registry/vianova/product/category-style-picker";
 import { LegendCategorical } from "@/registry/vianova/product/legend-categorical";
 import { MapCanvas } from "@/registry/vianova/product/map-canvas";
@@ -119,6 +120,7 @@ import {
   SAMPLE_COLUMN_DESCRIPTIONS,
   SAMPLE_FEEDS,
   firstPosition,
+  operatorStyles,
   ringOf,
   type SampleFeed,
 } from "@/registry/vianova/lib/sample-datasets";
@@ -289,7 +291,9 @@ function previewRows(dataset: Dataset, n = 40): string[][] {
 function styleFor(column: Column, value: string): CategoryStyle {
   const values = column.values ?? [];
   return (
-    resolveStyles(values, { values: column.styles })[value] ?? {
+    resolveStyles(values, { values: column.styles }, operatorStyles(values))[
+      value
+    ] ?? {
       color: CATEGORY_PALETTE[0],
     }
   );
@@ -311,9 +315,11 @@ function DataPlot({
   className?: string;
 }) {
   const column = dataset.columns.find((c) => c.name === dataset.mapColumn);
-  const styles = resolveStyles(column?.values ?? [""], {
-    values: column?.styles,
-  });
+  const styles = resolveStyles(
+    column?.values ?? [""],
+    { values: column?.styles },
+    operatorStyles(column?.values ?? []),
+  );
   return (
     <GeometryThumbnail
       points={dataset.mapPoints ?? []}
@@ -758,9 +764,11 @@ function ColumnRow({
                         // a value left on its palette default would otherwise
                         // drift if the palette order ever did.
                         styles: {
-                          ...resolveStyles(column.values!, {
-                            values: column.styles,
-                          }),
+                          ...resolveStyles(
+                            column.values!,
+                            { values: column.styles },
+                            operatorStyles(column.values!),
+                          ),
                           [value]: next,
                         },
                       })
@@ -842,14 +850,44 @@ function PreviewTable({ dataset }: { dataset: Dataset }) {
       <TableBody>
         {sorted.map((row, r) => (
           <TableRow key={r}>
-            {row.map((cell, c) => (
-              <TableCell
-                key={c}
-                className="max-w-48 truncate whitespace-nowrap tabular-nums"
-              >
-                {cell}
-              </TableCell>
-            ))}
+            {row.map((cell, c) => {
+              /*
+               * A category's badge in the cell, where it has one.
+               *
+               * Through `styleFor`, not through a list of operators: anything
+               * that has a logo gets one here, whether it ships with the
+               * sample data or was uploaded in the picker two rows up. The
+               * test is the LOGO and not the colour -- a dot beside every
+               * value of every category column would be forty dots on a
+               * forty-row preview, and none of them would mean anything the
+               * text does not already say.
+               */
+              const column = dataset.columns[c];
+              const style =
+                column?.type === "category" && cell
+                  ? styleFor(column, cell)
+                  : undefined;
+              return (
+                <TableCell
+                  key={c}
+                  className="max-w-48 truncate whitespace-nowrap tabular-nums"
+                >
+                  {style?.logo ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <CategoryBadge
+                        color={badgeColor(style)}
+                        logo={style.logo}
+                        logoKind={style.logoKind}
+                        size={18}
+                      />
+                      {cell}
+                    </span>
+                  ) : (
+                    cell
+                  )}
+                </TableCell>
+              );
+            })}
           </TableRow>
         ))}
       </TableBody>
@@ -1100,10 +1138,11 @@ function DatasetMap({ dataset }: { dataset: Dataset }) {
   const styles = React.useMemo(
     // With no category column every point is one value, in the first colour.
     () =>
-      resolveStyles(column ? values : [""], {
-        logoZoom,
-        values: column?.styles,
-      }),
+      resolveStyles(
+        column ? values : [""],
+        { logoZoom, values: column?.styles },
+        operatorStyles(values),
+      ),
     // `values` is a new array each render when the column has none.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [column?.values, column?.styles, logoZoom],

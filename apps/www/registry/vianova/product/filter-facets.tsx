@@ -94,6 +94,7 @@ function FilterFacets({
   onValueChange,
   bounds = {},
   choices = {},
+  valueIcon,
   className,
   ...props
 }: Omit<React.ComponentProps<"div">, "onChange"> & {
@@ -106,6 +107,19 @@ function FilterFacets({
    */
   bounds?: FacetBounds;
   choices?: FacetChoices;
+  /**
+   * A mark to show beside a value, where one means something -- an operator's
+   * badge, a status colour.
+   *
+   * A function rather than an `icon` on each choice, because the choices for a
+   * data file are counted from its rows: the caller would have to rebuild that
+   * list, with React nodes in it, every time a filter narrowed. It also keeps
+   * `FilterField` free of React, which is what lets the filter AST be shared
+   * with code that never renders.
+   *
+   * Decorative. The value's own text is always shown beside it.
+   */
+  valueIcon?: (field: string, value: string) => React.ReactNode;
 }) {
   // Labels are referenced by id from the range inputs, so two FilterFacets on
   // one page must not mint the same ids.
@@ -183,6 +197,7 @@ function FilterFacets({
               condition={condition}
               bounds={bounds[field.name]}
               choices={field.options ?? choices[field.name] ?? []}
+              valueIcon={valueIcon}
               onWrite={(next) => write(field, next)}
             />
           </div>
@@ -198,6 +213,7 @@ function FacetControl({
   condition,
   bounds,
   choices,
+  valueIcon,
   onWrite,
 }: {
   field: FilterField;
@@ -205,6 +221,7 @@ function FacetControl({
   condition: FilterCondition | undefined;
   bounds: { min: number; max: number } | undefined;
   choices: { value: string; label: string }[];
+  valueIcon?: (field: string, value: string) => React.ReactNode;
   onWrite: (next: FilterCondition["value"] | null) => void;
 }) {
   if (field.type === "number") {
@@ -286,6 +303,7 @@ function FacetControl({
       <ComboboxChips className="min-h-8 py-1">
         {selected.map((item) => (
           <ComboboxChip key={item} aria-label={labels.get(item) ?? item}>
+            {valueIcon?.(field.name, item)}
             {labels.get(item) ?? item}
           </ComboboxChip>
         ))}
@@ -299,6 +317,7 @@ function FacetControl({
         <ComboboxList>
           {(item: string) => (
             <ComboboxItem key={item} value={item}>
+              {valueIcon?.(field.name, item)}
               {labels.get(item) ?? item}
             </ComboboxItem>
           )}
