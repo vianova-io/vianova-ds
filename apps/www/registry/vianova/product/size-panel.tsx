@@ -98,12 +98,124 @@ function Row({
 }
 
 /**
- * A slider and the number it is showing, as one row.
+ * The number beside a slider, typed or dragged.
  *
- * The number is an Input rather than text because typing 7.5 is the only way
- * to hit a half-pixel on a track 150px wide, and because someone matching two
- * layers needs to enter the value they read off the other one.
+ * The slider is for getting close and the box for being exact: 7.5 is not
+ * reachable by dragging a thumb along a track 150px wide, and someone
+ * matching two layers needs to enter the value they read off the other one.
+ *
+ * Text rather than `type="number"`, because a number input reports "" for
+ * every intermediate state -- a half-typed "7." would be indistinguishable
+ * from a cleared box. The draft is held as typed, the slider follows every
+ * parseable keystroke, and the value is clamped and snapped to `step` only on
+ * blur or Enter. The same contract `patterns/slider-field.tsx` implements,
+ * which is where this logic is borrowed from rather than reinvented.
+ *
+ * `suffix` is shown at rest and dropped while editing, so the unit is there
+ * to read without being there to delete.
  */
+function NumberBox({
+  label,
+  value,
+  onValueChange,
+  range,
+  suffix = "",
+  className,
+}: {
+  /** Used for the accessible name; the visible label is the caller's. */
+  label: string;
+  value: number;
+  onValueChange: (next: number) => void;
+  range: { min: number; max: number; step: number };
+  suffix?: string;
+  className?: string;
+}) {
+  const [draft, setDraft] = React.useState<string | null>(null);
+
+  const normalise = (n: number) => {
+    const clamped = Math.min(range.max, Math.max(range.min, n));
+    const stepped =
+      Math.round((clamped - range.min) / range.step) * range.step + range.min;
+    // Rounding can push past max when the span is not a whole number of
+    // steps. Two decimals covers a 0.25 step and a 0.5 one alike.
+    return Number(Math.min(range.max, stepped).toFixed(2));
+  };
+
+  /** Tolerates the suffix, a decimal comma, and a half-typed "7.". */
+  const parse = (text: string) => {
+    const cleaned = text
+      .trim()
+      .replace(/[^\d.,-]/g, "")
+      .replace(",", ".");
+    if (cleaned === "" || cleaned === ".") return null;
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const commit = () => {
+    if (draft === null) return;
+    const n = parse(draft);
+    // An unparseable or empty box snaps back to the last good value rather
+    // than to the floor: clearing a field and tabbing away is not a request
+    // for the smallest mark the panel allows.
+    const next = n === null ? value : normalise(n);
+    setDraft(null);
+    if (next !== value) onValueChange(next);
+  };
+
+  return (
+    <Input
+      aria-label={label}
+      inputMode="decimal"
+      autoComplete="off"
+      value={draft ?? `${value}${suffix}`}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        const n = parse(e.target.value);
+        // Live, but clamped: the thumb cannot leave the track, so it should
+        // not be asked to.
+        if (n !== null) {
+          const clamped = Math.min(range.max, Math.max(range.min, n));
+          if (clamped !== value) onValueChange(clamped);
+        }
+      }}
+      onFocus={(e) => {
+        setDraft(String(value));
+        // After the draft lands, so the selection covers the new text.
+        requestAnimationFrame(() => e.target.select());
+      }}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit();
+        }
+        // The arrow keys a number input would have given for free.
+        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          e.preventDefault();
+          const base = (draft !== null ? parse(draft) : null) ?? value;
+          const next = normalise(
+            base + (e.key === "ArrowUp" ? range.step : -range.step),
+          );
+          setDraft(null);
+          if (next !== value) onValueChange(next);
+        }
+      }}
+      className={cn(
+        // On the box and not on a wrapper: scroll-margin applies to the
+        // element the browser scrolls, and this is the one that gets focus.
+        // The slider's own input is position:fixed and clipped to nothing by
+        // Base UI, so it is never scrolled and never clipped; this box is a
+        // normal element with a 3px ring in a panel body that scrolls inside
+        // an overflow-hidden shell, which is what focus-ring.spec.ts catches.
+        "h-7 w-14 shrink-0 scroll-my-1 px-1 text-center text-xs",
+        className,
+      )}
+    />
+  );
+}
+
+/** A slider and its number, on one of the panel's label-column rows. */
 function SizeSlider({
   label,
   value,
@@ -132,11 +244,12 @@ function SizeSlider({
         step={range.step}
         className="min-w-0 flex-1"
       />
-      <Input
-        aria-label={`${label} in pixels`}
-        value={`${value}px`}
-        readOnly
-        className="h-7 w-14 shrink-0 px-1 text-center text-xs"
+      <NumberBox
+        label={`${label} in pixels`}
+        value={value}
+        onValueChange={onValueChange}
+        range={range}
+        suffix="px"
       />
     </Row>
   );
@@ -578,5 +691,95 @@ export function SizeTriggerRow({
           Preset row. */}
       <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
     </button>
+  );
+}
+
+/*
+ * How far the one slider can scale a layer, as a multiple of how it draws
+ * now.
+ *
+ * A multiple and not a pixel count, because the layers this sets are not all
+ * one size to begin with: the Zurich flows graduate by volume, so there is no
+ * single number to show, and a box reading "9px" over a map whose roads run
+ * from 1px to 4.5px would be naming something that is not there. 1 is the map
+ * as it already draws, which is also why it is the default -- mounting this
+ * control changes nothing until someone moves it.
+ */
+const SCALE_RANGE = { min: 0.25, max: 4, step: 0.25 };
+
+/** The multiple at which a layer draws exactly as it was designed to. */
+export const SIZE_SCALE_DEFAULT = 1;
+
+/**
+ * The whole size control, as production ships it: one slider, one number.
+ *
+ * Not a smaller SizePanel but a different answer to the same request. The
+ * panel exists because sizing by a value needs a field, a classification and
+ * a scale with two ends; none of that is here, so none of the chrome that
+ * carries it is either -- no mode switch, no header, no step to open.
+ *
+ * It scales whatever the layer already draws rather than setting a property,
+ * so one control serves a line layer, a point layer and a graduated one
+ * without asking which it is, and without flattening a graduation into a
+ * single width. The caller decides what the multiple multiplies.
+ *
+ * Rendered inline through DataLayerCard's `children` slot, where the trigger
+ * row would otherwise go. One slider does not earn a popover, and putting it
+ * behind one would add a click to the only thing most people want.
+ *
+ * Its own flex row rather than the panel's label grid: that grid reserves
+ * 5.25rem so two panels stacked in a cascade line up, and a 340px card has
+ * nothing to line up with -- it would spend a quarter of the row on the word
+ * "Size".
+ */
+export function SizeSliderRow({
+  value = SIZE_SCALE_DEFAULT,
+  onValueChange,
+  layerName,
+  id,
+  className,
+}: {
+  /** A multiple of the layer's designed size. 1 leaves it alone. */
+  value?: number;
+  onValueChange?: (next: number) => void;
+  /** Disambiguates the control when several cards are on screen. */
+  layerName?: string;
+  id?: string;
+  className?: string;
+}) {
+  const labelId = React.useId();
+  const name = layerName ? `Size ${layerName}` : "Size";
+  return (
+    <div
+      data-slot="size-slider-row"
+      id={id}
+      className={cn("flex min-h-8 items-center gap-2", className)}
+    >
+      {/* The layer's name is read but not shown: on screen the card already
+          says whose row this is, and ten cards of visible "Size Vehicle
+          Flows" would be noise. aria-labelledby resolves the whole text
+          content, sr-only part included. */}
+      <Label id={labelId} className="shrink-0 text-muted-foreground">
+        Size
+        {layerName ? <span className="sr-only"> {layerName}</span> : null}
+      </Label>
+      <Slider
+        aria-labelledby={labelId}
+        value={[value]}
+        onValueChange={(v) =>
+          onValueChange?.(Array.isArray(v) ? (v[0] ?? SCALE_RANGE.min) : v)
+        }
+        min={SCALE_RANGE.min}
+        max={SCALE_RANGE.max}
+        step={SCALE_RANGE.step}
+        className="min-w-0 flex-1"
+      />
+      <NumberBox
+        label={name}
+        value={value}
+        onValueChange={(next) => onValueChange?.(next)}
+        range={SCALE_RANGE}
+      />
+    </div>
   );
 }

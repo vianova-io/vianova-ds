@@ -29,7 +29,9 @@ import { PresetPicker } from "@/registry/vianova/product/preset-picker";
 import type { VisualizationTypeId } from "@/registry/vianova/product/visualization-picker";
 import {
   SIZE_DEFAULTS,
+  SIZE_SCALE_DEFAULT,
   SizePanel,
+  SizeSliderRow,
   SizeTriggerRow,
   type SizeField,
   type SizeGeometry,
@@ -155,6 +157,7 @@ export function SampleMapLayer({
   onVisibleChange,
   onSampleChange,
   onRemove,
+  sizeControl = "shipped",
 }: {
   feed: SampleFeed;
   map: MapLibreMap | null;
@@ -172,6 +175,14 @@ export function SampleMapLayer({
     id: string,
     state: { sample: ParsedSample; rows: Record<string, string>[] } | null,
   ) => void;
+  /**
+   * Which size control the card carries -- see MapWorkspace, which owns this
+   * decision and passes it down. "shipped" is one row in the card; "panel" is
+   * the proposal with its own step beside Colorize.
+   *
+   * TEMPORARY, and deleted with the block's prop of the same name.
+   */
+  sizeControl?: "shipped" | "panel";
 }) {
   const [sample, setSample] = React.useState<ParsedSample | null>(null);
   const [failed, setFailed] = React.useState(false);
@@ -217,6 +228,10 @@ export function SampleMapLayer({
   const [sizeRadiusRange, setSizeRadiusRange] = React.useState(
     SIZE_DEFAULTS.radiusRange,
   );
+  /* The shipped control's one number: a multiple of how the layer already
+     draws, so 1 is the map as designed. */
+  const [sizeScale, setSizeScale] = React.useState(SIZE_SCALE_DEFAULT);
+  const shippedSize = sizeControl === "shipped";
   const [sizeWidthRange, setSizeWidthRange] = React.useState(
     SIZE_DEFAULTS.widthRange,
   );
@@ -497,21 +512,25 @@ export function SampleMapLayer({
   const sizePaint = React.useMemo(
     () => ({
       radius: sizeExpression({
-        mode: sizeMode,
-        size: sizeRadius,
+        // A feed never graduated before this panel existed, so the shipped
+        // control has one size to scale rather than a range to stretch.
+        mode: shippedSize ? "single" : sizeMode,
+        size: shippedSize ? SIZE_DEFAULTS.radius * sizeScale : sizeRadius,
         property: "size",
         range: sizeRadiusRange,
         edges: sizeEdges,
       }),
       width: sizeExpression({
-        mode: sizeMode,
-        size: sizeWidth,
+        mode: shippedSize ? "single" : sizeMode,
+        size: shippedSize ? SIZE_DEFAULTS.width * sizeScale : sizeWidth,
         property: "size",
         range: sizeWidthRange,
         edges: sizeEdges,
       }),
     }),
     [
+      shippedSize,
+      sizeScale,
       sizeMode,
       sizeRadius,
       sizeWidth,
@@ -630,7 +649,7 @@ export function SampleMapLayer({
     logoZoom,
     // A number, not an expression: see the prop's own note -- the dots carry a
     // category and no measure, and icon-size has to be scaled to match.
-    radius: sizeRadius,
+    radius: shippedSize ? SIZE_DEFAULTS.radius * sizeScale : sizeRadius,
     id: `${feed.id}-points`,
   });
 
@@ -640,7 +659,7 @@ export function SampleMapLayer({
     shapes,
     styles,
     // A polygon's only size is its outline.
-    width: sizeWidth,
+    width: shippedSize ? SIZE_DEFAULTS.width * sizeScale : sizeWidth,
     id: `${feed.id}-shapes`,
   });
 
@@ -782,13 +801,22 @@ export function SampleMapLayer({
             as extra controls for the active visualisation. Nothing in
             DataLayerCard changes, so no visual baseline moves. */}
         {sample ? (
-          <SizeTriggerRow
-            id={sizeTriggerId}
-            layerName={feed.title}
-            open={sizeOpen}
-            onClick={() => setChain((c) => (c === "size" ? null : "size"))}
-            summary={sizeSummaryText}
-          />
+          shippedSize ? (
+            <SizeSliderRow
+              id={sizeTriggerId}
+              layerName={feed.title}
+              value={sizeScale}
+              onValueChange={setSizeScale}
+            />
+          ) : (
+            <SizeTriggerRow
+              id={sizeTriggerId}
+              layerName={feed.title}
+              open={sizeOpen}
+              onClick={() => setChain((c) => (c === "size" ? null : "size"))}
+              summary={sizeSummaryText}
+            />
+          )
         ) : null}
       </DataLayerCard>
 
@@ -867,7 +895,7 @@ export function SampleMapLayer({
       {/* A SIBLING of Colorize, not a child: a size is not a colour setting,
           and nesting it would make the chain claim it is. Both sit at depth 1,
           which is exactly why `chain` is one value -- see its declaration. */}
-      {sample ? (
+      {sample && !shippedSize ? (
         <PanelStep
           id={`${feed.id}-size`}
           title={`Size · ${feed.title}`}

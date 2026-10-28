@@ -112,7 +112,9 @@ import { RankedBars } from "@/registry/vianova/product/ranked-bars";
 import { SampleMapLayer } from "@/registry/vianova/product/sample-map-layer";
 import {
   SIZE_DEFAULTS,
+  SIZE_SCALE_DEFAULT,
   SizePanel,
+  SizeSliderRow,
   SizeTriggerRow,
 } from "@/registry/vianova/product/size-panel";
 import type { VisualizationTypeId } from "@/registry/vianova/product/visualization-picker";
@@ -578,11 +580,40 @@ const DEFAULT_LAYERS = [
 /** How many bars a breakdown shows before the tail is dropped. */
 const CHART_BARS = 8;
 
+/**
+ * The widths this layer has always drawn between, at scale 1.
+ *
+ * Narrower at the top than SIZE_DEFAULTS.widthRange: the stepped tiers this
+ * replaced topped out around 5.5px at z16, and 8 would have thickened every
+ * arterial the moment the control mounted.
+ */
+const SHIPPED_WIDTH_RANGE: [number, number] = [1, 4.5];
+
+/**
+ * A range, multiplied.
+ *
+ * Scaling both ends rather than replacing them is what lets one slider serve
+ * a graduated layer: at 1 the ends are the hand-tuned numbers the layer has
+ * always drawn, at 2 both double, and a busy road stays heavier than a quiet
+ * one the whole way up. Rounded, because 0.1 * 3 is 0.30000000000000004 and
+ * that reaches the paint expression.
+ */
+function scaleRange(
+  range: readonly [number, number],
+  by: number,
+): [number, number] {
+  return [
+    Number((range[0] * by).toFixed(2)),
+    Number((range[1] * by).toFixed(2)),
+  ];
+}
+
 export function MapWorkspace({
   className,
   mapboxToken,
   dataUrl = DEFAULT_DATA_URL,
   topBar = "shipped",
+  sizeControl = "shipped",
 }: {
   className?: string;
   /**
@@ -606,6 +637,23 @@ export function MapWorkspace({
    * does this.
    */
   topBar?: "shipped" | "edges";
+  /**
+   * Which size control the layer cards carry.
+   *
+   * "shipped" is production and what the docs show: one row under
+   * Visualization -- a label, a slider, a number -- scaling whatever the
+   * layer already draws. "panel" is the proposal under review: Size as its
+   * own step beside Colorize, with Single and By value, a classification and
+   * a preview of the scale.
+   *
+   * The word "shipped" is `topBar`'s above, on purpose -- a reader who has
+   * met one knows which side of the other is production.
+   *
+   * TEMPORARY, for the same reason `topBar` is, and with the same ending:
+   * a control has to be draggable before it can be chosen, and when one wins
+   * the other goes and so does this prop.
+   */
+  sizeControl?: "shipped" | "panel";
 }) {
   const [title, setTitle] = React.useState("Zürich vehicle flows");
   const [all, setAll] = React.useState<FlowFeature[] | null>(null);
@@ -1148,12 +1196,12 @@ export function MapWorkspace({
   const [sizeRadiusRange, setSizeRadiusRange] = React.useState(
     SIZE_DEFAULTS.radiusRange,
   );
-  /* Narrower at the top than the panel's own default: the tiers this replaced
-     topped out around 5.5px at z16, and 8 would have thickened every arterial
-     on load. */
-  const [sizeWidthRange, setSizeWidthRange] = React.useState<[number, number]>([
-    1, 4.5,
-  ]);
+  const [sizeWidthRange, setSizeWidthRange] =
+    React.useState<[number, number]>(SHIPPED_WIDTH_RANGE);
+  /* The shipped control's one number: a multiple of how the layer already
+     draws, so 1 is today's map and the volume graduation survives at every
+     setting. */
+  const [sizeScale, setSizeScale] = React.useState(SIZE_SCALE_DEFAULT);
 
   /**
    * Hiding the layer folds the chain away with its card.
@@ -1304,24 +1352,46 @@ export function MapWorkspace({
    * draw every one of them at the fallback.
    */
   const sizeProperty = aggregate ? "volume" : sizeField;
+
+  /**
+   * Whether this visualisation has a mark whose size anyone can set.
+   *
+   * A grid draws flows-grid-fill, a fill with no outline; a heatmap draws
+   * flows-heat, whose spread is heatmap-radius -- a kernel width, not the
+   * size of a thing on the map, and calling it "Size" would be the row lying
+   * about what it does. On either, the shipped control hides rather than
+   * offering a number the map ignores.
+   */
+  const sizeable = viz === "lines" || viz === "points" || viz === "clusters";
+
+  const shippedSize = sizeControl === "shipped";
   const sizePaint = React.useMemo(
     () => ({
       radius: sizeExpression({
-        mode: sizeMode,
-        size: sizeRadius,
+        mode: shippedSize ? "by-value" : sizeMode,
+        size: shippedSize ? SIZE_DEFAULTS.radius * sizeScale : sizeRadius,
         property: sizeProperty,
-        range: sizeRadiusRange,
+        range: shippedSize
+          ? scaleRange(SIZE_DEFAULTS.radiusRange, sizeScale)
+          : sizeRadiusRange,
         edges: sizeEdges,
       }),
       width: sizeExpression({
-        mode: sizeMode,
-        size: sizeWidth,
+        mode: shippedSize ? "by-value" : sizeMode,
+        size: shippedSize ? SIZE_DEFAULTS.width * sizeScale : sizeWidth,
         property: sizeProperty,
-        range: sizeWidthRange,
+        range: shippedSize
+          ? scaleRange(SHIPPED_WIDTH_RANGE, sizeScale)
+          : sizeWidthRange,
         edges: sizeEdges,
       }),
     }),
+    // Derived inside rather than above: a scaled range is a fresh array every
+    // render, and listing one here would make this memo recompute each time
+    // and the repaint effect below fire with it.
     [
+      shippedSize,
+      sizeScale,
       sizeMode,
       sizeProperty,
       sizeRadius,
@@ -2480,27 +2550,38 @@ export function MapWorkspace({
                       documents as extra controls for the active
                       visualisation. Nothing in DataLayerCard changes, so no
                       visual baseline moves. */}
-                    <SizeTriggerRow
-                      id={sizeTriggerId}
-                      layerName={LAYER_NAME}
-                      open={sizeOpen}
-                      onClick={() =>
-                        setChain((c) => (c === "size" ? null : "size"))
-                      }
-                      // The number that is actually doing something. This
-                      // layer draws as lines or as circles depending on the
-                      // visualisation, and a row reading "9 px" above a map of
-                      // road segments names a setting nothing on screen uses.
-                      summary={sizeSummary({
-                        mode: sizeMode,
-                        size: viz === "lines" ? sizeWidth : sizeRadius,
-                        range:
-                          viz === "lines" ? sizeWidthRange : sizeRadiusRange,
-                        fieldLabel: sizeFields.find(
-                          (f) => f.name === sizeProperty,
-                        )?.label,
-                      })}
-                    />
+                    {shippedSize ? (
+                      sizeable ? (
+                        <SizeSliderRow
+                          id={sizeTriggerId}
+                          layerName={LAYER_NAME}
+                          value={sizeScale}
+                          onValueChange={setSizeScale}
+                        />
+                      ) : null
+                    ) : (
+                      <SizeTriggerRow
+                        id={sizeTriggerId}
+                        layerName={LAYER_NAME}
+                        open={sizeOpen}
+                        onClick={() =>
+                          setChain((c) => (c === "size" ? null : "size"))
+                        }
+                        // The number that is actually doing something. This
+                        // layer draws as lines or as circles depending on the
+                        // visualisation, and a row reading "9 px" above a map of
+                        // road segments names a setting nothing on screen uses.
+                        summary={sizeSummary({
+                          mode: sizeMode,
+                          size: viz === "lines" ? sizeWidth : sizeRadius,
+                          range:
+                            viz === "lines" ? sizeWidthRange : sizeRadiusRange,
+                          fieldLabel: sizeFields.find(
+                            (f) => f.name === sizeProperty,
+                          )?.label,
+                        })}
+                      />
+                    )}
                   </DataLayerCard>
                 ) : null}
 
@@ -2523,6 +2604,7 @@ export function MapWorkspace({
                     onVisibleChange={(on) => setLayerVisible(feed.id, on)}
                     onSampleChange={onSampleChange}
                     onRemove={() => removeLayer(feed.id)}
+                    sizeControl={sizeControl}
                   />
                 ))}
 
@@ -2664,36 +2746,41 @@ export function MapWorkspace({
 
         {/* A SIBLING of Colorize, not a child: size is not a colour setting,
             and nesting it would make the chain claim it is. Both are depth 1,
-            which is exactly why `chain` is one value -- see its declaration. */}
-        <PanelStep
-          id="size"
-          title={`Size · ${LAYER_NAME}`}
-          width={360}
-          open={sizeOpen}
-          onOpenChange={setSizeOpen}
-          triggerId={sizeTriggerId}
-        >
-          <SizePanel
-            showHeader={false}
-            className="w-auto rounded-none border-0 bg-transparent shadow-none"
-            // Lines and points both: the layer draws as segments, and as
-            // circles once it is aggregated or clustered.
-            geometry="both"
-            fields={sizeFields}
-            mode={sizeMode}
-            onModeChange={setSizeMode}
-            field={sizeField}
-            onFieldChange={setSizeField}
-            radius={sizeRadius}
-            onRadiusChange={setSizeRadius}
-            width={sizeWidth}
-            onWidthChange={setSizeWidth}
-            radiusRange={sizeRadiusRange}
-            onRadiusRangeChange={setSizeRadiusRange}
-            widthRange={sizeWidthRange}
-            onWidthRangeChange={setSizeWidthRange}
-          />
-        </PanelStep>
+            which is exactly why `chain` is one value -- see its declaration.
+
+            Only in the proposal: the shipped control is a row in the card and
+            has no step to open. */}
+        {shippedSize ? null : (
+          <PanelStep
+            id="size"
+            title={`Size · ${LAYER_NAME}`}
+            width={360}
+            open={sizeOpen}
+            onOpenChange={setSizeOpen}
+            triggerId={sizeTriggerId}
+          >
+            <SizePanel
+              showHeader={false}
+              className="w-auto rounded-none border-0 bg-transparent shadow-none"
+              // Lines and points both: the layer draws as segments, and as
+              // circles once it is aggregated or clustered.
+              geometry="both"
+              fields={sizeFields}
+              mode={sizeMode}
+              onModeChange={setSizeMode}
+              field={sizeField}
+              onFieldChange={setSizeField}
+              radius={sizeRadius}
+              onRadiusChange={setSizeRadius}
+              width={sizeWidth}
+              onWidthChange={setSizeWidth}
+              radiusRange={sizeRadiusRange}
+              onRadiusRangeChange={setSizeRadiusRange}
+              widthRange={sizeWidthRange}
+              onWidthRangeChange={setSizeWidthRange}
+            />
+          </PanelStep>
+        )}
       </PanelStepper>
 
       {/* Charts panel. Same tray below lg, same docked column from lg up,
