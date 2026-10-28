@@ -562,7 +562,12 @@ export function SizeTriggerRow({
       aria-expanded={Boolean(open)}
       onClick={onClick}
       className={cn(
-        "flex h-8 w-full items-center gap-2 rounded-md px-1 text-sm transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+        // scroll-my-1 is not decoration: the ring paints 3px OUTSIDE the
+        // border box, and this row lives in a panel that scrolls inside an
+        // overflow-hidden shell. Focusing it scrolls it flush to an edge and
+        // the shell slices the ring off -- which e2e/focus-ring.spec.ts calls
+        // a real defect, since the ring is the keyboard user's only cue.
+        "flex h-8 w-full scroll-my-1 items-center gap-2 rounded-md px-1 text-sm transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
         className,
       )}
     >
