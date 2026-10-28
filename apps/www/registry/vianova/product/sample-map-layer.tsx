@@ -27,6 +27,18 @@ import {
 } from "@/registry/vianova/product/panel-stepper";
 import { PresetPicker } from "@/registry/vianova/product/preset-picker";
 import type { VisualizationTypeId } from "@/registry/vianova/product/visualization-picker";
+import {
+  SIZE_DEFAULTS,
+  SizePanel,
+  SizeTriggerRow,
+  type SizeField,
+  type SizeGeometry,
+} from "@/registry/vianova/product/size-panel";
+import {
+  sizeExpression,
+  sizeSummary,
+  type SizeMode,
+} from "@/registry/vianova/lib/size-expression";
 import { useCategoryPointLayer } from "@/registry/vianova/hooks/use-category-point-layer";
 import { useCategoryShapeLayer } from "@/registry/vianova/hooks/use-category-shape-layer";
 import {
@@ -175,26 +187,58 @@ export function SampleMapLayer({
   const [stops, setStops] = React.useState<Stop[] | null>(null);
   const [rampCustom, setRampCustom] = React.useState(false);
   const [opacity, setOpacity] = React.useState(100);
-  const [colorizeOpen, setColorizeOpen] = React.useState(false);
+  /**
+   * Which depth-1 step the chain is showing, as one value rather than a
+   * boolean each.
+   *
+   * PanelStep given a controlled `open` reads that prop and never consults the
+   * stepper's own openPath, so two controlled siblings both true would both
+   * render at the same anchor, one on top of the other. One state makes
+   * "never both" structural rather than something every handler remembers.
+   */
+  const [chain, setChain] = React.useState<"colorize" | "size" | null>(null);
+  const colorizeOpen = chain === "colorize";
+  const sizeOpen = chain === "size";
+  const setColorizeOpen = React.useCallback(
+    (open: boolean) => setChain(open ? "colorize" : null),
+    [],
+  );
+  const setSizeOpen = React.useCallback(
+    (open: boolean) => setChain(open ? "size" : null),
+    [],
+  );
   const [presetOpen, setPresetOpen] = React.useState(false);
   const [savedStyles, setSavedStyles] = React.useState<CategoryStyleSet>();
 
+  const [sizeMode, setSizeMode] = React.useState<SizeMode>("single");
+  const [sizeFieldChoice, setSizeFieldChoice] = React.useState<string>();
+  const [sizeRadius, setSizeRadius] = React.useState(SIZE_DEFAULTS.radius);
+  const [sizeWidth, setSizeWidth] = React.useState(SIZE_DEFAULTS.width);
+  const [sizeRadiusRange, setSizeRadiusRange] = React.useState(
+    SIZE_DEFAULTS.radiusRange,
+  );
+  const [sizeWidthRange, setSizeWidthRange] = React.useState(
+    SIZE_DEFAULTS.widthRange,
+  );
+
   const uid = React.useId();
   const colorizeTriggerId = `${uid}-colorize`;
+  const sizeTriggerId = `${uid}-size`;
   const browsePresetsId = `${uid}-preset`;
 
   /**
-   * Hiding the layer folds the colour chain away with its card.
+   * Hiding the layer folds the chain away with its card.
    *
    * The card collapses to a name and an eye when the layer goes off, taking
-   * the legend button these steps hang from with it -- so a docked Colorize
-   * would be left configuring a layer nobody can see, with no trigger for
+   * the legend button and the Visualization section these steps hang from with
+   * it -- so a docked Colorize or Size would be left configuring a layer
+   * nobody can see, with no trigger for
    * PanelStep to return focus to on close. Keyed on the prop, not written into
    * the eye's handler: the library switches layers on and off too.
    */
   React.useEffect(() => {
     if (visible) return;
-    setColorizeOpen(false);
+    setChain(null);
     setPresetOpen(false);
   }, [visible]);
 
@@ -308,6 +352,30 @@ export function SampleMapLayer({
     colorFields.find((f) => f.name === colorField)?.type ?? "string";
   const categorical = fieldType === "string";
 
+  /**
+   * What this layer can be sized by -- and nothing, when it is categorical.
+   *
+   * A categorical layer is coloured by a string, and its two hooks carry a
+   * category per feature and no measure: there is no number on the layer to
+   * graduate against. An empty list is the honest answer, and SizePanel reads
+   * it as "single size only" and drops the mode switch rather than offering a
+   * choice with an empty field list behind it.
+   */
+  const sizeFields = React.useMemo<SizeField[]>(() => {
+    if (!sample || categorical) return [];
+    return sample.columns
+      .filter((c) => c.type === "number")
+      .map((c) => ({ name: c.name, label: columnLabel(c.name) }));
+  }, [categorical, sample]);
+
+  /* The chosen field, kept valid by construction: a feed switched from
+     categorical to numeric, or swapped underneath, would otherwise leave a
+     column name that is no longer there. */
+  const sizeField =
+    sizeFieldChoice && sizeFields.some((f) => f.name === sizeFieldChoice)
+      ? sizeFieldChoice
+      : (sizeFields[0]?.name ?? "");
+
   /* --------------------------------- rows --------------------------------- */
 
   const predicate = React.useMemo(
@@ -405,6 +473,54 @@ export function SampleMapLayer({
     return quantileEdges(values, BANDS);
   }, [categorical, colorField, rows, sample]);
 
+  /**
+   * The size domain, which is its own.
+   *
+   * Sizing by speed while colouring by volume is two encodings on one layer,
+   * and borrowing the colour domain would scale every feature against numbers
+   * it has nothing to do with. Same column, same edges -- the common case
+   * costs nothing extra.
+   */
+  const sizeEdges = React.useMemo(() => {
+    if (!sample || !sizeField) return [];
+    if (sizeField === colorField) return edges;
+    const values = rows
+      .map((row) => Number(row[sizeField]))
+      .filter((n) => Number.isFinite(n));
+    return quantileEdges(values, BANDS);
+  }, [colorField, edges, rows, sample, sizeField]);
+
+  /* The size as MapLibre expressions, from the same builder the Zürich flows
+     layer paints with. `size` rather than the raw column name: useRampLayer
+     carries the sized number into every feature under that one key, so the
+     expression does not have to know which column it came from. */
+  const sizePaint = React.useMemo(
+    () => ({
+      radius: sizeExpression({
+        mode: sizeMode,
+        size: sizeRadius,
+        property: "size",
+        range: sizeRadiusRange,
+        edges: sizeEdges,
+      }),
+      width: sizeExpression({
+        mode: sizeMode,
+        size: sizeWidth,
+        property: "size",
+        range: sizeWidthRange,
+        edges: sizeEdges,
+      }),
+    }),
+    [
+      sizeMode,
+      sizeRadius,
+      sizeWidth,
+      sizeRadiusRange,
+      sizeWidthRange,
+      sizeEdges,
+    ],
+  );
+
   /* -------------------------------- layers -------------------------------- */
 
   // resolveStyles wants every value, not just the top N: a category pushed into
@@ -492,11 +608,17 @@ export function SampleMapLayer({
       if (!cell.trim()) continue;
       const geometry = area ? ringOf(cell) : firstPosition(cell);
       if (!geometry) continue;
-      out.push({ geometry, value: Number(row[colorField]) });
+      out.push({
+        geometry,
+        value: Number(row[colorField]),
+        // The sized column, carried alongside the coloured one so that
+        // "size by speed, colour by volume" has both numbers on the feature.
+        size: sizeField ? Number(row[sizeField]) : undefined,
+      });
       if (!area && out.length >= MAX_MAP_POINTS) break;
     }
     return out;
-  }, [categorical, colorField, rows, sample]);
+  }, [categorical, colorField, rows, sample, sizeField]);
 
   const alpha = opacity / 100;
 
@@ -506,6 +628,9 @@ export function SampleMapLayer({
     points,
     styles,
     logoZoom,
+    // A number, not an expression: see the prop's own note -- the dots carry a
+    // category and no measure, and icon-size has to be scaled to match.
+    radius: sizeRadius,
     id: `${feed.id}-points`,
   });
 
@@ -514,6 +639,8 @@ export function SampleMapLayer({
     enabled: visible && categorical && shapes.length > 0,
     shapes,
     styles,
+    // A polygon's only size is its outline.
+    width: sizeWidth,
     id: `${feed.id}-shapes`,
   });
 
@@ -524,6 +651,8 @@ export function SampleMapLayer({
     colors: rampColors,
     edges,
     opacity: alpha,
+    radius: sizePaint.radius,
+    width: sizePaint.width,
     id: `${feed.id}-ramp`,
   });
 
@@ -531,6 +660,14 @@ export function SampleMapLayer({
 
   const loading = visible && !sample && !failed;
   const geometry = sample?.geometry === "area" ? "area" : "point";
+  /* An area has no radius -- its only size is the outline it is drawn with. */
+  const sizeGeometry: SizeGeometry = geometry === "area" ? "line" : "point";
+  const sizeSummaryText = sizeSummary({
+    mode: sizeMode,
+    size: sizeGeometry === "line" ? sizeWidth : sizeRadius,
+    range: sizeGeometry === "line" ? sizeWidthRange : sizeRadiusRange,
+    fieldLabel: sizeFields.find((f) => f.name === sizeField)?.label,
+  });
   const conditions = countConditions(filter);
 
   const ticks = React.useMemo(() => {
@@ -592,7 +729,11 @@ export function SampleMapLayer({
         unavailableVisualizations={UNAVAILABLE[geometry]}
         unavailableVisualizationReason={REASON[geometry]}
         legend={legend}
-        onColorize={sample ? () => setColorizeOpen((open) => !open) : undefined}
+        onColorize={
+          sample
+            ? () => setChain((c) => (c === "colorize" ? null : "colorize"))
+            : undefined
+        }
         colorizeOpen={colorizeOpen}
         colorizeTriggerId={colorizeTriggerId}
         filters={Boolean(sample)}
@@ -636,7 +777,20 @@ export function SampleMapLayer({
             />
           ) : null
         }
-      />
+      >
+        {/* Through the card's own `children` slot, which it already documents
+            as extra controls for the active visualisation. Nothing in
+            DataLayerCard changes, so no visual baseline moves. */}
+        {sample ? (
+          <SizeTriggerRow
+            id={sizeTriggerId}
+            layerName={feed.title}
+            open={sizeOpen}
+            onClick={() => setChain((c) => (c === "size" ? null : "size"))}
+            summary={sizeSummaryText}
+          />
+        ) : null}
+      </DataLayerCard>
 
       {/* Declared beside the card rather than inside it: a step is a panel of
           its own, and nesting it in the card would put it inside the scrolling
@@ -707,6 +861,39 @@ export function SampleMapLayer({
               />
             </PanelStepBody>
           </PanelStep>
+        </PanelStep>
+      ) : null}
+
+      {/* A SIBLING of Colorize, not a child: a size is not a colour setting,
+          and nesting it would make the chain claim it is. Both sit at depth 1,
+          which is exactly why `chain` is one value -- see its declaration. */}
+      {sample ? (
+        <PanelStep
+          id={`${feed.id}-size`}
+          title={`Size · ${feed.title}`}
+          width={360}
+          open={sizeOpen}
+          onOpenChange={setSizeOpen}
+          triggerId={sizeTriggerId}
+        >
+          <SizePanel
+            showHeader={false}
+            className="w-auto rounded-none border-0 bg-transparent shadow-none"
+            geometry={sizeGeometry}
+            fields={sizeFields}
+            mode={sizeMode}
+            onModeChange={setSizeMode}
+            field={sizeField}
+            onFieldChange={setSizeFieldChoice}
+            radius={sizeRadius}
+            onRadiusChange={setSizeRadius}
+            width={sizeWidth}
+            onWidthChange={setSizeWidth}
+            radiusRange={sizeRadiusRange}
+            onRadiusRangeChange={setSizeRadiusRange}
+            widthRange={sizeWidthRange}
+            onWidthRangeChange={setSizeWidthRange}
+          />
         </PanelStep>
       ) : null}
     </>

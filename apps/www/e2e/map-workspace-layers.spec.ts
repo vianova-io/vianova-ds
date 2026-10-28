@@ -43,7 +43,9 @@ const toggle = (page: Page, name: string) =>
   page.getByRole("button", {
     // Escaped: "Trips (MDS)" would otherwise read as a capture group and the
     // pattern would never match the label it was built from.
-    name: new RegExp(`^(Show|Hide) ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
+    name: new RegExp(
+      `^(Show|Hide) ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+    ),
   });
 
 /**
@@ -72,7 +74,9 @@ async function addEverything(page: Page) {
       continue;
     }
     for (let i = 0; i < count; i++) await pickable.nth(i).click();
-    await dialog.getByRole("button", { name: /^Add \d+ layers$|^Add layer$/ }).click();
+    await dialog
+      .getByRole("button", { name: /^Add \d+ layers$|^Add layer$/ })
+      .click();
     await expect(dialog).toBeHidden();
   }
 
@@ -111,7 +115,11 @@ test.describe("the layer list", () => {
   test("Data lists the feeds and Zones the areas", async ({ page }) => {
     await open(page);
 
-    for (const name of ["Trips (MDS)", "Vehicle events", "Parking infringements"]) {
+    for (const name of [
+      "Trips (MDS)",
+      "Vehicle events",
+      "Parking infringements",
+    ]) {
       await expect(card(page, name)).toBeVisible();
     }
     // Areas belong to the other tab, which is the distinction the hub draws.
@@ -119,7 +127,11 @@ test.describe("the layer list", () => {
 
     await zones(page).click();
 
-    for (const name of ["Parking zones", "Districts", "Night curfew · Bairro Alto"]) {
+    for (const name of [
+      "Parking zones",
+      "Districts",
+      "Night curfew · Bairro Alto",
+    ]) {
       await expect(card(page, name)).toBeVisible();
     }
     await expect(card(page, "Trips (MDS)")).toHaveCount(0);
@@ -137,7 +149,9 @@ test.describe("the layer list", () => {
     await expect(block(page).getByText(/Nothing here matches/)).toBeVisible();
   });
 
-  test("a layer is a name and an eye until it is switched on", async ({ page }) => {
+  test("a layer is a name and an eye until it is switched on", async ({
+    page,
+  }) => {
     await open(page);
     const events = card(page, "Vehicle events");
     await expect(events).toHaveAttribute("data-expanded", "false");
@@ -192,23 +206,35 @@ test.describe("a layer carries its own data", () => {
   test("colorize offers the file's own columns, labelled", async ({ page }) => {
     await open(page);
     await toggle(page, "Parking infringements").click();
-    await page.getByRole("button", { name: "Colorize Parking infringements" }).click();
+    await page
+      .getByRole("button", { name: "Colorize Parking infringements" })
+      .click();
 
     const step = page.locator('[data-slot="panel-step"][data-depth="1"]');
     await expect(step).toBeVisible();
     await step.locator("#color-by").click();
 
     // Labels from the hub's own column names, not the raw header.
-    await expect(page.getByRole("option", { name: "Operator", exact: true })).toBeVisible();
-    await expect(page.getByRole("option", { name: "Fine", exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("option", { name: "Operator", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("option", { name: "Fine", exact: true }),
+    ).toBeVisible();
     // The geometry column is not something you colour by.
-    await expect(page.getByRole("option", { name: "location", exact: true })).toHaveCount(0);
+    await expect(
+      page.getByRole("option", { name: "location", exact: true }),
+    ).toHaveCount(0);
   });
 
-  test("a numeric column switches the panel to the ramp body", async ({ page }) => {
+  test("a numeric column switches the panel to the ramp body", async ({
+    page,
+  }) => {
     await open(page);
     await toggle(page, "Parking infringements").click();
-    await page.getByRole("button", { name: "Colorize Parking infringements" }).click();
+    await page
+      .getByRole("button", { name: "Colorize Parking infringements" })
+      .click();
 
     const step = page.locator('[data-slot="panel-step"][data-depth="1"]');
     await step.locator("#color-by").click();
@@ -312,9 +338,13 @@ test.describe("every layer gets the chain", () => {
     await toggle(page, "Parking infringements").click();
 
     await page.getByRole("button", { name: "Colorize Vehicle events" }).click();
-    await expect(page.locator('[data-slot="panel-step"][data-depth="1"]')).toHaveCount(1);
+    await expect(
+      page.locator('[data-slot="panel-step"][data-depth="1"]'),
+    ).toHaveCount(1);
 
-    await page.getByRole("button", { name: "Colorize Parking infringements" }).click();
+    await page
+      .getByRole("button", { name: "Colorize Parking infringements" })
+      .click();
 
     // One path, so one chain: the stepper truncates rather than stacking.
     const open_ = page.locator('[data-slot="panel-step"][data-depth="1"]');
@@ -330,7 +360,131 @@ test.describe("every layer gets the chain", () => {
     const step = page.locator('[data-slot="panel-step"][data-depth="1"]');
     await expect(step).toBeVisible();
     await step.getByRole("button", { name: "Preset" }).click();
-    await expect(page.locator('[data-slot="panel-step"][data-depth="2"]')).toBeVisible();
+    await expect(
+      page.locator('[data-slot="panel-step"][data-depth="2"]'),
+    ).toBeVisible();
+  });
+  /**
+   * Size, which is a SIBLING of Colorize rather than a step beneath it.
+   *
+   * Both sit at depth 1, and PanelStep given a controlled `open` reads that
+   * prop instead of the stepper's path -- so two of them true would render on
+   * top of each other at the same anchor. The count assertion is the whole
+   * point of these three tests: it is what the one-value `chain` state buys.
+   */
+  test("Size opens from the card, beside Colorize and never with it", async ({
+    page,
+  }) => {
+    await open(page);
+    const depth1 = page.locator('[data-slot="panel-step"][data-depth="1"]');
+
+    await page.getByRole("button", { name: "Colorize Vehicle Flows" }).click();
+    await expect(depth1).toHaveCount(1);
+
+    await page.getByRole("button", { name: "Size Vehicle Flows" }).click();
+    await expect(depth1).toHaveCount(1);
+    await expect(depth1).toContainText("Size");
+    await expect(page.locator('[data-slot="size-panel"]')).toHaveAttribute(
+      "data-mode",
+      /single|by-value/,
+    );
+
+    // And back the other way, so neither direction can stack.
+    await page.getByRole("button", { name: "Colorize Vehicle Flows" }).click();
+    await expect(depth1).toHaveCount(1);
+    await expect(page.locator('[data-slot="size-panel"]')).toHaveCount(0);
+  });
+
+  test("a categorical layer is offered one size and no mode switch", async ({
+    page,
+  }) => {
+    await open(page);
+    await toggle(page, "Parking infringements").click();
+    await page
+      .getByRole("button", { name: "Size Parking infringements" })
+      .click();
+
+    const panel = page.locator('[data-slot="size-panel"]');
+    await expect(panel).toHaveAttribute("data-mode", "single");
+    // Nothing numeric on the layer to graduate against, so the choice is not
+    // offered rather than offered with an empty field list behind it.
+    await expect(panel.getByRole("radio")).toHaveCount(0);
+    // By role: "Point radius" also names the slider's group wrapper and the
+    // read-only px readout beside it, and all three are the same control.
+    await expect(
+      panel.getByRole("slider", { name: "Point radius" }),
+    ).toBeVisible();
+  });
+
+  test("the slider repaints the layer rather than rebuilding it", async ({
+    page,
+  }) => {
+    await open(page);
+    await page.getByRole("button", { name: "Size Vehicle Flows" }).click();
+    // This layer arrives graduated by volume, which replaces the slider with
+    // the two ends of a scale. A single size is what has a slider to drag.
+    await page.getByText("Single", { exact: true }).first().click();
+
+    // Stamped through the React tree, because the block keeps the map in state
+    // and exposes no handle: if the stamp survives, the source object was
+    // never removed and re-added, which is the no-flash guarantee.
+    const findMap = () => {
+      const el = document.querySelector(".maplibregl-map");
+      if (!el) return null;
+      const key = Object.keys(el).find((k) => k.startsWith("__reactFiber$"));
+      let fiber = (
+        el as never as Record<
+          string,
+          { memoizedState?: unknown; return?: unknown }
+        >
+      )[key!];
+      for (let hops = 0; fiber && hops < 60; hops++) {
+        let hook = (
+          fiber as {
+            memoizedState?: { memoizedState?: unknown; next?: unknown };
+          }
+        ).memoizedState;
+        for (let g = 0; hook && g < 80; g++) {
+          const s = hook.memoizedState as { getPaintProperty?: unknown } | null;
+          if (s && typeof s.getPaintProperty === "function") return s;
+          hook = hook.next as typeof hook;
+        }
+        fiber = (fiber as { return?: typeof fiber }).return!;
+      }
+      return null;
+    };
+
+    const before = await page.evaluate((fn) => {
+      const map = new Function(`return (${fn})()`)() as {
+        getPaintProperty: (l: string, p: string) => unknown;
+        getSource: (id: string) => Record<string, unknown>;
+      } | null;
+      if (!map) return null;
+      map.getSource("flows-lines").__stamp = "before";
+      return JSON.stringify(map.getPaintProperty("flows-line", "line-width"));
+    }, findMap.toString());
+    expect(before).not.toBeNull();
+
+    await page
+      .getByRole("slider", { name: "Line width" })
+      .press("ArrowRight");
+    await page.waitForTimeout(400);
+
+    const after = await page.evaluate((fn) => {
+      const map = new Function(`return (${fn})()`)() as {
+        getPaintProperty: (l: string, p: string) => unknown;
+        getSource: (id: string) => Record<string, unknown>;
+      } | null;
+      if (!map) return null;
+      return {
+        width: JSON.stringify(map.getPaintProperty("flows-line", "line-width")),
+        stamp: map.getSource("flows-lines").__stamp,
+      };
+    }, findMap.toString());
+
+    expect(after!.width).not.toEqual(before);
+    // The source survived the change, so the layer repainted.
+    expect(after!.stamp).toBe("before");
   });
 });
 
@@ -348,7 +502,9 @@ test.describe("category colours and logos", () => {
     page,
   }) => {
     const step = await openColorize(page);
-    const swatch = step.getByRole("button", { name: /^Colour and logo for/ }).first();
+    const swatch = step
+      .getByRole("button", { name: /^Colour and logo for/ })
+      .first();
     await expect(swatch).toBeVisible();
 
     await swatch.click();
@@ -359,7 +515,9 @@ test.describe("category colours and logos", () => {
     await expect(page.getByText("On the map", { exact: true })).toBeVisible();
     await expect(page.getByText(/^Below zoom \d+$/)).toBeVisible();
     await expect(page.getByText(/^From zoom \d+$/)).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Use #/ }).first()).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /^Use #/ }).first(),
+    ).toBeVisible();
     await expect(page.getByText("Logo", { exact: true })).toBeVisible();
   });
 
@@ -407,11 +565,19 @@ test.describe("the panel is compact", () => {
     // survives any amount of restyling that keeps it.
     for (const name of ["Color by", "Mode", "Opacity"]) {
       const label = step.getByText(name, { exact: true });
-      const row = label.locator("xpath=ancestor::div[contains(@class,'grid')][1]");
-      const [l, r] = await Promise.all([label.boundingBox(), row.boundingBox()]);
+      const row = label.locator(
+        "xpath=ancestor::div[contains(@class,'grid')][1]",
+      );
+      const [l, r] = await Promise.all([
+        label.boundingBox(),
+        row.boundingBox(),
+      ]);
       const labelMid = l!.y + l!.height / 2;
       const rowMid = r!.y + r!.height / 2;
-      expect(Math.abs(labelMid - rowMid), `${name} is not on one row`).toBeLessThan(6);
+      expect(
+        Math.abs(labelMid - rowMid),
+        `${name} is not on one row`,
+      ).toBeLessThan(6);
     }
   });
 });
@@ -446,12 +612,16 @@ test.describe("the charts follow the layer", () => {
   });
 });
 
-test("the layer panel has no serious or critical violations", async ({ page }) => {
+test("the layer panel has no serious or critical violations", async ({
+  page,
+}) => {
   await page.setViewportSize(WIDE);
   await open(page);
   await toggle(page, "Parking infringements").click();
   await expect(
-    card(page, "Parking infringements").locator('[data-slot="legend-categorical"]'),
+    card(page, "Parking infringements").locator(
+      '[data-slot="legend-categorical"]',
+    ),
   ).toBeVisible();
 
   const results = await new AxeBuilder({ page })
