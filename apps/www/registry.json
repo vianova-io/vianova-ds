@@ -3396,6 +3396,30 @@
       }
     },
     {
+      "name": "announcement-bar",
+      "type": "registry:ui",
+      "title": "Announcement Bar",
+      "description": "Announcement Bar — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/announcement-bar.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "app-shell",
       "type": "registry:ui",
       "title": "App Shell",
@@ -3579,6 +3603,32 @@
       "files": [
         {
           "path": "registry/vianova/patterns/inline-edit.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "maintenance-screen",
+      "type": "registry:ui",
+      "title": "Maintenance Screen",
+      "description": "Maintenance Screen — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/announcement-bar",
+        "@vianova/button",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/maintenance-screen.tsx",
           "type": "registry:ui"
         }
       ],
@@ -3794,6 +3844,32 @@
       "files": [
         {
           "path": "registry/vianova/patterns/status-badge.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "status-toast",
+      "type": "registry:ui",
+      "title": "Status Toast",
+      "description": "Status Toast — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/announcement-bar",
+        "@vianova/toast",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/status-toast.tsx",
           "type": "registry:ui"
         }
       ],

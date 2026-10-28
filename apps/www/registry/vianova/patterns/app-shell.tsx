@@ -27,6 +27,7 @@ export function AppShell({
   sidebar,
   sidebarHeader,
   sidebarFooter,
+  banner,
   header,
   headerActions,
   defaultSidebarOpen = true,
@@ -38,6 +39,14 @@ export function AppShell({
   sidebar: React.ReactNode;
   sidebarHeader?: React.ReactNode;
   sidebarFooter?: React.ReactNode;
+  /**
+   * A platform-wide notice above the header, usually an `AnnouncementBar`.
+   *
+   * It sits outside the scroll container, so it holds position while the page
+   * moves -- no stickiness of its own needed. Spans the inset, not the
+   * sidebar, so the navigation stays one unbroken column.
+   */
+  banner?: React.ReactNode;
   /** Left of the header bar, after the trigger. Usually a breadcrumb. */
   header?: React.ReactNode;
   headerActions?: React.ReactNode;
@@ -53,6 +62,8 @@ export function AppShell({
       </Sidebar>
 
       <SidebarInset data-slot="app-shell" className={cn("min-w-0", className)} {...props}>
+        {banner ? <div className="shrink-0">{banner}</div> : null}
+
         <header className="bg-background/95 supports-[backdrop-filter]:bg-background/70 sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b px-4 backdrop-blur">
           <SidebarTrigger className="-ml-1" />
           {header ? (
