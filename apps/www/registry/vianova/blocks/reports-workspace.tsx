@@ -34,6 +34,7 @@ import {
   Table2,
   Trash2,
   TriangleAlert,
+  Tags,
   Type,
   WandSparkles,
   X,
@@ -106,7 +107,11 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/registry/vianova/ui/dropdown-menu";
@@ -220,6 +225,8 @@ type AnyEvent = Trip | Infringement;
 type DatasetField = {
   key: string;
   label: string;
+  /** For a chart's filter labels, where the full name would crowd a card. */
+  short?: string;
   /** The CSV column, whose values (in the feed's own order) are offered. */
   column: string;
   of: (e: AnyEvent) => string;
@@ -283,6 +290,7 @@ const DATASETS: Record<DatasetId, DatasetDef> = {
       {
         key: "type",
         label: "Infringement type",
+        short: "Type",
         column: "infringement_type",
         of: (e) => ("type" in e ? e.type : ""),
       },
@@ -856,8 +864,15 @@ export type Report = {
   createdAt: string;
   updatedAt: string;
   filters: Filters;
+  /**
+   * How a chart shows the filters only it is under: a count that opens the
+   * list, or the filters themselves as labels. A count when unset.
+   */
+  filterDisplay?: FilterDisplay;
   widgets: Widget[];
 };
+
+export type FilterDisplay = "count" | "labels";
 
 const ANA: Person = {
   name: "Ana Ribeiro",
@@ -2507,32 +2522,13 @@ function WidgetSettings({
 }
 
 /**
- * Which filters a chart is under, from its header: a count, and the list on
- * click. The date leads, since it always applies; then the overall filters,
- * then the dataset's own. Nothing at all when only the date applies: the bar
- * already says it, and a "0" on every card is noise.
- *
- * On a phone the list opens as a bottom tray rather than a popover: a popover
- * is cramped there, and a tray is where a thumb expects detail to come from,
- * and swipes away.
+ * Everything a chart is filtered by, for its list: the date leads, since it
+ * always applies; then the comparison, the overall filters, the dataset's own.
  */
-function CardFilters({
-  filters,
-  dataset,
-  chart,
-}: {
-  filters: Filters;
-  dataset: DatasetId;
-  /** The chart's name, so the tray says whose filters these are. */
-  chart: string;
-}) {
-  // Before the early return: hooks run on every render.
-  const isMobile = useIsMobile();
-  const applied = appliedFilters(filters, dataset);
-  if (applied.length === 0) return null;
+function filterRows(filters: Filters, dataset: DatasetId) {
   const period = PERIODS[filters.period];
   const prev = previousPeriod({ from: period.from, to: period.to });
-  const rows = [
+  return [
     { id: "date", label: "Date", value: period.label },
     ...(filters.compare
       ? [
@@ -2543,9 +2539,36 @@ function CardFilters({
           },
         ]
       : []),
-    ...applied,
+    ...appliedFilters(filters, dataset),
   ];
-  const label = `${applied.length} ${applied.length === 1 ? "filter" : "filters"} on this chart`;
+}
+
+/**
+ * The list of a chart's filters, opened from `children`: a popover on a
+ * desktop, and on a phone a bottom tray, since a popover is cramped there, and
+ * a tray is where a thumb expects detail to come from, and swipes away.
+ */
+function FilterDetails({
+  filters,
+  dataset,
+  chart,
+  label,
+  className,
+  title,
+  children,
+}: {
+  filters: Filters;
+  dataset: DatasetId;
+  /** The chart's name, so the tray says whose filters these are. */
+  chart: string;
+  /** The trigger's accessible name. */
+  label: string;
+  className: { mobile: string; desktop: string };
+  title?: string;
+  children: React.ReactNode;
+}) {
+  const isMobile = useIsMobile();
+  const rows = filterRows(filters, dataset);
 
   if (isMobile)
     return (
@@ -2555,13 +2578,11 @@ function CardFilters({
             <button
               type="button"
               aria-label={label}
-              // A thumb-sized target at the row's right edge.
-              className="text-muted-foreground active:text-foreground focus-visible:ring-ring -mr-1.5 inline-flex min-h-8 min-w-8 shrink-0 items-center justify-center gap-1 rounded-md px-1.5 text-xs focus-visible:ring-2 focus-visible:outline-none"
+              className={className.mobile}
             />
           }
         >
-          <Filter className="size-4" aria-hidden />
-          <span className="tabular-nums">{applied.length}</span>
+          {children}
         </DrawerTrigger>
         <DrawerContent>
           <DrawerHeader className="flex-row items-center justify-between gap-2 border-b pb-3 text-left">
@@ -2603,14 +2624,12 @@ function CardFilters({
           <button
             type="button"
             aria-label={label}
-            title="Filters on this chart"
-            className="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex shrink-0 items-center gap-1 rounded-sm text-xs focus-visible:ring-2 focus-visible:outline-none"
+            title={title}
+            className={className.desktop}
           />
         }
       >
-        {/* Icon and count only: a small card has no room for the word. */}
-        <ListFilter className="size-3.5" aria-hidden />
-        <span className="tabular-nums">{applied.length}</span>
+        {children}
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 gap-2 p-3">
         <p className="text-sm font-medium">Filters on this chart</p>
@@ -2627,16 +2646,230 @@ function CardFilters({
   );
 }
 
+/**
+ * Which filters a chart is under, from its header: a count, and the list on
+ * click. Nothing at all when only the date applies: the bar already says it,
+ * and a "0" on every card is noise. On a phone the count sits at the row's
+ * right edge, with a thumb-sized target.
+ */
+function CardFilters({
+  filters,
+  dataset,
+  chart,
+}: {
+  filters: Filters;
+  dataset: DatasetId;
+  chart: string;
+}) {
+  // Before the early return: hooks run on every render.
+  const isMobile = useIsMobile();
+  const applied = appliedFilters(filters, dataset);
+  if (applied.length === 0) return null;
+  return (
+    <FilterDetails
+      filters={filters}
+      dataset={dataset}
+      chart={chart}
+      label={`${applied.length} ${applied.length === 1 ? "filter" : "filters"} on this chart`}
+      title="Filters on this chart"
+      className={{
+        mobile:
+          "text-muted-foreground active:text-foreground focus-visible:ring-ring -mr-1.5 inline-flex min-h-8 min-w-8 shrink-0 items-center justify-center gap-1 rounded-md px-1.5 text-xs focus-visible:ring-2 focus-visible:outline-none",
+        desktop:
+          "text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex shrink-0 items-center gap-1 rounded-sm text-xs focus-visible:ring-2 focus-visible:outline-none",
+      }}
+    >
+      {/* Icon and count only: a small card has no room for the word. */}
+      {isMobile ? (
+        <Filter className="size-4" aria-hidden />
+      ) : (
+        <ListFilter className="size-3.5" aria-hidden />
+      )}
+      <span className="tabular-nums">{applied.length}</span>
+    </FilterDetails>
+  );
+}
+
+/** A label for one of a chart's own filters: its field, first value, and how many more. */
+type FilterLabel = {
+  id: string;
+  field: string;
+  value: string;
+  more: number;
+  /** Every value, for a tooltip and a screen reader. */
+  full: string;
+};
+
+function chartFilterLabels(filters: Filters, dataset: DatasetId) {
+  return DATASETS[dataset].fields.flatMap((field): FilterLabel[] => {
+    const values = filters.datasets[dataset]?.[field.key];
+    if (!values?.length) return [];
+    const names = values.map((v) => valueLabel(field.key, v));
+    return [
+      {
+        id: field.key,
+        field: field.short ?? field.label,
+        value: names[0]!,
+        more: names.length - 1,
+        full: `${field.label}: ${names.join(", ")}`,
+      },
+    ];
+  });
+}
+
+const LABEL_CHIP =
+  "bg-muted/60 inline-flex h-5 items-center gap-1 rounded-sm border px-1.5 text-xs whitespace-nowrap";
+
+function FilterChip({ label }: { label: FilterLabel }) {
+  return (
+    <>
+      <span className="sr-only">{label.full}</span>
+      <span aria-hidden className="text-muted-foreground shrink-0">
+        {label.field}:
+      </span>
+      <span aria-hidden className="min-w-0 truncate">
+        {label.value}
+      </span>
+      {label.more ? (
+        <span
+          aria-hidden
+          className="text-muted-foreground shrink-0 tabular-nums"
+        >
+          +{label.more}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+/** Space between label chips, in pixels: Tailwind's gap-1. */
+const LABEL_GAP = 4;
+
+/**
+ * The filters only this chart is under, as labels under its header, read at a
+ * glance rather than behind a click. Overall filters stay in the bar above,
+ * since every chart shares them. One line: what does not fit folds into a
+ * "+2" that opens the full list, as the count does.
+ */
+function CardFilterLabels({
+  filters,
+  dataset,
+  chart,
+}: {
+  filters: Filters;
+  dataset: DatasetId;
+  chart: string;
+}) {
+  const labels = chartFilterLabels(filters, dataset);
+  const rowRef = React.useRef<HTMLUListElement>(null);
+  const measureRef = React.useRef<HTMLDivElement>(null);
+  const [shown, setShown] = React.useState(labels.length);
+  const signature = labels.map((l) => l.full).join("|");
+
+  // Every chip is drawn once, out of sight, to learn its width; then as many
+  // as fit are shown, leaving room for the "+N" when any are left over.
+  React.useLayoutEffect(() => {
+    const row = rowRef.current;
+    const measure = measureRef.current;
+    if (!row || !measure) return;
+    const fit = () => {
+      const widths = [...measure.children].map(
+        (c) => (c as HTMLElement).offsetWidth,
+      );
+      const plus = widths.pop() ?? 0;
+      const room = row.clientWidth;
+      let used = 0;
+      let n = 0;
+      for (const [i, w] of widths.entries()) {
+        const rest = i < widths.length - 1 ? LABEL_GAP + plus : 0;
+        if (used + w + rest > room) break;
+        used += w + LABEL_GAP;
+        n++;
+      }
+      // The first always shows, truncated if it must be.
+      setShown(Math.max(1, n));
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [signature]);
+
+  if (labels.length === 0) return null;
+  const hidden = labels.length - Math.min(shown, labels.length);
+  const chip = (l: FilterLabel, i: number) => (
+    <li
+      key={l.id}
+      title={l.full}
+      // Only the first may shrink, when even it does not fit whole.
+      className={cn(LABEL_CHIP, i === 0 ? "min-w-0" : "shrink-0")}
+    >
+      <FilterChip label={l} />
+    </li>
+  );
+
+  return (
+    <div className="relative min-w-0">
+      <div
+        ref={measureRef}
+        aria-hidden
+        className="pointer-events-none invisible absolute top-0 left-0 flex h-0 w-max overflow-hidden [&>*]:shrink-0"
+      >
+        {labels.map((l) => (
+          <span key={l.id} className={LABEL_CHIP}>
+            <FilterChip label={l} />
+          </span>
+        ))}
+        <span className={LABEL_CHIP}>+{labels.length}</span>
+      </div>
+      <ul
+        ref={rowRef}
+        aria-label="Filters on this chart"
+        // The vertical padding keeps focus rings and the phone's larger tap
+        // target clear of the clip.
+        className="-my-1.5 flex w-full min-w-0 items-center gap-1 overflow-hidden py-1.5"
+      >
+        {labels.slice(0, labels.length - hidden).map(chip)}
+        {hidden ? (
+          <li className="draggable-cancel flex shrink-0">
+            <FilterDetails
+              filters={filters}
+              dataset={dataset}
+              chart={chart}
+              label={`${hidden} more ${hidden === 1 ? "filter" : "filters"} on this chart`}
+              className={{
+                // A 32px target around the 20px chip.
+                mobile: cn(
+                  LABEL_CHIP,
+                  "text-muted-foreground active:text-foreground focus-visible:ring-ring relative tabular-nums after:absolute after:-inset-1.5 focus-visible:ring-2 focus-visible:outline-none",
+                ),
+                desktop: cn(
+                  LABEL_CHIP,
+                  "text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:ring-ring tabular-nums focus-visible:ring-2 focus-visible:outline-none",
+                ),
+              }}
+            >
+              +{hidden}
+            </FilterDetails>
+          </li>
+        ) : null}
+      </ul>
+    </div>
+  );
+}
+
 function WidgetCard({
   widget,
   data,
   filters,
+  filterDisplay = "count",
   onChange,
   onDelete,
 }: {
   widget: ChartWidget;
   data: ReportData;
   filters: Filters;
+  filterDisplay?: FilterDisplay;
   onChange: (w: ChartWidget) => void;
   onDelete: () => void;
 }) {
@@ -2763,14 +2996,25 @@ function WidgetCard({
             <Database className="size-3.5 shrink-0" aria-hidden />
             <span className="truncate">{data.dataset.label}</span>
           </span>
-          <span className="draggable-cancel empty:hidden">
-            <CardFilters
+          {filterDisplay === "count" ? (
+            <span className="draggable-cancel empty:hidden">
+              <CardFilters
+                filters={filters}
+                dataset={data.dataset.id}
+                chart={name}
+              />
+            </span>
+          ) : null}
+        </div>
+        {filterDisplay === "labels" ? (
+          <div className="col-span-2 min-w-0 empty:hidden">
+            <CardFilterLabels
               filters={filters}
               dataset={data.dataset.id}
               chart={name}
             />
-          </span>
-        </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Anchored to the options button, since the menu that opened it has closed. */}
@@ -2964,6 +3208,7 @@ function ReportCanvas({
   widgets,
   data,
   filters,
+  filterDisplay,
   autoSelectId,
   onChange,
   onPlacedText,
@@ -2972,6 +3217,7 @@ function ReportCanvas({
   /** Per dataset: each chart draws from its own. */
   data: Record<DatasetId, ReportData>;
   filters: Filters;
+  filterDisplay?: FilterDisplay;
   /** A text widget to focus as soon as it mounts. */
   autoSelectId: string | null;
   onChange: (widgets: Widget[]) => void;
@@ -3242,6 +3488,7 @@ function ReportCanvas({
         widget={w}
         data={data[datasetOf(w) ?? "trips"]}
         filters={filters}
+        filterDisplay={filterDisplay}
         onChange={(next) => update(w.id, next)}
         onDelete={() => remove(w.id)}
       />
@@ -4503,7 +4750,9 @@ function ReportView({
           role="heading"
           // As the list's "Reports": one level under the page's own title.
           aria-level={2}
-          className="min-w-0 flex-1 text-xl font-semibold tracking-tight"
+          // At least 12rem, so on a phone the actions wrap under the name
+          // rather than cut it to a few letters.
+          className="min-w-[min(12rem,100%)] flex-1 text-xl font-semibold tracking-tight"
         >
           <InlineEdit
             variant="title"
@@ -4523,6 +4772,39 @@ function ReportView({
             <WandSparkles data-icon="inline-start" />
             Export report
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Report options"
+                >
+                  <MoreHorizontal />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Chart filters</DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={report.filterDisplay ?? "count"}
+                  onValueChange={(v) =>
+                    onChange({ ...report, filterDisplay: v as FilterDisplay })
+                  }
+                >
+                  <DropdownMenuRadioItem value="count" closeOnClick>
+                    <ListFilter />
+                    Show as a count
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="labels" closeOnClick>
+                    <Tags />
+                    Show as labels
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
@@ -4568,6 +4850,7 @@ function ReportView({
           widgets={report.widgets}
           data={data}
           filters={report.filters}
+          filterDisplay={report.filterDisplay}
           autoSelectId={autoSelectId}
           onPlacedText={setAutoSelectId}
           onChange={setWidgets}
