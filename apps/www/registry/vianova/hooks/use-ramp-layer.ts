@@ -6,11 +6,37 @@ import type {
   Map as MapLibreMap,
 } from "maplibre-gl";
 
+/*
+ * What a layer draws at before anything sets a size.
+ *
+ * The values the circle and the outline were hardcoded to, kept exactly so
+ * that a caller which passes no size gets the map it had.
+ */
+const DEFAULT_RADIUS: DataDrivenPropertyValueSpecification<number> = [
+  "interpolate",
+  ["linear"],
+  ["zoom"],
+  8,
+  3,
+  16,
+  9,
+];
+const DEFAULT_WIDTH = 1;
+
 export type RampFeature = {
   /** A point's position, or a polygon's outer ring. */
   geometry: [number, number] | [number, number][];
   /** What the colour encodes. Non-finite values fall to the ramp's first band. */
   value: number;
+  /**
+   * What the SIZE encodes, when that is a different column.
+   *
+   * Carried separately because sizing by speed while colouring by volume is
+   * two encodings on one layer, and they need two numbers. Omitted, a
+   * by-value size expression reading `size` finds nothing and the feature
+   * draws at the fallback.
+   */
+  size?: number;
 };
 
 /**
@@ -33,6 +59,8 @@ export function useRampLayer({
   colors,
   edges,
   opacity = 1,
+  radius = DEFAULT_RADIUS,
+  width = DEFAULT_WIDTH,
   id = "ramp-layer",
 }: {
   map: MapLibreMap | null;
@@ -43,15 +71,34 @@ export function useRampLayer({
   /** Ascending band edges; `colors.length - 1` of them is the natural count. */
   edges: readonly number[];
   opacity?: number;
+  /**
+   * Point radius, as px or as an expression. Applied by its own effect, so a
+   * slider repaints the layer instead of rebuilding it -- see below.
+   */
+  radius?: number | DataDrivenPropertyValueSpecification<number>;
+  /** Outline width for areas, in the same two forms. */
+  width?: number | DataDrivenPropertyValueSpecification<number>;
   id?: string;
 }) {
+  /*
+   * Which layer ids this hook owns, worked out the same way build() does.
+   *
+   * Needed outside the build effect because the size effect below has to
+   * address the layers without being able to re-derive them from a closure it
+   * is not inside.
+   */
+  const areas = features.length > 0 && Array.isArray(features[0]!.geometry[0]);
+  const layerId = `${id}-${areas ? "fill" : "circle"}`;
+  const outlineId = `${id}-outline`;
+
+  /* Read by build(), which runs again on style.load long after the effect
+     closed over its props -- so the size has to be read live, not captured. */
+  const sizeRef = React.useRef({ radius, width });
+  sizeRef.current = { radius, width };
+
   React.useEffect(() => {
     if (!map || !enabled || features.length === 0) return;
     if (colors.length === 0) return;
-
-    const areas = Array.isArray(features[0]!.geometry[0]);
-    const layerId = `${id}-${areas ? "fill" : "circle"}`;
-    const outlineId = `${id}-outline`;
 
     const remove = () => {
       // A map being torn down throws on any of these.
@@ -102,7 +149,14 @@ export function useRampLayer({
             // Non-finite values would make `step` fall through to the default
             // band silently; -Infinity puts them in the first band on purpose,
             // which at least matches "no reading" rather than "the highest".
-            properties: { value: Number.isFinite(f.value) ? f.value : -Infinity },
+            properties: {
+              value: Number.isFinite(f.value) ? f.value : -Infinity,
+              size: Number.isFinite(f.size)
+                ? f.size
+                : Number.isFinite(f.value)
+                  ? f.value
+                  : 0,
+            },
             geometry: areas
               ? {
                   type: "Polygon" as const,
@@ -130,7 +184,7 @@ export function useRampLayer({
           source: id,
           paint: {
             "line-color": paint(),
-            "line-width": 1,
+            "line-width": sizeRef.current.width,
             "line-opacity": 0.9 * opacity,
           },
         });
@@ -143,7 +197,7 @@ export function useRampLayer({
         source: id,
         paint: {
           "circle-color": paint(),
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3, 16, 9],
+          "circle-radius": sizeRef.current.radius,
           "circle-opacity": 0.9 * opacity,
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 1,
@@ -160,5 +214,31 @@ export function useRampLayer({
       map.off("style.load", rebuild);
       remove();
     };
+    // No radius or width here, on purpose -- this effect REBUILDS, and a size
+    // on a slider would tear the layer down per drag tick. They reach build()
+    // through sizeRef, and reach the live layer through the effect below.
   }, [map, enabled, features, colors, edges, opacity, id]);
+
+  /**
+   * Size changes repaint; they never rebuild.
+   *
+   * The effect above removes and re-adds the source and every layer, which is
+   * right for new data and ruinous for a slider. setPaintProperty leaves the
+   * source alone, so a drag is one paint update per tick with no flash. The
+   * getLayer guards are not defensive noise: which layers exist depends on the
+   * geometry, and before the first build there are none.
+   */
+  React.useEffect(() => {
+    if (!map) return;
+    try {
+      if (map.getLayer(layerId) && !areas) {
+        map.setPaintProperty(layerId, "circle-radius", radius);
+      }
+      if (map.getLayer(outlineId)) {
+        map.setPaintProperty(outlineId, "line-width", width);
+      }
+    } catch {
+      /* the map is gone */
+    }
+  }, [map, areas, layerId, outlineId, radius, width]);
 }

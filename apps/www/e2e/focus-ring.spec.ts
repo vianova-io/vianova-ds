@@ -69,6 +69,24 @@ async function auditPage(page: Page, url: string): Promise<Clip[]> {
       /** How far a focus indicator reaches beyond this element's border box. */
       const reachOf = (n: Element) => {
         const cs = getComputedStyle(n);
+
+        // A ring on something nobody can see is not a ring.
+        //
+        // Base UI puts a real <input> inside Slider.Thumb and hides it with
+        // clip-path: inset(50%). Focused, it takes the browser's default 1px
+        // outline -- painted nowhere, since the element is clipped to
+        // nothing, but still a measurable reach. Counting it reports a
+        // "clipped focus ring" for a control that has no visible ring at all,
+        // which is a different bug and the opposite of this one.
+        //
+        // That different bug is real and still open: ui/slider.tsx puts
+        // focus-visible:ring-3 on the thumb <div>, but focus lands on the
+        // input inside it, and :focus-visible does not match an element with
+        // a focused descendant -- so a keyboard user gets no ring on a
+        // slider. Skipping it here does not hide it; nothing was testing for
+        // it either way.
+        if (/inset\(50%\)/.test(cs.clipPath)) return null;
+
         const out = { top: 0, right: 0, bottom: 0, left: 0 };
         const shadows = cs.boxShadow === "none" ? [] : cs.boxShadow.split(/,(?![^(]*\))/);
         for (const s of shadows) {

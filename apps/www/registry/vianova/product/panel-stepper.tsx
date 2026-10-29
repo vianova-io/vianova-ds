@@ -294,7 +294,12 @@ export function PanelStep({
       React.ReactElement<React.HTMLAttributes<HTMLElement>> | undefined;
     const triggerId =
       triggerEl?.props.id ?? triggerIdProp ?? `${panelId}-trigger`;
-    if (depth === 1) stepper.rootTriggerId.current = triggerId;
+    // The OPEN chain's root, not whichever depth-1 step rendered last. Two
+    // siblings can sit at this depth -- Colorize and Size hang off the same
+    // card -- and every one of them runs this line on every render, so without
+    // the guard Close would return focus to the trigger of whichever was
+    // declared later: a control the reader never touched.
+    if (depth === 1 && isOpen) stepper.rootTriggerId.current = triggerId;
 
     const header = (
       <div

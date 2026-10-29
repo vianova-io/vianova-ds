@@ -5,6 +5,9 @@ import type { DataDrivenPropertyValueSpecification, Map as MapLibreMap } from "m
 
 import type { CategoryStyle } from "@/registry/vianova/lib/category-style";
 
+/** The outline width the areas were hardcoded to. */
+const DEFAULT_WIDTH = 1.5;
+
 export type CategoryShape = {
   /** The outer ring, as [longitude, latitude] pairs. */
   ring: [number, number][];
@@ -24,6 +27,7 @@ export function useCategoryShapeLayer({
   enabled,
   shapes,
   styles,
+  width = DEFAULT_WIDTH,
   id = "category-shapes",
 }: {
   map: MapLibreMap | null;
@@ -31,8 +35,21 @@ export function useCategoryShapeLayer({
   shapes: CategoryShape[];
   /** Keyed by category value. Keep this referentially stable between renders. */
   styles: Record<string, CategoryStyle>;
+  /**
+   * The outline width in px. The only size a filled polygon has -- a fill has
+   * no radius and no thickness, so this is what the Size panel drives for an
+   * area layer.
+   */
+  width?: number | DataDrivenPropertyValueSpecification<number>;
   id?: string;
 }) {
+  const lineId = `${id}-line`;
+
+  /* Read by build(), which runs again on style.load long after the effect
+     closed over its props. */
+  const widthRef = React.useRef(width);
+  widthRef.current = width;
+
   React.useEffect(() => {
     if (!map || !enabled || shapes.length === 0) return;
     const entries = Object.entries(styles);
@@ -93,7 +110,7 @@ export function useCategoryShapeLayer({
         id: line,
         type: "line",
         source: id,
-        paint: { "line-color": colour, "line-width": 1.5 },
+        paint: { "line-color": colour, "line-width": widthRef.current },
       });
     };
 
@@ -104,5 +121,20 @@ export function useCategoryShapeLayer({
       map.off("style.load", build);
       remove();
     };
+    // No width here: this effect rebuilds source and layers, which is too much
+    // for a slider. It reaches build() through widthRef, and the live layer
+    // through the effect below.
   }, [map, enabled, shapes, styles, id]);
+
+  /** A width change repaints the outline; it does not rebuild the layer. */
+  React.useEffect(() => {
+    if (!map) return;
+    try {
+      if (map.getLayer(lineId)) {
+        map.setPaintProperty(lineId, "line-width", width);
+      }
+    } catch {
+      /* the map is gone */
+    }
+  }, [map, lineId, width]);
 }

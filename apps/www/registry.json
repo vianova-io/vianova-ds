@@ -363,6 +363,21 @@
       ]
     },
     {
+      "name": "size-expression",
+      "type": "registry:lib",
+      "title": "Size Expression",
+      "description": "Size Expression helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/size-expression.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "dependencies": [
+        "maplibre-gl"
+      ]
+    },
+    {
       "name": "trip-report",
       "type": "registry:lib",
       "title": "Trip Report",
@@ -660,6 +675,8 @@
         "@vianova/sample-datasets",
         "@vianova/sample-map-layer",
         "@vianova/select",
+        "@vianova/size-expression",
+        "@vianova/size-panel",
         "@vianova/skeleton",
         "@vianova/tabs",
         "@vianova/use-color-scheme",
@@ -3226,6 +3243,8 @@
         "@vianova/popover",
         "@vianova/preset-picker",
         "@vianova/sample-datasets",
+        "@vianova/size-expression",
+        "@vianova/size-panel",
         "@vianova/skeleton",
         "@vianova/use-category-point-layer",
         "@vianova/use-category-shape-layer",
@@ -3310,6 +3329,38 @@
       "files": [
         {
           "path": "registry/vianova/product/segmented-control.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "size-panel",
+      "type": "registry:ui",
+      "title": "Size Panel",
+      "description": "Size Panel — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/button",
+        "@vianova/colorize-panel",
+        "@vianova/input",
+        "@vianova/label",
+        "@vianova/segmented-control",
+        "@vianova/select",
+        "@vianova/separator",
+        "@vianova/slider",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/size-panel.tsx",
           "type": "registry:ui"
         }
       ],
