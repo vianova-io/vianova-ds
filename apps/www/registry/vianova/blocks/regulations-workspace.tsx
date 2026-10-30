@@ -726,11 +726,18 @@ function RegulationRow({
         <span className="text-muted-foreground block truncate text-xs">
           {RULE_TYPES[reg.kind].label}
           {reg.rules.length > 1 ? ` · ${reg.rules.length} rules` : ""}
-          <span className="sm:hidden"> · {STATUS_LABELS[status]}</span>
+          <span className="sm:hidden">
+            {" · "}
+            {STATUS_LABELS[status]}
+            {reg.visibility === "public" ? " · Public" : ""}
+          </span>
         </span>
       </TableCell>
       <TableCell className="hidden sm:table-cell">
-        <RegulationStatusBadge status={status} />
+        <span className="flex flex-wrap items-center gap-1">
+          <RegulationStatusBadge status={status} />
+          {reg.visibility === "public" ? <VisibilityBadge visibility="public" /> : null}
+        </span>
       </TableCell>
       <TableCell className="text-muted-foreground hidden tabular-nums md:table-cell">
         {zoneTotal(reg)}
@@ -781,10 +788,19 @@ function RegulationStatusBadge({ status }: { status: RegulationStatus }) {
 }
 
 function VisibilityBadge({ visibility }: { visibility: Regulation["visibility"] }) {
-  return (
-    <Badge variant="outline">
-      {visibility === "public" ? <Globe /> : <Lock />}
-      {visibility === "public" ? "Public" : "Private"}
+  // Only Public is tinted: it is the state with consequences outside the
+  // product -- the zones are served to anyone -- so it is the one that must
+  // not be missed. Private is the default and stays quiet. --info passes AA as
+  // text in both themes, which --warning would not.
+  return visibility === "public" ? (
+    <Badge variant="outline" data-visibility="public" className="border-info/30 bg-info/10 text-info">
+      <Globe />
+      Public
+    </Badge>
+  ) : (
+    <Badge variant="outline" data-visibility="private">
+      <Lock />
+      Private
     </Badge>
   );
 }
