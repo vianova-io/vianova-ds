@@ -192,3 +192,24 @@ test("a polygon drawn with the map's draw control joins the rule, and the tool r
   await expect(root.getByText("3 zones").first()).toBeVisible();
   await expect(map.getByRole("button", { name: "Draw a zone" })).toHaveAttribute("aria-pressed", "false");
 });
+
+test("Public is tinted where Private stays quiet, in the list and the editor", async ({ page }) => {
+  const root = await open(page);
+  const row = (name: string) =>
+    root.getByRole("row").filter({ has: page.locator("[data-slot=regulation-link]", { hasText: name }) });
+
+  // The list said nothing about visibility before; now a public row does, and
+  // a private one stays silent -- private is the default, so it reads as absence.
+  await expect(row("Fleet cap · Baixa and Avenidas Novas").locator("[data-visibility=public]")).toBeVisible();
+  await expect(row("Parking · Baixa and Chiado").locator("[data-visibility]")).toHaveCount(0);
+
+  await root.locator("[data-slot=regulation-link]", { hasText: "Parking · Baixa and Chiado" }).click();
+  const header = root.locator("[data-visibility]");
+  await expect(header).toHaveAttribute("data-visibility", "private");
+
+  await root.getByRole("button", { name: "Regulation options" }).click();
+  await page.getByRole("menuitem", { name: "Make public" }).click();
+  await expect(header).toHaveAttribute("data-visibility", "public");
+  await expect(header).toHaveText("Public");
+  await expectNoBlockingViolations(page);
+});
