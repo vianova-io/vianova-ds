@@ -66,7 +66,15 @@ import { Timeline, TimelineItem } from "@/registry/vianova/patterns/timeline";
 import { MapCanvas } from "@/registry/vianova/product/map-canvas";
 import { SegmentedControl } from "@/registry/vianova/product/segmented-control";
 import { useCategoryPointLayer } from "@/registry/vianova/hooks/use-category-point-layer";
-import { resolveStyles } from "@/registry/vianova/lib/category-style";
+import {
+  badgeColor,
+  resolveStyles,
+} from "@/registry/vianova/lib/category-style";
+import {
+  operatorStyle,
+  operatorStyles,
+} from "@/registry/vianova/lib/sample-datasets";
+import { CategoryBadge } from "@/registry/vianova/product/category-badge";
 import { resolveCssColor } from "@/registry/vianova/lib/css-color";
 import {
   CITIZEN_CENTER,
@@ -308,6 +316,29 @@ function AppHeader({
 }
 
 /**
+ * The operator's mark, where its name is written.
+ *
+ * The same badge the map draws the vehicle as, so the card a resident opens
+ * after tapping a pin carries the thing they tapped. Decorative: the name is
+ * right beside it in every use, and CategoryBadge is aria-hidden.
+ *
+ * Nothing for an operator without a shipped look -- Munich runs two that the
+ * sample data does not describe, and an empty disc beside a name says less
+ * than the name alone.
+ */
+function OperatorBadge({ operator }: { operator: string }) {
+  const style = operatorStyle(operator);
+  if (!style) return null;
+  return (
+    <CategoryBadge
+      color={badgeColor(style)}
+      logo={style.logo}
+      logoKind={style.logoKind}
+      size={18}
+    />
+  );
+}
+/**
  * A vehicle as production summarises it: operator, type, ID, and its state.
  *
  * `bare` drops the box for a caller that already draws one -- the selection
@@ -349,7 +380,10 @@ function VehicleSummary({
       */}
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
         <dt className="text-muted-foreground">{t("vehicle.operator")}</dt>
-        <dd className="truncate">{vehicle.operator}</dd>
+        <dd className="flex min-w-0 items-center gap-1.5">
+          <OperatorBadge operator={vehicle.operator} />
+          <span className="truncate">{vehicle.operator}</span>
+        </dd>
         <dt className="text-muted-foreground">{t("vehicle.type")}</dt>
         <dd>{t(`vehicle.types.${vehicle.type}`)}</dd>
         <dt className="text-muted-foreground">{t("vehicle.id")}</dt>
@@ -877,9 +911,20 @@ function MapPane({
   const [locate, setLocate] = React.useState<LocateState>("idle");
 
   // Colour by operator: it is the axis a resident filters on, and the one a
-  // city asks about. `resolveStyles` hands out the house palette in value
-  // order, so the same operator is the same colour wherever it is drawn.
-  const styles = React.useMemo(() => resolveStyles([...CITIZEN_OPERATORS]), []);
+  // city asks about. The operators that ship a look get it -- the same disc
+  // and the same mark the city sees on its own map, so a resident reporting a
+  // scooter and an analyst counting them are looking at one thing. Munich runs
+  // two that Lisbon does not; those keep the house palette, which is where
+  // every operator used to start.
+  const styles = React.useMemo(
+    () =>
+      resolveStyles(
+        [...CITIZEN_OPERATORS],
+        undefined,
+        operatorStyles(CITIZEN_OPERATORS),
+      ),
+    [],
+  );
   const points = React.useMemo(
     () => visible.map((v) => ({ position: v.position, category: v.operator })),
     [visible],
@@ -1494,7 +1539,12 @@ function ListPane({
                   }
                 >
                   <ItemContent>
-                    <ItemTitle>{vehicle.operator}</ItemTitle>
+                    {/* ItemTitle is already a flex row that clamps to one
+                        line, so the badge just becomes its first child. */}
+                    <ItemTitle>
+                      <OperatorBadge operator={vehicle.operator} />
+                      {vehicle.operator}
+                    </ItemTitle>
                     <ItemDescription>
                       {t(`vehicle.types.${vehicle.type}`)} ·{" "}
                       {formatDistance(vehicle.distanceM)} ·{" "}
