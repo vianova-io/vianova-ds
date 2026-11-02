@@ -12,7 +12,6 @@ import {
   ChartLine,
   ChartPie,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -318,6 +317,15 @@ const PERIODS = {
 } as const;
 type PeriodKey = keyof typeof PERIODS;
 
+/** With no date set, a report reads every day the feeds hold. */
+const ALL_DATES = { from: PERIODS.sep.from, to: PERIODS.sep.to };
+
+/** The days a report reads: its period, or all of them. */
+const rangeOf = (f: Filters) => (f.period ? PERIODS[f.period] : ALL_DATES);
+
+/** Comparing needs a period to compare: with no date it is off. */
+const comparing = (f: Filters) => Boolean(f.period && f.compare);
+
 const SLICES: Record<
   string,
   { label: string; days?: "work" | "weekend"; hours?: [number, number] }
@@ -360,13 +368,13 @@ const ZONES: Record<string, { label: string; zone: Zone }> = {
 type ZoneKey = keyof typeof ZONES;
 
 /**
- * A report's filters. The date is always set; everything else is added one
- * at a time. Time and zone narrow every dataset; a dataset's own filters
- * narrow only the charts made from it.
+ * A report's filters, each added one at a time. With no date, every day the
+ * feeds hold is read. Time and zone narrow every dataset; a dataset's own
+ * filters narrow only the charts made from it.
  */
 type Filters = {
-  period: PeriodKey;
-  /** Also show the same filters over the period just before. */
+  period?: PeriodKey;
+  /** Also show the same filters over the period just before. Needs a date. */
   compare: boolean;
   slice?: SliceKey;
   zone?: ZoneKey;
@@ -375,14 +383,13 @@ type Filters = {
 };
 
 const DEFAULT_FILTERS: Filters = {
-  period: "sep",
   compare: false,
   datasets: {},
 };
 
 const eventFilter = (f: Filters): EventFilter => ({
-  from: PERIODS[f.period].from,
-  to: PERIODS[f.period].to,
+  from: rangeOf(f).from,
+  to: rangeOf(f).to,
   days: f.slice ? SLICES[f.slice]?.days : undefined,
   hours: f.slice ? SLICES[f.slice]?.hours : undefined,
   zone: f.zone ? ZONES[f.zone]?.zone : undefined,
@@ -888,7 +895,7 @@ const SAMPLE_REPORTS: Report[] = [
     creator: ANA,
     createdAt: "2026-10-01T07:12:40Z",
     updatedAt: "2026-10-02T09:41:05Z",
-    filters: DEFAULT_FILTERS,
+    filters: { ...DEFAULT_FILTERS, period: "sep" },
     widgets: place(
       "lib-trips-operator",
       "lib-trips",
@@ -921,7 +928,7 @@ const SAMPLE_REPORTS: Report[] = [
     creator: INES,
     createdAt: "2026-09-24T10:30:00Z",
     updatedAt: "2026-09-24T11:02:18Z",
-    filters: { ...DEFAULT_FILTERS, slice: "night" },
+    filters: { ...DEFAULT_FILTERS, period: "sep", slice: "night" },
     widgets: layOut([
       {
         spec: {
@@ -940,7 +947,7 @@ const SAMPLE_REPORTS: Report[] = [
     creator: ANA,
     createdAt: "2026-09-18T08:45:27Z",
     updatedAt: "2026-09-30T17:11:43Z",
-    filters: { ...DEFAULT_FILTERS, zone: "baixa" },
+    filters: { ...DEFAULT_FILTERS, period: "sep", zone: "baixa" },
     widgets: place("lib-trips-day", "lib-fleet", "lib-donut"),
   },
   {
@@ -951,6 +958,7 @@ const SAMPLE_REPORTS: Report[] = [
     updatedAt: "2026-10-07T15:48:02Z",
     filters: {
       ...DEFAULT_FILTERS,
+      period: "sep",
       datasets: {
         infringements: { type: ["Sidewalk parking", "Blocking access"] },
       },
@@ -1197,7 +1205,7 @@ function useReportData(
         ...base,
         status: "ready",
         events: filterEvents(state.events, f, own),
-        previous: filters.compare
+        previous: comparing(filters)
           ? {
               events: filterEvents(state.events, prev, own),
               days: daysBetween(prev.from, prev.to),
@@ -2516,15 +2524,17 @@ function WidgetSettings({
 }
 
 /**
- * Everything a chart is filtered by, for its list: the date leads, since it
- * always applies; then the comparison, the overall filters, the dataset's own.
+ * Everything a chart is filtered by, for its list: the date leads, when there
+ * is one; then the comparison, the overall filters, the dataset's own.
  */
 function filterRows(filters: Filters, dataset: DatasetId) {
-  const period = PERIODS[filters.period];
-  const prev = previousPeriod({ from: period.from, to: period.to });
+  const range = rangeOf(filters);
+  const prev = previousPeriod({ from: range.from, to: range.to });
   return [
-    { id: "date", label: "Date", value: period.label },
-    ...(filters.compare
+    ...(filters.period
+      ? [{ id: "date", label: "Date", value: PERIODS[filters.period].label }]
+      : []),
+    ...(comparing(filters)
       ? [
           {
             id: "compare",
@@ -4377,14 +4387,24 @@ function ReportFilterBar({
   const [open, setOpen] = React.useState<string | null>(null);
   // A field just picked in "Add filter", shown as a chip before it has values.
   const [draft, setDraft] = React.useState<string | null>(null);
-  const period = PERIODS[filters.period];
-  const prev = previousPeriod({ from: period.from, to: period.to });
-  const prevHasData = prev.from >= PERIODS.sep.from;
+  const period = filters.period ? PERIODS[filters.period] : null;
+  const range = rangeOf(filters);
+  const prev = previousPeriod({ from: range.from, to: range.to });
+  const prevHasData = prev.from >= ALL_DATES.from;
+  // Shown once set, or while it is being picked from "Add filter".
+  const showDate = Boolean(period) || draft === "date";
   const applied = appliedFilters(filters);
   const shown = FILTER_FIELDS.filter(
     (f) => applied.some((a) => a.id === f.id) || f.id === draft,
   );
   const addable = FILTER_FIELDS.filter((f) => !shown.includes(f));
+  const pick = (id: string) => {
+    setDraft(id);
+    // After the "Add filter" popover has closed, so the two do not fight
+    // over focus.
+    requestAnimationFrame(() => setOpen(id));
+    setOpen(null);
+  };
 
   const optionsOf = (field: FilterFieldDef) =>
     field.id === "slice"
@@ -4408,41 +4428,57 @@ function ReportFilterBar({
       data-slot="report-filters"
       className="flex flex-wrap items-center gap-2"
     >
-      <Popover open={open === "date"} onOpenChange={openChange("date")}>
-        <PopoverTrigger
-          render={
-            <button type="button" className={cn(chipClass, chipPartClass)} />
-          }
-        >
-          <Calendar
-            className="text-muted-foreground size-4 shrink-0"
-            aria-hidden
-          />
-          <span className="text-muted-foreground">Date:</span>
-          <span className="truncate font-medium">{period.label}</span>
-          <ChevronDown
-            className="text-muted-foreground size-3.5 shrink-0"
-            aria-hidden
-          />
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-60 p-0">
-          <ValuePicker
-            label="Date"
-            multi={false}
-            options={Object.entries(PERIODS).map(([value, p]) => ({
-              value,
-              label: p.label,
-            }))}
-            selected={[filters.period]}
-            onChange={([v]) => {
-              if (v) onChange({ ...filters, period: v as PeriodKey });
-              setOpen(null);
+      {showDate ? (
+        <span className={chipClass}>
+          <Popover open={open === "date"} onOpenChange={openChange("date")}>
+            <PopoverTrigger
+              render={<button type="button" className={chipPartClass} />}
+              aria-label={`Date: ${period?.label ?? "Choose…"}. Change`}
+            >
+              <Calendar
+                className="text-muted-foreground size-4 shrink-0"
+                aria-hidden
+              />
+              <span className="min-w-0 truncate">
+                <span className="text-muted-foreground">Date: </span>
+                <span className="font-medium">
+                  {period?.label ?? "Choose…"}
+                </span>
+              </span>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-60 p-0">
+              <ValuePicker
+                label="Date"
+                multi={false}
+                options={Object.entries(PERIODS).map(([value, p]) => ({
+                  value,
+                  label: p.label,
+                }))}
+                selected={filters.period ? [filters.period] : []}
+                onChange={([v]) => {
+                  if (v) onChange({ ...filters, period: v as PeriodKey });
+                  setDraft(null);
+                  setOpen(null);
+                }}
+              />
+            </PopoverContent>
+          </Popover>
+          <button
+            type="button"
+            aria-label="Remove date filter"
+            onClick={() => {
+              setDraft(null);
+              // A comparison needs the period it compares; it goes too.
+              onChange({ ...filters, period: undefined, compare: false });
             }}
-          />
-        </PopoverContent>
-      </Popover>
+            className={cn(chipPartClass, "shrink-0 border-l px-1.5")}
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        </span>
+      ) : null}
 
-      {filters.compare ? (
+      {!period ? null : filters.compare ? (
         <span className={chipClass}>
           <span className="inline-flex min-w-0 items-center gap-1.5 px-2.5">
             <span className="text-muted-foreground">Compared with:</span>
@@ -4544,7 +4580,7 @@ function ReportFilterBar({
         );
       })}
 
-      {addable.length ? (
+      {addable.length || !showDate ? (
         <Popover open={open === "add"} onOpenChange={openChange("add")}>
           <PopoverTrigger
             render={
@@ -4568,25 +4604,29 @@ function ReportFilterBar({
                 <CommandEmpty>Nothing matches.</CommandEmpty>
                 {[null, ...DATASET_IDS].map((ds) => {
                   const items = addable.filter((f) => f.dataset === ds);
-                  if (!items.length) return null;
+                  const withDate = ds === null && !showDate;
+                  if (!items.length && !withDate) return null;
                   return (
                     <CommandGroup
                       key={ds ?? "overall"}
                       heading={ds ? DATASETS[ds].label : "All datasets"}
                     >
+                      {withDate ? (
+                        <CommandItem
+                          value="All Date"
+                          onSelect={() => pick("date")}
+                        >
+                          <Calendar aria-hidden />
+                          Date
+                        </CommandItem>
+                      ) : null}
                       {items.map((f) => {
                         const Icon = f.icon;
                         return (
                           <CommandItem
                             key={f.id}
                             value={`${ds ? DATASETS[ds].label : "All"} ${f.label}`}
-                            onSelect={() => {
-                              setDraft(f.id);
-                              // After this popover has closed, so the two do
-                              // not fight over focus.
-                              requestAnimationFrame(() => setOpen(f.id));
-                              setOpen(null);
-                            }}
+                            onSelect={() => pick(f.id)}
                           >
                             <Icon aria-hidden />
                             {f.label}
@@ -4602,13 +4642,13 @@ function ReportFilterBar({
         </Popover>
       ) : null}
 
-      {applied.length || filters.compare ? (
+      {applied.length || filters.period ? (
         <Button
           variant="ghost"
           size="sm"
           onClick={() => {
             setDraft(null);
-            onChange({ ...DEFAULT_FILTERS, period: filters.period });
+            onChange(DEFAULT_FILTERS);
           }}
         >
           Clear all
