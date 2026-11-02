@@ -34,7 +34,6 @@ import {
   Table2,
   Trash2,
   TriangleAlert,
-  Tags,
   Type,
   WandSparkles,
   X,
@@ -107,11 +106,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/registry/vianova/ui/dropdown-menu";
@@ -864,14 +859,13 @@ export type Report = {
   createdAt: string;
   updatedAt: string;
   filters: Filters;
-  /**
-   * How a chart shows the filters only it is under: a count that opens the
-   * list, or the filters themselves as labels. A count when unset.
-   */
-  filterDisplay?: FilterDisplay;
   widgets: Widget[];
 };
 
+/**
+ * How a chart shows the filters only it is under: a count that opens the
+ * list, or the filters themselves as labels.
+ */
 export type FilterDisplay = "count" | "labels";
 
 const ANA: Person = {
@@ -4695,6 +4689,7 @@ function ReportView({
   states,
   styles,
   aiAnalysis,
+  filterDisplay,
   onBack,
   onChange,
   onRetry,
@@ -4704,6 +4699,7 @@ function ReportView({
   states: DatasetStates;
   styles: Record<string, CategoryStyle>;
   aiAnalysis: boolean;
+  filterDisplay: FilterDisplay;
   onBack: () => void;
   onChange: (r: Report) => void;
   onRetry: (id: DatasetId) => void;
@@ -4772,39 +4768,6 @@ function ReportView({
             <WandSparkles data-icon="inline-start" />
             Export report
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="icon"
-                  aria-label="Report options"
-                >
-                  <MoreHorizontal />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Chart filters</DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={report.filterDisplay ?? "count"}
-                  onValueChange={(v) =>
-                    onChange({ ...report, filterDisplay: v as FilterDisplay })
-                  }
-                >
-                  <DropdownMenuRadioItem value="count" closeOnClick>
-                    <ListFilter />
-                    Show as a count
-                  </DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="labels" closeOnClick>
-                    <Tags />
-                    Show as labels
-                  </DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </header>
 
@@ -4850,7 +4813,7 @@ function ReportView({
           widgets={report.widgets}
           data={data}
           filters={report.filters}
-          filterDisplay={report.filterDisplay}
+          filterDisplay={filterDisplay}
           autoSelectId={autoSelectId}
           onPlacedText={setAutoSelectId}
           onChange={setWidgets}
@@ -5154,6 +5117,7 @@ export function ReportsWorkspace({
   status = "ready",
   currentUser = { name: "You", email: "" },
   aiAnalysis = true,
+  filterDisplay = "count",
   onRetry,
   onSave,
   onExportReport,
@@ -5169,6 +5133,8 @@ export function ReportsWorkspace({
   currentUser?: Person;
   /** Whether an export includes AI-written analysis, which its dialog then says. */
   aiAnalysis?: boolean;
+  /** How each chart shows the filters only it is under. */
+  filterDisplay?: FilterDisplay;
   onRetry?: () => void;
   /** Called after any change to a report: its name, filters or charts. */
   onSave?: (report: Report) => void;
@@ -5246,6 +5212,7 @@ export function ReportsWorkspace({
           states={states}
           styles={styles}
           aiAnalysis={aiAnalysis}
+          filterDisplay={filterDisplay}
           onBack={() => open(null)}
           onChange={commit}
           onRetry={retry}

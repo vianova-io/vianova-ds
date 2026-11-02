@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { CodeBlock } from "@/components/code-block";
 import { MapWorkspaceVariants } from "@/components/map-workspace-variants";
+import { ReportsWorkspaceVariants } from "@/components/reports-workspace-variants";
 import { InstallTabs } from "@/components/install-tabs";
 import { readRegistryFile, rewriteAliases } from "@/lib/source";
 import { Blocks } from "@/__registry__";
@@ -49,10 +50,16 @@ export default async function BlockPage({
           <div className="h-[max(480px,75svh)] animate-pulse rounded-xl bg-muted md:h-[700px]" />
         }
       >
-        {/* One workspace carries a proposal under review, so its page offers
-            the switch rather than hiding it behind a URL. Every other block
-            renders the registry component as published. */}
-        {slug === "map-workspace" ? <MapWorkspaceVariants /> : <Demo />}
+        {/* The workspaces carrying a proposal under review offer the switch
+            on their page rather than hiding it behind a URL. Every other
+            block renders the registry component as published. */}
+        {slug === "map-workspace" ? (
+          <MapWorkspaceVariants />
+        ) : slug === "reports-workspace" ? (
+          <ReportsWorkspaceVariants />
+        ) : (
+          <Demo />
+        )}
       </React.Suspense>
 
       <section className="mx-auto max-w-3xl space-y-3">
