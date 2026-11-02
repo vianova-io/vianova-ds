@@ -4391,7 +4391,7 @@ function ReportFilterBar({
   const range = rangeOf(filters);
   const prev = previousPeriod({ from: range.from, to: range.to });
   const prevHasData = prev.from >= ALL_DATES.from;
-  // Shown once set, or while it is being picked from "Add filter".
+  // Shown once set, or while "Add filter" has it being picked.
   const showDate = Boolean(period) || draft === "date";
   const applied = appliedFilters(filters);
   const shown = FILTER_FIELDS.filter(
