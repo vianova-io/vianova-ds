@@ -82,17 +82,17 @@ test("leaving with unsaved changes asks first, and Keep editing keeps them", asy
   await root.locator("[data-slot=regulation-link]", { hasText: "Speed limit · Baixa" }).click();
   await expect(root.getByText("All changes saved")).toBeVisible();
 
-  await root.getByLabel("Speed limit").fill("20");
+  await root.getByRole("spinbutton", { name: "Speed limit" }).fill("20");
   await expect(root.getByText("Unsaved changes")).toBeVisible();
 
   await root.getByRole("button", { name: "Regulations", exact: true }).click();
   const confirm = page.getByRole("alertdialog", { name: "Leave without saving?" });
   await expect(confirm).toBeVisible();
   await confirm.getByRole("button", { name: "Keep editing" }).click();
-  await expect(root.getByLabel("Speed limit")).toHaveValue("20");
+  await expect(root.getByRole("spinbutton", { name: "Speed limit" })).toHaveValue("20");
 
   await root.getByRole("button", { name: "Discard" }).click();
-  await expect(root.getByLabel("Speed limit")).toHaveValue("15");
+  await expect(root.getByRole("spinbutton", { name: "Speed limit" })).toHaveValue("15");
 });
 
 test("zones added from the picker land in the rule", async ({ page }) => {
