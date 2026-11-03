@@ -854,7 +854,7 @@ function layOut(
 const place = (...ids: string[]) => layOut(ids.map(templateOf));
 
 /* -------------------------------------------------------------------------- */
-/* Reports                                                                     */
+/* Dashboards                                                                 */
 /* -------------------------------------------------------------------------- */
 
 export type Person = { name: string; email: string };
@@ -3033,7 +3033,7 @@ function WidgetCard({
         open={confirming}
         onOpenChange={setConfirming}
         title={`Delete “${name}”?`}
-        description="It comes off this report. The chart stays in the library."
+        description="It comes off this dashboard. The chart stays in the library."
         confirmLabel="Delete"
         destructive
         onConfirm={onDelete}
@@ -3674,7 +3674,7 @@ function ReportCanvas({
         <div
           ref={gridRef}
           role="group"
-          aria-label="Report canvas"
+          aria-label="Dashboard canvas"
           aria-describedby="report-canvas-help"
           className="absolute inset-0 grid"
           style={{
@@ -4424,7 +4424,7 @@ function ReportFilterBar({
   return (
     <div
       role="group"
-      aria-label="Report filters"
+      aria-label="Dashboard filters"
       data-slot="report-filters"
       className="flex flex-wrap items-center gap-2"
     >
@@ -4775,7 +4775,7 @@ function ReportView({
           variant="outline"
           size="icon-sm"
           onClick={onBack}
-          aria-label="Back to reports"
+          aria-label="Back to dashboards"
         >
           <ArrowLeft />
         </Button>
@@ -4784,7 +4784,7 @@ function ReportView({
             elements. An emptied name keeps the old one. */}
         <div
           role="heading"
-          // As the list's "Reports": one level under the page's own title.
+          // As the list's "Dashboards": one level under the page's own title.
           aria-level={2}
           // At least 12rem, so on a phone the actions wrap under the name
           // rather than cut it to a few letters.
@@ -4792,9 +4792,9 @@ function ReportView({
         >
           <InlineEdit
             variant="title"
-            label="report name"
+            label="dashboard name"
             value={report.title}
-            placeholder="Untitled report"
+            placeholder="Untitled dashboard"
             onValueChange={(next) => {
               if (next) onChange({ ...report, title: next });
             }}
@@ -4922,14 +4922,14 @@ function ReportList({
     <div className="mx-auto w-full max-w-6xl space-y-4 p-4 md:p-6">
       <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="space-y-1">
-          <h2 className="text-xl font-semibold tracking-tight">Reports</h2>
+          <h2 className="text-xl font-semibold tracking-tight">Dashboards</h2>
           <p className="text-muted-foreground text-sm">
-            Here&apos;s a list of all your reports
+            Here&apos;s a list of all your dashboards
           </p>
         </div>
         <Button onClick={onCreate}>
           <FilePlus2 data-icon="inline-start" />
-          Create report
+          Create dashboard
         </Button>
       </header>
 
@@ -4940,13 +4940,13 @@ function ReportList({
         <InputGroupInput
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search for reports"
-          aria-label="Search for reports"
+          placeholder="Search for dashboards"
+          aria-label="Search for dashboards"
         />
       </InputGroup>
 
       {status === "loading" ? (
-        <div role="status" aria-label="Loading reports" className="space-y-2">
+        <div role="status" aria-label="Loading dashboards" className="space-y-2">
           {Array.from({ length: 5 }, (_, i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
@@ -4957,7 +4957,7 @@ function ReportList({
             <EmptyMedia variant="icon">
               <TriangleAlert />
             </EmptyMedia>
-            <EmptyTitle>Couldn&apos;t load your reports</EmptyTitle>
+            <EmptyTitle>Couldn&apos;t load your dashboards</EmptyTitle>
             <EmptyDescription>
               Something went wrong fetching them. Nothing was changed.
             </EmptyDescription>
@@ -4974,10 +4974,10 @@ function ReportList({
             <EmptyMedia variant="icon">
               {query ? <Search /> : <FilePlus2 />}
             </EmptyMedia>
-            <EmptyTitle>{query ? "No results" : "No reports yet"}</EmptyTitle>
+            <EmptyTitle>{query ? "No results" : "No dashboards yet"}</EmptyTitle>
             <EmptyDescription>
               {query
-                ? `No report matches “${query}”.`
+                ? `No dashboard matches “${query}”.`
                 : "Create one to put charts from your data side by side."}
             </EmptyDescription>
           </EmptyHeader>
@@ -4989,7 +4989,7 @@ function ReportList({
             ) : (
               <Button onClick={onCreate}>
                 <FilePlus2 data-icon="inline-start" />
-                Create report
+                Create dashboard
               </Button>
             )}
           </EmptyContent>
@@ -5092,8 +5092,8 @@ function ReportList({
           if (!o) setDeleting(null);
         }}
         title={`Delete “${deleting?.title ?? ""}”?`}
-        description="The report and its layout are deleted for everyone. The data behind it is not touched."
-        confirmLabel="Delete report"
+        description="The dashboard and its layout are deleted for everyone. The data behind it is not touched."
+        confirmLabel="Delete dashboard"
         destructive
         onConfirm={() => {
           if (deleting) onDelete(deleting);
@@ -5135,19 +5135,20 @@ const REPORT_CSS = `
 /* -------------------------------------------------------------------------- */
 
 /**
- * Reports: a table of saved reports, each a grid of charts over the Lisbon trips
- * feed with filters that apply to all of them.
+ * Dashboards: a table of saved dashboards, each a grid of charts over the
+ * Lisbon trips feed with filters that apply to all of them.
  *
- * Laid out after the product's dashboards. In a report: an editable name,
+ * Laid out after the product's dashboards. In a dashboard: an editable name,
  * Export report, and a filter bar -- the date, and filters added one at a time,
  * either on every dataset (time, zone) or on one dataset's charts only. Empty
  * cells add a chart from the library or a text section. Each chart names its
  * dataset and the filters it is under; its menu edits how it is drawn,
  * refreshes it, exports it as CSV or PNG, or deletes it.
  *
- * `status` is how the report catalogue itself is doing; the host owns that
- * fetch. The datasets the charts draw from are fetched here, once each. Export report
- * hands the chosen name to `onExportReport`: producing the file is the host's job.
+ * `status` is how the dashboard catalogue itself is doing; the host owns that
+ * fetch. The datasets the charts draw from are fetched here, once each. Export
+ * report hands the chosen name to `onExportReport`: producing the file is the
+ * host's job.
  */
 export function ReportsWorkspace({
   className,
@@ -5268,7 +5269,7 @@ export function ReportsWorkspace({
             const now = new Date().toISOString();
             const r = commit({
               id: newId("report"),
-              title: "New report",
+              title: "New dashboard",
               creator: currentUser,
               createdAt: now,
               updatedAt: now,

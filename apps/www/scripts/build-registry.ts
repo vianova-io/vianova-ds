@@ -73,7 +73,7 @@ const CATEGORY: Record<string, string> = {
 const BLOCK_TITLES: Record<string, string> = {
   "map-workspace": "Map workspace",
   "datahub-workspace": "Data Hub workspace",
-  "reports-workspace": "Reports workspace",
+  "reports-workspace": "Dashboard workspace",
   "regulations-workspace": "Regulations workspace",
   "feeds-workspace": "Feeds workspace",
   "citizen-workspace": "Citizen Platform workspace",
