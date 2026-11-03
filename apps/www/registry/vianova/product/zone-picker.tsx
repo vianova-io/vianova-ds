@@ -2,16 +2,34 @@
 
 import * as React from "react";
 import {
+  ArrowLeft,
   Braces,
+  Circle,
   FileUp,
   LayoutGrid,
   Link2,
   List as ListIcon,
+  PencilLine,
+  Route,
   Search,
   Shapes,
+  Spline,
 } from "lucide-react";
 
+import {
+  ShapefileError,
+  collectShapefileParts,
+  readShapefile,
+  unzip,
+} from "@/registry/vianova/lib/shapefile";
 import { cn } from "@/registry/vianova/lib/utils";
+import { FileDropzone } from "@/registry/vianova/patterns/file-dropzone";
+import { DrawZoneIcon } from "@/registry/vianova/product/draw-zone-icon";
+import {
+  circleAround,
+  corridorAround,
+  type Position,
+} from "@/registry/vianova/lib/zone-geometry";
 import { SliderField } from "@/registry/vianova/patterns/slider-field";
 import { TagInput } from "@/registry/vianova/patterns/tag-input";
 import { Badge } from "@/registry/vianova/ui/badge";
@@ -28,7 +46,6 @@ import {
   Sheet,
   SheetContent,
   SheetDescription,
-  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from "@/registry/vianova/ui/sheet";
@@ -140,10 +157,6 @@ function ringPath(ring: [number, number][], size: number) {
 /* GeoJSON parsing                                                            */
 /* -------------------------------------------------------------------------- */
 
-const METERS_PER_DEGREE = 111_320;
-const CIRCLE_STEPS = 32;
-
-type Position = [number, number];
 type Feature = { geometry: unknown; properties: Record<string, unknown> };
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -180,86 +193,6 @@ function toRing(value: unknown): Position[] {
   const ring = value.map(toPosition);
   if (ring.length < 3)
     throw new GeoJsonError("A polygon needs at least three points.");
-  return ring;
-}
-
-/** A regular polygon around a point, close enough to a circle at map scale. */
-function circle([lng, lat]: Position, radius: number): Position[] {
-  const dLat = radius / METERS_PER_DEGREE;
-  const dLng = radius / (METERS_PER_DEGREE * Math.cos((lat * Math.PI) / 180));
-  const ring: Position[] = [];
-  for (let i = 0; i < CIRCLE_STEPS; i++) {
-    const a = (i / CIRCLE_STEPS) * Math.PI * 2;
-    ring.push([lng + dLng * Math.cos(a), lat + dLat * Math.sin(a)]);
-  }
-  ring.push(ring[0]!);
-  return ring;
-}
-
-/**
- * A corridor of `radius` metres either side of a line, with round ends.
- *
- * Worked in local metres around the first vertex, then converted back: an
- * offset in degrees would be narrower east-west than north-south. Joins are
- * the average of the two segment normals, which is good enough for street
- * corridors; it is not a general-purpose buffer and does not resolve the
- * self-overlap a hairpin produces.
- */
-function corridor(line: Position[], radius: number): Position[] {
-  const [lng0, lat0] = line[0]!;
-  const kx = METERS_PER_DEGREE * Math.cos((lat0 * Math.PI) / 180);
-  const ky = METERS_PER_DEGREE;
-  const pts = line.map(
-    ([lng, lat]) => [(lng - lng0) * kx, (lat - lat0) * ky] as const,
-  );
-  const back = ([x, y]: readonly [number, number]): Position => [
-    lng0 + x / kx,
-    lat0 + y / ky,
-  ];
-
-  const normals = pts.slice(1).map(([x, y], i) => {
-    const [px, py] = pts[i]!;
-    const len = Math.hypot(x - px, y - py) || 1;
-    return [-(y - py) / len, (x - px) / len] as const;
-  });
-  const vertexNormal = (i: number) => {
-    const a = normals[Math.max(0, i - 1)]!;
-    const b = normals[Math.min(normals.length - 1, i)]!;
-    const nx = a[0] + b[0];
-    const ny = a[1] + b[1];
-    const len = Math.hypot(nx, ny) || 1;
-    return [nx / len, ny / len] as const;
-  };
-
-  const left: Position[] = [];
-  const right: Position[] = [];
-  pts.forEach(([x, y], i) => {
-    const [nx, ny] = vertexNormal(i);
-    left.push(back([x + nx * radius, y + ny * radius]));
-    right.push(back([x - nx * radius, y - ny * radius]));
-  });
-
-  const cap = (i: number, from: readonly [number, number]) => {
-    const [cx, cy] = pts[i]!;
-    const start = Math.atan2(from[1], from[0]);
-    const out: Position[] = [];
-    for (let s = 1; s < CIRCLE_STEPS / 2; s++) {
-      const a = start - (s / (CIRCLE_STEPS / 2)) * Math.PI;
-      out.push(back([cx + Math.cos(a) * radius, cy + Math.sin(a) * radius]));
-    }
-    return out;
-  };
-
-  const last = pts.length - 1;
-  const [sx, sy] = vertexNormal(0);
-  // Each cap sweeps clockwise from one side to the other, round the line's end.
-  const ring = [
-    ...left,
-    ...cap(last, vertexNormal(last)),
-    ...right.reverse(),
-    ...cap(0, [-sx, -sy]),
-  ];
-  ring.push(ring[0]!);
   return ring;
 }
 
@@ -359,7 +292,9 @@ export function parseGeoJsonZones(
                 ? coords
                 : [];
           if (radius > 0)
-            points.forEach((p) => rings.push(circle(toPosition(p), radius)));
+            points.forEach((p) =>
+              rings.push(circleAround(toPosition(p), radius)),
+            );
           else needsRadius ??= "points";
           break;
         }
@@ -376,7 +311,7 @@ export function parseGeoJsonZones(
               if (!Array.isArray(line)) continue;
               const positions = line.map(toPosition);
               if (positions.length >= 2)
-                rings.push(corridor(positions, radius));
+                rings.push(corridorAround(positions, radius));
             }
           } else needsRadius ??= "lines";
           break;
@@ -433,8 +368,60 @@ export function parseGeoJsonZones(
  */
 const ROW_LIMIT = 100;
 
-type Source = "zones" | "paste" | "upload" | "url";
+/**
+ * One empty list, shared.
+ *
+ * `[]` written inline is a new array every render, and anything downstream
+ * that watches it by identity -- a memo, an effect reporting the selection to
+ * a map -- would then fire on every render. This is what stops that.
+ */
+const NO_ZONES: PickerZone[] = [];
+
+type Source = "zones" | "draw" | "paste" | "upload" | "url";
 type View = "cards" | "list";
+
+/**
+ * The drawing tools this sheet can hand off to.
+ *
+ * Spelled out here rather than imported from the map's draw control, which
+ * would drag MapLibre into every project that installs the picker -- a sheet
+ * that lists zones has no business pulling in a mapping engine. The names are
+ * the same, so a consumer passes the chosen tool straight through, and a
+ * subset stays assignable if the map ever grows a tool this sheet omits.
+ */
+export type ZoneDrawTool = "polygon" | "circle" | "freehand" | "line";
+
+const DRAW_TOOLS: {
+  value: ZoneDrawTool;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+}[] = [
+  {
+    value: "polygon",
+    title: "Polygon",
+    description: "A point per corner",
+    icon: <DrawZoneIcon />,
+  },
+  {
+    value: "circle",
+    title: "Circle",
+    description: "Out from a centre",
+    icon: <Circle />,
+  },
+  {
+    value: "freehand",
+    title: "Free hand",
+    description: "Trace the outline",
+    icon: <Spline />,
+  },
+  {
+    value: "line",
+    title: "Line",
+    description: "A street and its width",
+    icon: <Route />,
+  },
+];
 
 const dateFormat = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -459,6 +446,7 @@ export function ZonePicker({
   zones,
   excludeIds,
   onAdd,
+  onDraw,
   title = "Add zones",
   side = "right",
 }: {
@@ -469,6 +457,15 @@ export function ZonePicker({
   excludeIds?: string[];
   /** Called with the chosen zones; the sheet then closes. */
   onAdd: (zones: PickerZone[]) => void;
+  /**
+   * Arms a drawing tool on the map behind the sheet, which then closes.
+   *
+   * Left out, the sheet offers no drawing at all -- a picker with no map to
+   * draw on should not say otherwise. Given, drawing becomes one of the ways
+   * zones get here, beside the library and a pasted shape, instead of a
+   * separate habit parked on the map's own toolbar.
+   */
+  onDraw?: (tool: ZoneDrawTool) => void;
   title?: string;
   side?: "left" | "right";
 }) {
@@ -479,6 +476,7 @@ export function ZonePicker({
         className="gap-0 data-[side=left]:sm:max-w-md data-[side=right]:sm:max-w-md"
       >
         <ZonePickerBody
+          chrome="sheet"
           zones={zones}
           excludeIds={excludeIds}
           title={title}
@@ -487,26 +485,111 @@ export function ZonePicker({
             onAdd(chosen);
             onOpenChange(false);
           }}
+          onDraw={
+            onDraw &&
+            ((tool) => {
+              // Closed first: the map it hands over to is behind this sheet,
+              // and a tool armed under an open overlay would look broken.
+              onOpenChange(false);
+              onDraw(tool);
+            })
+          }
         />
       </SheetContent>
     </Sheet>
   );
 }
 
-function ZonePickerBody({
+/**
+ * Everything the picker does, without the sheet around it.
+ *
+ * Use this where there is a panel to fill -- the regulation editor swaps its
+ * settings column for it, so the map stays on screen while zones are chosen
+ * and the chosen ones can be shown on it. The sheet remains for surfaces with
+ * no column to give up.
+ *
+ * It fills its parent and scrolls inside itself, so the back row and the Add
+ * button stay put while the list moves.
+ */
+export function ZonePickerPanel({
   zones,
   excludeIds,
-  title,
-  onCancel,
   onAdd,
+  onDraw,
+  onBack,
+  backLabel = "Back",
+  title = "Add zones",
+  onPreviewChange,
+  onSelectionChange,
+  className,
 }: {
   zones: PickerZone[];
   excludeIds?: string[];
+  onAdd: (zones: PickerZone[]) => void;
+  onDraw?: (tool: ZoneDrawTool) => void;
+  /** Leaves without adding anything. The back arrow and Cancel both call it. */
+  onBack: () => void;
+  /** What the back arrow names: where leaving returns to, not this screen. */
+  backLabel?: string;
+  title?: string;
+  /**
+   * The zone under the pointer or keyboard focus, or null when none is.
+   *
+   * For a map beside the panel to pick out the row being read. The whole
+   * reason this is a panel and not a sheet is that such a map is visible.
+   */
+  onPreviewChange?: (zone: PickerZone | null) => void;
+  /** Everything currently chosen, as it changes, for that same map. */
+  onSelectionChange?: (zones: PickerZone[]) => void;
+  className?: string;
+}) {
+  return (
+    <div
+      data-slot="zone-picker-panel"
+      className={cn("flex min-h-0 flex-1 flex-col", className)}
+    >
+      <ZonePickerBody
+        chrome="panel"
+        zones={zones}
+        excludeIds={excludeIds}
+        title={title}
+        backLabel={backLabel}
+        onCancel={onBack}
+        onAdd={onAdd}
+        onDraw={onDraw}
+        onPreviewChange={onPreviewChange}
+        onSelectionChange={onSelectionChange}
+      />
+    </div>
+  );
+}
+
+function ZonePickerBody({
+  chrome,
+  zones,
+  excludeIds,
+  title,
+  backLabel,
+  onCancel,
+  onAdd,
+  onDraw,
+  onPreviewChange,
+  onSelectionChange,
+}: {
+  /** Sheet chrome, or a back row and a heading for a panel in a column. */
+  chrome: "sheet" | "panel";
+  zones: PickerZone[];
+  excludeIds?: string[];
   title: string;
+  backLabel?: string;
   onCancel: () => void;
   onAdd: (zones: PickerZone[]) => void;
+  onDraw?: (tool: ZoneDrawTool) => void;
+  onPreviewChange?: (zone: PickerZone | null) => void;
+  onSelectionChange?: (zones: PickerZone[]) => void;
 }) {
   const [source, setSource] = React.useState<Source>("zones");
+  const [tool, setTool] = React.useState<ZoneDrawTool>("polygon");
   const [selected, setSelected] = React.useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -514,6 +597,10 @@ function ZonePickerBody({
     text: "",
     radius: 0,
   });
+  // The upload source parses on its own -- reading a file is asynchronous and
+  // a zip has to be inflated first -- and reports what it found up here, so
+  // the footer counts uploaded zones the same way it counts pasted ones.
+  const [uploaded, setUploaded] = React.useState<PickerZone[]>([]);
 
   const parsed = React.useMemo(
     () =>
@@ -522,7 +609,8 @@ function ZonePickerBody({
         : null,
     [paste],
   );
-  const pastedZones = parsed && "zones" in parsed ? parsed.zones : [];
+  const pastedZones =
+    parsed && "zones" in parsed ? parsed.zones : NO_ZONES;
 
   const chosen = React.useMemo(
     () =>
@@ -530,16 +618,55 @@ function ZonePickerBody({
         ? zones.filter((z) => selected.has(z.id))
         : source === "paste"
           ? pastedZones
-          : [],
-    [source, zones, selected, pastedZones],
+          : source === "upload"
+            ? uploaded
+            : NO_ZONES,
+    [source, zones, selected, pastedZones, uploaded],
   );
+
+  // Reported rather than returned, because what the map beside the panel has
+  // to draw is whatever is chosen right now -- a ticked library zone, a
+  // pasted shape, an uploaded one -- and only this component knows which of
+  // the three the reader is looking at.
+  React.useEffect(() => {
+    onSelectionChange?.(chosen);
+  }, [chosen, onSelectionChange]);
+
+  // Leaving the panel, or switching source, must not leave a zone lit on the
+  // map that nothing on screen is pointing at any more.
+  React.useEffect(() => () => onPreviewChange?.(null), [onPreviewChange]);
+  React.useEffect(() => onPreviewChange?.(null), [source, onPreviewChange]);
 
   return (
     <>
-      <SheetHeader className="pr-12">
-        <SheetTitle>{title}</SheetTitle>
-        <SheetDescription>Choose where the zones come from.</SheetDescription>
-      </SheetHeader>
+      {chrome === "sheet" ? (
+        <SheetHeader className="pr-12">
+          <SheetTitle>{title}</SheetTitle>
+          <SheetDescription>Choose where the zones come from.</SheetDescription>
+        </SheetHeader>
+      ) : (
+        /* The same back row the editor itself uses, one level deeper: the
+           arrow names where it returns to, and the heading names where you
+           are. A breadcrumb would say both at once, in a block that has no
+           other breadcrumb to look like. */
+        <header className="space-y-2 border-b px-4 pt-3 pb-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ml-2 max-w-full"
+            onClick={onCancel}
+          >
+            <ArrowLeft data-icon="inline-start" />
+            <span className="truncate">{backLabel}</span>
+          </Button>
+          <div className="space-y-0.5">
+            <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+            <p className="text-muted-foreground text-sm">
+              Choose where the zones come from.
+            </p>
+          </div>
+        </header>
+      )}
 
       {/* One scroll region for the whole body, with the padding inside it so a
           focus ring at the edge is never cut by the overflow. */}
@@ -555,6 +682,16 @@ function ZonePickerBody({
             icon={<Shapes />}
             title="Select from your zones"
           />
+          {/* Second, not last: drawing is how a zone that does not exist yet
+              gets made, which is the other half of "add zones" and was only
+              reachable from the map's own toolbar. */}
+          {onDraw ? (
+            <ChoiceCard
+              value="draw"
+              icon={<PencilLine />}
+              title="Draw on the map"
+            />
+          ) : null}
           <ChoiceCard
             value="paste"
             icon={<Braces />}
@@ -564,8 +701,6 @@ function ZonePickerBody({
             value="upload"
             icon={<FileUp />}
             title="Upload shape file"
-            badge="Soon"
-            disabled
           />
           <ChoiceCard
             value="url"
@@ -582,7 +717,12 @@ function ZonePickerBody({
             excludeIds={excludeIds}
             selected={selected}
             onSelectedChange={setSelected}
+            onPreviewChange={onPreviewChange}
           />
+        ) : source === "draw" ? (
+          <DrawSource value={tool} onValueChange={setTool} />
+        ) : source === "upload" ? (
+          <UploadSource onZonesChange={setUploaded} />
         ) : (
           <PasteSource
             text={paste.text}
@@ -594,16 +734,27 @@ function ZonePickerBody({
         )}
       </div>
 
-      <SheetFooter className="flex-row justify-end border-t">
+      <div
+        className={cn(
+          "mt-auto flex flex-row justify-end gap-2 border-t p-4",
+          chrome === "sheet" && "gap-2",
+        )}
+      >
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button disabled={chosen.length === 0} onClick={() => onAdd(chosen)}>
-          {chosen.length
-            ? `Add ${plural(chosen.length, "zone", "zones")}`
-            : "Add zones"}
-        </Button>
-      </SheetFooter>
+        {source === "draw" && onDraw ? (
+          // A different verb because it is a different ending: the sheet
+          // closes and the map takes over, and nothing has been added yet.
+          <Button onClick={() => onDraw(tool)}>Draw on the map</Button>
+        ) : (
+          <Button disabled={chosen.length === 0} onClick={() => onAdd(chosen)}>
+            {chosen.length
+              ? `Add ${plural(chosen.length, "zone", "zones")}`
+              : "Add zones"}
+          </Button>
+        )}
+      </div>
     </>
   );
 }
@@ -613,11 +764,13 @@ function ZoneList({
   excludeIds,
   selected,
   onSelectedChange,
+  onPreviewChange,
 }: {
   zones: PickerZone[];
   excludeIds?: string[];
   selected: ReadonlySet<string>;
   onSelectedChange: React.Dispatch<React.SetStateAction<ReadonlySet<string>>>;
+  onPreviewChange?: (zone: PickerZone | null) => void;
 }) {
   const [query, setQuery] = React.useState("");
   const [view, setView] = React.useState<View>("cards");
@@ -673,6 +826,15 @@ function ZoneList({
       }),
     [onSelectedChange],
   );
+
+  // Read through a ref so the rows get one callback for the panel's lifetime.
+  // A new arrow per render would defeat ZoneRow's memo and re-render all
+  // hundred rows on every pointer move across the list.
+  const previewRef = React.useRef(onPreviewChange);
+  previewRef.current = onPreviewChange;
+  const preview = React.useCallback((zone: PickerZone | null) => {
+    previewRef.current?.(zone);
+  }, []);
 
   const shown = filtered.slice(0, ROW_LIMIT);
   const selectAllId = React.useId();
@@ -764,6 +926,7 @@ function ZoneList({
               added={excluded.has(zone.id)}
               checked={selected.has(zone.id)}
               onToggle={toggle}
+              onPreview={preview}
             />
           ))}
         </ul>
@@ -800,12 +963,15 @@ const ZoneRow = React.memo(function ZoneRow({
   added,
   checked,
   onToggle,
+  onPreview,
 }: {
   zone: PickerZone;
   view: View;
   added: boolean;
   checked: boolean;
   onToggle: (id: string, on: boolean) => void;
+  /** Says which row is being read, for a map beside the list. */
+  onPreview?: (zone: PickerZone | null) => void;
 }) {
   const id = React.useId();
   const nameId = `${id}-name`;
@@ -825,11 +991,29 @@ const ZoneRow = React.memo(function ZoneRow({
 
   const addedBadge = added ? <Badge variant="secondary">Added</Badge> : null;
 
+  /*
+   * Pointer and focus both, so the map follows the arrow keys as well as the
+   * mouse: a reader tabbing through a hundred zones gets the same answer to
+   * "which one is this" as a reader hovering them.
+   *
+   * onFocus, not onFocusCapture, is enough -- focus events bubble in React,
+   * so the checkbox inside the label reports through it.
+   */
+  const previewing = onPreview
+    ? {
+        onPointerEnter: () => onPreview(zone),
+        onPointerLeave: () => onPreview(null),
+        onFocus: () => onPreview(zone),
+        onBlur: () => onPreview(null),
+      }
+    : undefined;
+
   if (view === "list") {
     return (
       <li>
         <label
           htmlFor={id}
+          {...previewing}
           className={cn(
             "flex min-h-10 items-center gap-2.5 px-3 py-1.5 text-sm",
             added
@@ -859,6 +1043,7 @@ const ZoneRow = React.memo(function ZoneRow({
     <li>
       <label
         htmlFor={id}
+        {...previewing}
         className={cn(
           "flex items-start gap-3 rounded-lg border border-border p-3 text-sm transition-colors",
           added
@@ -895,6 +1080,299 @@ const ZoneRow = React.memo(function ZoneRow({
     </li>
   );
 });
+
+/**
+ * The drawing tools, chosen here rather than on the map.
+ *
+ * The map's own menu stays -- it is how someone already looking at the map
+ * switches tools mid-task. This is the other way in: from the rule that needs
+ * an area, without having to know the toolbar exists.
+ */
+function DrawSource({
+  value,
+  onValueChange,
+}: {
+  value: ZoneDrawTool;
+  onValueChange: (tool: ZoneDrawTool) => void;
+}) {
+  return (
+    <div data-slot="zone-picker-draw" className="flex flex-col gap-3">
+      <p className="text-muted-foreground text-sm">
+        Pick a tool, then draw on the map. The shape is added to this rule as
+        soon as you finish it.
+      </p>
+      <ChoiceCardGroup
+        aria-label="Drawing tool"
+        columns={2}
+        value={value}
+        onValueChange={(v) => onValueChange(v as ZoneDrawTool)}
+      >
+        {DRAW_TOOLS.map((t) => (
+          <ChoiceCard
+            key={t.value}
+            value={t.value}
+            icon={t.icon}
+            title={t.title}
+            description={t.description}
+          />
+        ))}
+      </ChoiceCardGroup>
+    </div>
+  );
+}
+
+/**
+ * What is about to be added, drawn rather than counted.
+ *
+ * "14 zones found" is not an answer to the question anyone actually has,
+ * which is whether these are the right shapes -- a file with the wrong layer
+ * selected, or coordinates the wrong way round, counts exactly the same as a
+ * correct one. The outlines are what tell the two apart, so they are shown
+ * before the Add button is reached, not after.
+ */
+function ZonePreview({ zones }: { zones: PickerZone[] }) {
+  const shown = zones.slice(0, ROW_LIMIT);
+  return (
+    <div data-slot="zone-picker-preview" className="flex flex-col gap-2">
+      <p className="text-sm font-medium">
+        {plural(zones.length, "zone", "zones")} found
+      </p>
+      <ul
+        role="list"
+        className="divide-border flex flex-col divide-y rounded-lg border"
+      >
+        {shown.map((zone) => (
+          <li
+            key={zone.id}
+            className="flex items-center gap-3 px-3 py-2 text-sm"
+          >
+            <ZoneThumbnail ring={zone.ring} size={32} />
+            <span className="min-w-0 flex-1 truncate">{zone.name}</span>
+          </li>
+        ))}
+      </ul>
+      {zones.length > shown.length ? (
+        <p className="text-muted-foreground text-xs">
+          Showing the first {count.format(shown.length)}. All{" "}
+          {count.format(zones.length)} are added.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Upload                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/** What a chosen file turned out to hold, kept so a width change re-reads it. */
+type UploadedFile =
+  | { kind: "geojson"; text: string }
+  | { kind: "shapefile"; shp: ArrayBuffer; dbf?: ArrayBuffer; prj?: string };
+
+type UploadState =
+  | { status: "empty" }
+  | { status: "reading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; label: string; note?: string; file: UploadedFile };
+
+const isExtension = (name: string, ...extensions: string[]) =>
+  extensions.some((e) => name.toLowerCase().endsWith(e));
+
+/** A view onto a buffer, copied out so it can be kept past its container. */
+const own = (bytes: Uint8Array): ArrayBuffer =>
+  bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+
+/**
+ * A shapefile or a GeoJSON file, read in the browser.
+ *
+ * Zipped is the normal case and the one the label asks for: a shapefile is
+ * three or four files that mean nothing apart, and every GIS exports them
+ * together. The separate parts are accepted too, because someone who has
+ * already unzipped them should not have to zip them again.
+ */
+function UploadSource({
+  onZonesChange,
+}: {
+  onZonesChange: (zones: PickerZone[]) => void;
+}) {
+  const [state, setState] = React.useState<UploadState>({ status: "empty" });
+  const [radius, setRadius] = React.useState(0);
+
+  const parsed = React.useMemo(() => {
+    if (state.status !== "ready") return null;
+    if (state.file.kind === "geojson") {
+      return parseGeoJsonZones(state.file.text, {
+        radiusMeters: radius,
+        namePrefix: "Uploaded zone",
+      });
+    }
+    const read = readShapefile(state.file, { radiusMeters: radius });
+    if ("error" in read) return read;
+    const createdAt = new Date().toISOString();
+    return {
+      zones: read.zones.map((zone, i) => ({
+        id: `uploaded-${i + 1}`,
+        name: zone.name,
+        tags: ["uploaded"],
+        ring: zone.ring,
+        createdAt,
+      })),
+    };
+  }, [state, radius]);
+
+  // setState is stable, so this settles after one render rather than looping.
+  React.useEffect(() => {
+    onZonesChange(parsed && "zones" in parsed ? parsed.zones : []);
+  }, [parsed, onZonesChange]);
+
+  const accept = async (files: File[]) => {
+    setState({ status: "reading" });
+    try {
+      const zip = files.find((f) => isExtension(f.name, ".zip"));
+      if (zip) {
+        const entries = await unzip(await zip.arrayBuffer());
+        const parts = collectShapefileParts(entries);
+        if (parts.shp) {
+          setState({
+            status: "ready",
+            label: zip.name,
+            note:
+              parts.shpCount > 1
+                ? `This zip holds ${parts.shpCount} shapefiles; the first was read.`
+                : parts.prj
+                  ? undefined
+                  : NO_PRJ,
+            file: {
+              kind: "shapefile",
+              shp: own(parts.shp),
+              dbf: parts.dbf && own(parts.dbf),
+              prj: parts.prj,
+            },
+          });
+          return;
+        }
+        const geo = entries.find((e) =>
+          isExtension(e.name, ".geojson", ".json"),
+        );
+        if (!geo) {
+          setState({
+            status: "error",
+            message: "This zip holds no .shp or GeoJSON file.",
+          });
+          return;
+        }
+        setState({
+          status: "ready",
+          label: zip.name,
+          file: {
+            kind: "geojson",
+            text: new TextDecoder().decode(geo.bytes),
+          },
+        });
+        return;
+      }
+
+      const shp = files.find((f) => isExtension(f.name, ".shp"));
+      if (shp) {
+        const dbf = files.find((f) => isExtension(f.name, ".dbf"));
+        const prj = files.find((f) => isExtension(f.name, ".prj"));
+        setState({
+          status: "ready",
+          label: shp.name,
+          note: prj ? undefined : NO_PRJ,
+          file: {
+            kind: "shapefile",
+            shp: await shp.arrayBuffer(),
+            dbf: dbf && (await dbf.arrayBuffer()),
+            prj: prj && (await prj.text()),
+          },
+        });
+        return;
+      }
+
+      const geo = files.find((f) => isExtension(f.name, ".geojson", ".json"));
+      if (geo) {
+        setState({
+          status: "ready",
+          label: geo.name,
+          file: { kind: "geojson", text: await geo.text() },
+        });
+        return;
+      }
+      setState({
+        status: "error",
+        message: "Choose a zipped shapefile, a .shp, or a GeoJSON file.",
+      });
+    } catch (e) {
+      setState({
+        status: "error",
+        message:
+          e instanceof ShapefileError
+            ? e.message
+            : "That file could not be read.",
+      });
+    }
+  };
+
+  const error =
+    state.status === "error"
+      ? state.message
+      : parsed && "error" in parsed
+        ? parsed.error
+        : null;
+
+  return (
+    <div data-slot="zone-picker-upload" className="flex flex-col gap-5">
+      <FileDropzone
+        multiple
+        accept=".zip,.shp,.dbf,.prj,.shx,.cpg,.geojson,.json"
+        onFiles={accept}
+        label={
+          state.status === "ready" ? state.label : "Drop a shapefile here"
+        }
+        hint={
+          state.status === "reading"
+            ? "Reading…"
+            : "A zipped .shp, its separate parts, or a GeoJSON file"
+        }
+      />
+
+      {error ? (
+        <p role="alert" className="text-destructive text-sm">
+          {error}
+        </p>
+      ) : null}
+      {state.status === "ready" && state.note ? (
+        <p className="text-muted-foreground text-sm">{state.note}</p>
+      ) : null}
+
+      <SliderField
+        label="Increase zone radius"
+        description="Grows points and lines into zones. Polygons are added as drawn."
+        value={radius}
+        onValueChange={setRadius}
+        min={0}
+        max={100}
+        unit="m"
+        marks={[0, 50, 100]}
+      />
+
+      {parsed && "zones" in parsed ? <ZonePreview zones={parsed.zones} /> : null}
+    </div>
+  );
+}
+
+/**
+ * Said rather than assumed. Without a .prj the numbers could be metres in any
+ * of a hundred national grids, and read as degrees those land in the Atlantic
+ * -- silently, because they are still perfectly good numbers.
+ */
+const NO_PRJ =
+  "No .prj came with this file, so its numbers are read as longitude and latitude. Check the shapes below are where you expect.";
 
 function PasteSource({
   text,
@@ -949,27 +1427,7 @@ function PasteSource({
         marks={[0, 50, 100]}
       />
 
-      {parsed && "zones" in parsed ? (
-        <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium">
-            {plural(parsed.zones.length, "zone", "zones")} found
-          </p>
-          <ul
-            role="list"
-            className="flex flex-col divide-y divide-border rounded-lg border"
-          >
-            {parsed.zones.slice(0, ROW_LIMIT).map((zone) => (
-              <li
-                key={zone.id}
-                className="flex items-center gap-2.5 px-3 py-2 text-sm"
-              >
-                <ZoneThumbnail ring={zone.ring} size={24} />
-                <span className="min-w-0 flex-1 truncate">{zone.name}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      {parsed && "zones" in parsed ? <ZonePreview zones={parsed.zones} /> : null}
     </div>
   );
 }

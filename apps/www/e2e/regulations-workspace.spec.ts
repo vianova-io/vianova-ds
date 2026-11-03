@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
 import { settle } from "./examples";
+import { zippedShapefile } from "./shapefile-fixture";
 
 /**
  * The regulations workspace's flow: list → new regulation → editor → save →
@@ -9,8 +10,9 @@ import { settle } from "./examples";
  *
  * The block crawls in a11y.spec and focus-ring.spec only ever see the list,
  * because that is what the block opens on. The editor -- a rule rail, an
- * accordion of settings, a sheet, a save bar -- is most of the workspace, so
- * it is reached here and judged by the same axe rules.
+ * accordion of settings, the Add zones screen one level deeper, a save bar --
+ * is most of the workspace, so it is reached here and judged by the same axe
+ * rules.
  */
 
 const BLOCKING = new Set(["serious", "critical"]);
@@ -27,13 +29,14 @@ async function open(page: Page, viewport = { width: 1440, height: 1000 }) {
 async function expectNoBlockingViolations(page: Page) {
   // Nothing dimming the block when the scan runs.
   //
-  // A sheet lays a backdrop over the workspace, and this scan is scoped to the
-  // workspace -- so axe measures the contrast of text UNDER that scrim and
+  // An overlay lays a backdrop over the workspace, and this scan is scoped to
+  // the workspace -- so axe measures the contrast of text UNDER that scrim and
   // reports colour-contrast failures on markup that is fine a frame later.
   // Intermittent, because it depends on whether the analysis starts before or
-  // after the fade: measured at the exact point this helper was called after
-  // adding a zone, the backdrop was still at opacity 1 and took ~180ms to go,
-  // and the suite failed roughly two runs in seven.
+  // after the fade: measured when the zone picker was still a sheet, the
+  // backdrop was at opacity 1 for ~180ms after it closed and the suite failed
+  // roughly two runs in seven. The picker is a screen now, but the type
+  // dialog and the leave confirmation still fade, so the guard stays.
   await expect(
     page.locator("[data-slot=sheet-overlay], [data-slot=dialog-overlay]"),
   ).toHaveCount(0);
@@ -98,15 +101,15 @@ test("zones added from the picker land in the rule", async ({ page }) => {
   await expect(root.getByText("2 zones").first()).toBeVisible();
 
   await root.getByRole("button", { name: "Add zones" }).click();
-  const sheet = page.getByRole("dialog", { name: "Add zones" });
+  const panel = root.locator("[data-slot=zone-picker-panel]");
   // The search field is a tag input: a ticked zone becomes a chip in it, and
   // removing the chip unticks the zone.
-  const search = sheet.getByRole("textbox", { name: "Search zones" });
+  const search = panel.getByRole("textbox", { name: "Search zones" });
   await search.fill("Belém");
-  await sheet.getByRole("checkbox", { name: "Belém", exact: true }).click();
-  await expect(sheet.locator("[data-slot=tag-input-chip]", { hasText: "Belém" })).toBeVisible();
-  await sheet.getByRole("button", { name: "Remove Belém" }).click();
-  await expect(sheet.getByRole("checkbox", { name: "Belém", exact: true })).not.toBeChecked();
+  await panel.getByRole("checkbox", { name: "Belém", exact: true }).click();
+  await expect(panel.locator("[data-slot=tag-input-chip]", { hasText: "Belém" })).toBeVisible();
+  await panel.getByRole("button", { name: "Remove Belém" }).click();
+  await expect(panel.getByRole("checkbox", { name: "Belém", exact: true })).not.toBeChecked();
 
   // Enter picks the top match without touching the list.
   //
@@ -123,8 +126,8 @@ test("zones added from the picker land in the rule", async ({ page }) => {
     await search.press("Enter");
     await expect(search).toHaveValue("");
   }).toPass({ timeout: 10_000 });
-  await expect(sheet.locator("[data-slot=tag-input-chip]", { hasText: "Belém" })).toBeVisible();
-  await sheet.getByRole("button", { name: "Add 1 zone" }).click();
+  await expect(panel.locator("[data-slot=tag-input-chip]", { hasText: "Belém" })).toBeVisible();
+  await panel.getByRole("button", { name: "Add 1 zone" }).click();
 
   await expect(root.getByText("3 zones").first()).toBeVisible();
   await expect(root.getByText("Unsaved changes")).toBeVisible();
@@ -212,4 +215,101 @@ test("Public is tinted where Private stays quiet, in the list and the editor", a
   await expect(header).toHaveAttribute("data-visibility", "public");
   await expect(header).toHaveText("Public");
   await expectNoBlockingViolations(page);
+});
+
+test("a line drawn with the map's draw control becomes a corridor zone, at the width the banner sets", async ({ page }) => {
+  const root = await open(page);
+  await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
+  await expect(root.getByText("2 zones").first()).toBeVisible();
+
+  const map = root.getByRole("region", { name: "Map of the regulation's zones" });
+  await map.getByRole("button", { name: "Choose a drawing tool" }).click();
+  await page.getByRole("menuitemradio", { name: /Line/ }).click();
+
+  // The width is the line tool's own control, and it is in the banner rather
+  // than a panel because it is only judgeable against the street underneath.
+  const width = map.getByRole("spinbutton", { name: "Corridor width in metres" });
+  await expect(width).toHaveValue("20");
+  await width.fill("120");
+
+  // Two points are enough for a line, where a polygon needs three -- so Done
+  // is still refused after one and offered after two.
+  const box = (await map.boundingBox())!;
+  const click = ([x, y]: readonly [number, number]) =>
+    page.mouse.click(box.x + box.width * x, box.y + box.height * y);
+  const done = map.getByRole("button", { name: "Done" });
+  await click([0.35, 0.35]);
+  await expect(done).toBeDisabled();
+  await click([0.55, 0.5]);
+  await click([0.7, 0.42]);
+  await done.click();
+
+  await expect(root.getByText("3 zones").first()).toBeVisible();
+  await expect(map.getByRole("button", { name: "Draw a zone" })).toHaveAttribute("aria-pressed", "false");
+});
+
+test("Add zones offers drawing, and picking a tool there hands over to the map", async ({ page }) => {
+  const root = await open(page);
+  await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
+
+  await root.getByRole("button", { name: "Add zones" }).click();
+  const panel = root.locator("[data-slot=zone-picker-panel]");
+  await panel.getByRole("radio", { name: "Draw on the map" }).click();
+  await panel.getByRole("radio", { name: /^Line/ }).click();
+  await panel.getByRole("button", { name: "Draw on the map" }).click();
+
+  // The panel steps back out to the rule it came from, so the map it just
+  // handed over to is unobstructed, and the tool it chose is the one now
+  // armed -- not the toolbar's own default.
+  await expect(panel).toHaveCount(0);
+  const map = root.getByRole("region", { name: "Map of the regulation's zones" });
+  await expect(map.getByRole("button", { name: "Draw a zone" })).toHaveAttribute("aria-pressed", "true");
+  await expect(map.getByRole("spinbutton", { name: "Corridor width in metres" })).toBeVisible();
+});
+
+test("a zipped shapefile uploads, previews its shapes and adds them to the rule", async ({ page }) => {
+  const root = await open(page);
+  await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
+  await root.getByRole("button", { name: "Add zones" }).click();
+
+  const panel = root.locator("[data-slot=zone-picker-panel]");
+  await panel.getByRole("radio", { name: "Upload shape file" }).click();
+  await panel.locator("input[type=file]").setInputFiles({
+    name: "Zones.zip",
+    mimeType: "application/zip",
+    buffer: zippedShapefile(),
+  });
+
+  // The names come from the .dbf, which is the half of a shapefile that would
+  // be easiest to quietly skip -- the shapes would still draw without it.
+  const preview = panel.locator("[data-slot=zone-picker-preview]");
+  await expect(preview).toContainText("2 zones found");
+  await expect(preview).toContainText("Baixa core");
+  await expect(preview).toContainText("Alfama edge");
+  // And a shape apiece, which is the whole point of previewing before adding.
+  await expect(preview.locator("svg")).toHaveCount(2);
+
+  await panel.getByRole("button", { name: "Add 2 zones" }).click();
+  await expect(root.getByText("4 zones").first()).toBeVisible();
+});
+
+test("a shapefile in a projection the reader cannot convert is refused by name", async ({ page }) => {
+  const root = await open(page);
+  await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
+  await root.getByRole("button", { name: "Add zones" }).click();
+
+  const panel = root.locator("[data-slot=zone-picker-panel]");
+  await panel.getByRole("radio", { name: "Upload shape file" }).click();
+  await panel.locator("input[type=file]").setInputFiles({
+    name: "Zones.zip",
+    mimeType: "application/zip",
+    buffer: zippedShapefile("sweref"),
+  });
+
+  // Metres read as degrees would land these in the Atlantic without a word of
+  // warning, so the refusal names the system and the fix.
+  await expect(panel.getByRole("alert")).toContainText("SWEREF99_TM");
+  await expect(panel.getByRole("alert")).toContainText("EPSG:4326");
+  await expect(panel.locator("[data-slot=zone-picker-preview]")).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Add zones" })).toBeDisabled();
 });

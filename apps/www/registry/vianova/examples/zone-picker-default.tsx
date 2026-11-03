@@ -5,7 +5,10 @@ import * as React from "react";
 import {
   type PickerZone,
   ZonePicker,
+  ZonePickerPanel,
+  ZoneThumbnail,
 } from "@/registry/vianova/product/zone-picker";
+import { Badge } from "@/registry/vianova/ui/badge";
 import { Button } from "@/registry/vianova/ui/button";
 
 /** Mulberry32: a few lines, and the same zones on every render and every machine. */
@@ -99,25 +102,101 @@ function makeZones(n: number): PickerZone[] {
 const ZONES = makeZones(300);
 
 export default function ZonePickerDefault() {
+  const [picking, setPicking] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const [added, setAdded] = React.useState<PickerZone[]>(() =>
     ZONES.slice(0, 2),
   );
+  const [preview, setPreview] = React.useState<PickerZone | null>(null);
+
+  const add = (zones: PickerZone[]) =>
+    setAdded((prev) => [...prev, ...zones]);
 
   return (
-    <div className="flex flex-col items-start gap-3">
-      <Button onClick={() => setOpen(true)}>Add zones</Button>
-      <p className="text-sm text-muted-foreground">
-        {added.length
-          ? `In this rule: ${added.map((z) => z.name).join(", ")}`
-          : "No zones in this rule yet."}
-      </p>
+    <div className="flex flex-col gap-4">
+      {/*
+       * The in-depth screen: the column that held the rule gives way to the
+       * picker, and whatever sits beside it -- a map, in the product -- stays
+       * put. This is the default; the sheet below is for surfaces with no
+       * column to spare.
+       */}
+      <div className="flex h-[42rem] overflow-hidden rounded-lg border">
+        {/* As wide as the settings column it stands in for. */}
+        <div className="flex w-[26rem] shrink-0 flex-col border-r">
+          {picking ? (
+            <ZonePickerPanel
+              zones={ZONES}
+              excludeIds={added.map((z) => z.id)}
+              backLabel="Fleet cap · Parking"
+              onBack={() => setPicking(false)}
+              onPreviewChange={setPreview}
+              onAdd={(zones) => {
+                add(zones);
+                setPicking(false);
+              }}
+            />
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <header className="space-y-0.5 border-b px-4 pt-3 pb-4">
+                <h2 className="text-xl font-semibold tracking-tight">
+                  Parking
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  {added.length} zone{added.length === 1 ? "" : "s"} in this
+                  rule.
+                </p>
+              </header>
+              <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
+                {added.map((zone) => (
+                  <div
+                    key={zone.id}
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm"
+                  >
+                    <ZoneThumbnail ring={zone.ring} size={24} />
+                    <span className="truncate">{zone.name}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-auto border-t p-4">
+                <Button className="w-full" onClick={() => setPicking(true)}>
+                  Add zones
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+        {/*
+         * Standing in for the map. The point of the example is that this side
+         * never goes away, and that it hears about the row under the pointer.
+         */}
+        <div className="bg-muted/40 flex min-w-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+          {preview ? (
+            <>
+              <ZoneThumbnail ring={preview.ring} size={96} />
+              <Badge variant="secondary">{preview.name}</Badge>
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              The map stays here. Point at a zone in the list to preview it.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button variant="outline" onClick={() => setOpen(true)}>
+          Add zones in a sheet
+        </Button>
+        <p className="text-muted-foreground text-sm">
+          The same picker, for surfaces with no column to give up.
+        </p>
+      </div>
       <ZonePicker
         open={open}
         onOpenChange={setOpen}
         zones={ZONES}
         excludeIds={added.map((z) => z.id)}
-        onAdd={(zones) => setAdded((prev) => [...prev, ...zones])}
+        onAdd={add}
       />
     </div>
   );

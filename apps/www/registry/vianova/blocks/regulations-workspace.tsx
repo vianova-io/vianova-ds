@@ -14,6 +14,7 @@ import {
   Lock,
   LocateFixed,
   Map as MapIcon,
+  Minus,
   MoreHorizontal,
   Plus,
   Power,
@@ -90,6 +91,7 @@ import { Input } from "@/registry/vianova/ui/input";
 import {
   InputGroup,
   InputGroupAddon,
+  InputGroupButton,
   InputGroupInput,
   InputGroupText,
 } from "@/registry/vianova/ui/input-group";
@@ -127,6 +129,7 @@ import { LegendCategorical } from "@/registry/vianova/product/legend-categorical
 import { MapCanvas } from "@/registry/vianova/product/map-canvas";
 import { MapControls } from "@/registry/vianova/product/map-controls";
 import {
+  DEFAULT_LINE_WIDTH_M,
   MapDrawBanner,
   MapDrawControl,
   useMapDraw,
@@ -144,7 +147,7 @@ import {
   type RuleType,
 } from "@/registry/vianova/product/rule-type-icon";
 import {
-  ZonePicker,
+  ZonePickerPanel,
   type PickerZone,
 } from "@/registry/vianova/product/zone-picker";
 import { SegmentedControl } from "@/registry/vianova/product/segmented-control";
@@ -153,6 +156,7 @@ import {
   type CategoryShape,
 } from "@/registry/vianova/hooks/use-category-shape-layer";
 import { DEFAULT_BASEMAP_ID, type BasemapId } from "@/registry/vianova/lib/basemaps";
+import { CATEGORY_PALETTE } from "@/registry/vianova/lib/category-style";
 import {
   DEFAULT_BUFFER,
   OPERATORS,
@@ -239,9 +243,6 @@ const cloneRegulation = (reg: Regulation): Regulation => ({
 
 /** Rule types in a regulation, once each, in the order the rules are listed. */
 const typesOf = (reg: Regulation) => [...new Set(reg.rules.map((r) => r.type))];
-
-const zoneTotal = (reg: Regulation) =>
-  new Set(reg.rules.flatMap((r) => r.zoneIds)).size;
 
 /** Next free "<Type> N" name, so a second parking rule is "Parking 2", not another "Parking 1". */
 function nextRuleName(type: RuleType, rules: Rule[]) {
@@ -369,6 +370,7 @@ export function RegulationsWorkspace({
 
   const create = (type: RuleType) => {
     const id = uid("reg");
+    const now = new Date().toISOString();
     // Multi-parking is a container, not a rule: production starts one with a
     // parking rule, and no-parking rules are added beside it from the rail.
     const first: RuleType = type === "multi_parking" ? "parking" : type;
@@ -381,7 +383,8 @@ export function RegulationsWorkspace({
       global: { start: REFERENCE_DATE },
       visibility: "private",
       deactivated: false,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
     setDrafts((d) => ({ ...d, [id]: draft }));
     setCreating(false);
@@ -417,14 +420,18 @@ export function RegulationsWorkspace({
             setZones((all) => all.map((z) => (z.id === id ? { ...z, name } : z)))
           }
           onSave={(reg) => {
+            // The list's "Last update" is what a save moves, so it is stamped
+            // here, where every save passes, rather than in the editor's own
+            // state where a draft could carry a time it never saved at.
+            const stamped = { ...reg, updatedAt: new Date().toISOString() };
             setRegulations((all) =>
-              all.some((r) => r.id === reg.id)
-                ? all.map((r) => (r.id === reg.id ? reg : r))
-                : [reg, ...all],
+              all.some((r) => r.id === stamped.id)
+                ? all.map((r) => (r.id === stamped.id ? stamped : r))
+                : [stamped, ...all],
             );
-            setDrafts(({ [reg.id]: _, ...rest }) => rest);
-            setView({ kind: "edit", id: reg.id, isNew: false });
-            onSave?.(reg);
+            setDrafts(({ [stamped.id]: _, ...rest }) => rest);
+            setView({ kind: "edit", id: stamped.id, isNew: false });
+            onSave?.(stamped);
           }}
           onDuplicate={(reg) => {
             const copy = cloneRegulation(reg);
@@ -432,6 +439,7 @@ export function RegulationsWorkspace({
             copy.name = `${reg.name} (copy)`;
             copy.visibility = "private";
             copy.createdAt = new Date().toISOString();
+            copy.updatedAt = copy.createdAt;
             setDrafts((d) => ({ ...d, [copy.id]: copy }));
             setView({ kind: "edit", id: copy.id, isNew: true });
           }}
@@ -652,7 +660,6 @@ function RegulationList({
                 <TableHead className="w-28">Rules</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead className="hidden sm:table-cell">Status</TableHead>
-                <TableHead className="hidden md:table-cell">Zones</TableHead>
                 <TableHead className="hidden md:table-cell">
                   <button
                     type="button"
@@ -664,6 +671,7 @@ function RegulationList({
                     {sort === "desc" ? <ArrowDown className="size-3.5" /> : <ArrowUp className="size-3.5" />}
                   </button>
                 </TableHead>
+                <TableHead className="hidden md:table-cell">Last update</TableHead>
                 <TableHead className="w-20">
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -739,19 +747,18 @@ function RegulationRow({
           {reg.visibility === "public" ? <VisibilityBadge visibility="public" /> : null}
         </span>
       </TableCell>
-      <TableCell className="text-muted-foreground hidden tabular-nums md:table-cell">
-        {zoneTotal(reg)}
-      </TableCell>
       <TableCell className="text-muted-foreground hidden whitespace-nowrap md:table-cell">
         {formatDate(reg.createdAt)}
       </TableCell>
+      <TableCell className="text-muted-foreground hidden whitespace-nowrap md:table-cell">
+        {formatDate(reg.updatedAt)}
+      </TableCell>
       <TableCell>
-        {/* Two controls side by side, as production's list has and as Save Map
-            does: downloading is the one thing people come to this row to do
-            besides opening it, and behind the ⋯ it cost two clicks to reach a
-            menu that held almost nothing else. It stays in the menu as well --
-            the menu is the full list of what a row can do, the icon is the
-            shortcut past it. */}
+        {/* Download alone. The ⋯ menu held Open and Download GeoJSON and
+            nothing else: the name opens the regulation and this icon downloads
+            it, so the menu was a second click to what was already one click
+            away. Anything a row gains later goes in the editor, not back
+            behind a ⋯. */}
         <div className="flex items-center justify-end gap-0.5">
           <Button
             variant="ghost"
@@ -761,22 +768,6 @@ function RegulationRow({
           >
             <Download />
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="ghost" size="icon-sm" aria-label={`Options for ${reg.name}`}>
-                  <MoreHorizontal />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={onOpen}>Open</DropdownMenuItem>
-              <DropdownMenuItem onClick={onDownload}>
-                <Download />
-                Download GeoJSON
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </TableCell>
     </TableRow>
@@ -1025,7 +1016,26 @@ function RegulationEditor({
   const [saving, setSaving] = React.useState(false);
   const [confirmLeave, setConfirmLeave] = React.useState(false);
   const [confirmDeactivate, setConfirmDeactivate] = React.useState(false);
-  const [pickerOpen, setPickerOpen] = React.useState(false);
+  /*
+   * Adding zones is a screen, not an overlay.
+   *
+   * It was a sheet, which covered the map -- the one thing worth looking at
+   * while choosing an area. In its place the settings column goes one level
+   * deeper, the way it already does from the list into a regulation, and the
+   * map keeps its half of the screen and lights up what is being picked.
+   */
+  const [picking, setPicking] = React.useState(false);
+  /** The zone under the pointer in the panel, drawn on the map as you read. */
+  const [preview, setPreview] = React.useState<PickerZone | null>(null);
+  /** Everything ticked so far, drawn and framed before it is committed. */
+  const [candidates, setCandidates] = React.useState<PickerZone[]>([]);
+  /*
+   * The tool being drawn with, held here rather than inside the map, because
+   * two things arm it now: the map's own toolbar, and "Draw on the map" in
+   * the Add zones screen. That screen is the settings column, a sibling of
+   * the map, so the one piece of state they share has to sit above both.
+   */
+  const [drawMode, setDrawMode] = React.useState<DrawMode | null>(null);
   const [focusZone, setFocusZone] = React.useState<{ id: string; at: number } | null>(null);
   /*
    * Below lg the settings and the map take turns rather than stacking: stacked,
@@ -1084,6 +1094,13 @@ function RegulationEditor({
 
   const back = () => (dirty ? setConfirmLeave(true) : onClose());
 
+  /** Leaves Add zones without adding, and takes its drawing off the map. */
+  const stopPicking = () => {
+    setPicking(false);
+    setPreview(null);
+    setCandidates([]);
+  };
+
   const duplicateRule = (id: string) => {
     const src = draft.rules.find((r) => r.id === id);
     if (!src) return;
@@ -1108,12 +1125,41 @@ function RegulationEditor({
     <div className="flex h-full flex-col lg:flex-row">
       {/* Panel */}
       <section
-        aria-label="Regulation settings"
+        aria-label={picking ? "Add zones" : "Regulation settings"}
         className={cn(
           "bg-background flex min-w-0 flex-col lg:h-full lg:w-[460px] lg:shrink-0 lg:flex-none lg:border-r",
           pane === "settings" ? "min-h-0 flex-1" : "shrink-0",
         )}
       >
+        {picking && rule ? (
+          <ZonePickerPanel
+            zones={zones}
+            excludeIds={rule.zoneIds}
+            // Where the arrow returns to, named: the rule in a multi-rule
+            // regulation, the regulation itself when there is only one.
+            backLabel={multi ? `${draft.name} · ${rule.name}` : draft.name}
+            onBack={stopPicking}
+            onPreviewChange={setPreview}
+            onSelectionChange={setCandidates}
+            onAdd={(picked) => {
+              // Pasted and uploaded zones are ones the library has never seen.
+              const fresh = picked.filter((z) => !zoneIndex.has(z.id));
+              if (fresh.length) onZonesCreated(fresh);
+              addZones(picked, rule.id);
+              stopPicking();
+            }}
+            onDraw={(tool) => {
+              // Drawing happens on the map, so the panel steps back out to the
+              // rule first -- below lg that is also what puts the map on
+              // screen, and arming a tool on a hidden pane would strand the
+              // reader on the settings with nothing to draw on.
+              stopPicking();
+              setPane("map");
+              setDrawMode(tool);
+            }}
+          />
+        ) : (
+          <>
         <header className="space-y-2 border-b px-4 pt-3 pb-3 lg:pb-4">
           <div className="flex items-center justify-between gap-2">
             <Button variant="ghost" size="sm" className="-ml-2" onClick={back}>
@@ -1227,7 +1273,12 @@ function RegulationEditor({
                 zoneIndex={zoneIndex}
                 zonesLoading={zonesLoading}
                 onChange={(next) => updateRule(rule.id, next)}
-                onAddZones={() => setPickerOpen(true)}
+                onAddZones={() => {
+                  // On a phone the panes take turns, and Add zones is the
+                  // settings pane's own next screen.
+                  setPane("settings");
+                  setPicking(true);
+                }}
                 onZoneRename={onZoneRename}
                 onLocate={(id) => {
                   setPane("map");
@@ -1256,6 +1307,8 @@ function RegulationEditor({
           message={isNew ? "Not saved yet" : undefined}
           saveLabel={isNew ? "Create regulation" : "Save"}
         />
+          </>
+        )}
       </section>
 
       {/* Map */}
@@ -1266,6 +1319,10 @@ function RegulationEditor({
         zoneIndex={zoneIndex}
         focusZone={focusZone}
         canDraw={Boolean(rule)}
+        drawMode={drawMode}
+        onDrawModeChange={setDrawMode}
+        candidates={candidates}
+        preview={preview}
         onDrawn={(ring) => {
           if (!rule) return;
           const zone: PickerZone = {
@@ -1282,22 +1339,6 @@ function RegulationEditor({
           setPane("settings");
         }}
       />
-
-      {rule ? (
-        <ZonePicker
-          open={pickerOpen}
-          onOpenChange={setPickerOpen}
-          zones={zones}
-          excludeIds={rule.zoneIds}
-          onAdd={(picked) => {
-            // Pasted GeoJSON arrives as zones the library has never seen.
-            const fresh = picked.filter((z) => !zoneIndex.has(z.id));
-            if (fresh.length) onZonesCreated(fresh);
-            addZones(picked, rule.id);
-          }}
-          side="left"
-        />
-      ) : null}
 
       <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
         <AlertDialogContent>
@@ -1714,6 +1755,20 @@ function NumberField({
   value?: number;
   onChange: (next: number | undefined) => void;
 }) {
+  /**
+   * Stepping from whatever is there now. An empty field starts at `min` when
+   * there is one, so the first click lands on a legal value rather than on 0
+   * for a field whose floor is 5.
+   */
+  const nudge = (by: number) => {
+    const from = value ?? min ?? 0;
+    const next = round(from + by * step);
+    onChange(clamp(next, min, max));
+  };
+
+  const atMin = value !== undefined && min !== undefined && value <= min;
+  const atMax = value !== undefined && max !== undefined && value >= max;
+
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
@@ -1732,10 +1787,47 @@ function NumberField({
         />
         <InputGroupAddon align="inline-end">
           <InputGroupText>{unit}</InputGroupText>
+          {/* The browser's own arrows are suppressed in Input: they render at
+              about 10px, well under the target size everything else here
+              meets. These are the 24px replacements. */}
+          <InputGroupButton
+            size="icon-xs"
+            aria-label={`Decrease ${label.toLowerCase()}`}
+            disabled={atMin}
+            onClick={() => nudge(-1)}
+          >
+            <Minus />
+          </InputGroupButton>
+          <InputGroupButton
+            size="icon-xs"
+            aria-label={`Increase ${label.toLowerCase()}`}
+            disabled={atMax}
+            onClick={() => nudge(1)}
+          >
+            <Plus />
+          </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
     </Field>
   );
+}
+
+/**
+ * Keeps a stepped value inside the spec's bounds, either of which may be
+ * absent -- a fleet cap has a floor and no ceiling.
+ */
+function clamp(n: number, min?: number, max?: number) {
+  if (min !== undefined && n < min) return min;
+  if (max !== undefined && n > max) return max;
+  return n;
+}
+
+/**
+ * Binary floating point, rounded off. A subsidy steps by 0.05, and 0.1 + 0.05
+ * is 0.15000000000000002 -- which a currency field must never show.
+ */
+function round(n: number) {
+  return Math.round(n * 1e6) / 1e6;
 }
 
 /**
@@ -1993,6 +2085,13 @@ function ZoneList({
 
 type Bounds = [[number, number], [number, number]];
 
+/**
+ * The look of a zone that is chosen but not yet added. Module scope, because
+ * useCategoryShapeLayer asks for a styles object that does not change
+ * identity between renders.
+ */
+const CANDIDATE_STYLES = { candidate: { color: CATEGORY_PALETTE[1] } };
+
 function boundsOf(rings: [number, number][][]): Bounds | null {
   let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
   for (const ring of rings)
@@ -2011,6 +2110,10 @@ function RegulationMap({
   zoneIndex,
   focusZone,
   canDraw,
+  drawMode,
+  onDrawModeChange,
+  candidates,
+  preview,
   onDrawn,
   className,
 }: {
@@ -2019,6 +2122,13 @@ function RegulationMap({
   zoneIndex: Map<string, PickerZone>;
   focusZone: { id: string; at: number } | null;
   canDraw: boolean;
+  /** Zones chosen in the Add zones panel but not yet added to the rule. */
+  candidates: PickerZone[];
+  /** The one being read in that panel, drawn over the rest. */
+  preview: PickerZone | null;
+  /** Owned above, because the Add zones screen arms it too. */
+  drawMode: DrawMode | null;
+  onDrawModeChange: (mode: DrawMode | null) => void;
   onDrawn: (ring: [number, number][]) => void;
   className?: string;
 }) {
@@ -2044,7 +2154,10 @@ function RegulationMap({
     return () => ro.disconnect();
   }, [map]);
   const [basemapId, setBasemapId] = React.useState<BasemapId>(DEFAULT_BASEMAP_ID);
-  const [drawMode, setDrawMode] = React.useState<DrawMode | null>(null);
+  // Kept across drawings rather than reset with the tool: someone marking up
+  // a street network sets the corridor once and then draws a dozen streets at
+  // that width.
+  const [lineWidth, setLineWidth] = React.useState(DEFAULT_LINE_WIDTH_M);
 
   // The selected rule draws on top and the others sit underneath, so in a
   // multi-rule regulation you can see where a parking bay falls inside a
@@ -2073,14 +2186,52 @@ function RegulationMap({
   useCategoryShapeLayer({ map, enabled: others.length > 0, shapes: others, styles, id: "regulation-others" });
   useCategoryShapeLayer({ map, enabled: focused.length > 0, shapes: focused, styles, id: "regulation-focused" });
 
+  /*
+   * What Add zones is about to add, over the top of what the rule already has.
+   *
+   * Blue, and not the rule's own colour, because these are not in the rule
+   * yet: beside purple caps, green parking, amber, red and teal, blue is the
+   * one slot the rule types leave free, so a candidate can never be mistaken
+   * for something already saved. It is the design system's own categorical
+   * blue rather than a colour invented here.
+   */
+  const candidateShapes = React.useMemo(
+    () => candidates.map((z) => ({ ring: z.ring, category: "candidate" })),
+    [candidates],
+  );
+  const previewShapes = React.useMemo(
+    () => (preview ? [{ ring: preview.ring, category: "candidate" }] : []),
+    [preview],
+  );
+  useCategoryShapeLayer({
+    map,
+    enabled: candidateShapes.length > 0,
+    shapes: candidateShapes,
+    styles: CANDIDATE_STYLES,
+    width: 2,
+    id: "regulation-candidates",
+  });
+  // The row being read, drawn again on top with a heavier outline. A second
+  // layer rather than a second colour: the zone is the same zone, and what
+  // the reader needs is to find it, not to be told it is a different kind.
+  useCategoryShapeLayer({
+    map,
+    enabled: previewShapes.length > 0,
+    shapes: previewShapes,
+    styles: CANDIDATE_STYLES,
+    width: 4,
+    id: "regulation-preview",
+  });
+
   const draw = useMapDraw({
     map,
     mode: drawMode,
+    lineWidthMeters: lineWidth,
     onComplete: (ring) => {
       onDrawn(ring);
-      setDrawMode(null);
+      onDrawModeChange(null);
     },
-    onCancel: () => setDrawMode(null),
+    onCancel: () => onDrawModeChange(null),
   });
 
   // Frame the regulation once its zones are known, and again when a different
@@ -2105,8 +2256,26 @@ function RegulationMap({
     if (b) map.fitBounds(b, { padding: 80, maxZoom: 17 });
   }, [map, visible, focusZone, zoneIndex]);
 
+  /*
+   * Frame what is being picked, as it is picked.
+   *
+   * Keyed on how many are chosen rather than on the zones themselves, so the
+   * camera moves when the selection grows or shrinks and stays put while
+   * someone scrolls the list or hovers a row -- which the preview layer
+   * answers instead. Clearing the selection leaves the camera where it is:
+   * flying back on an untick would be the map arguing with the reader.
+   */
+  const candidateCount = candidates.length;
   React.useEffect(() => {
-    if (!canDraw) setDrawMode(null);
+    if (!map || !visible || candidateCount === 0) return;
+    const b = boundsOf(candidates.map((z) => z.ring));
+    if (b) map.fitBounds(b, { padding: 64, maxZoom: 16 });
+    // candidates is read for its rings but deliberately not depended on; see above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, visible, candidateCount]);
+
+  React.useEffect(() => {
+    if (!canDraw) onDrawModeChange(null);
   }, [canDraw]);
 
   return (
@@ -2136,15 +2305,17 @@ function RegulationMap({
       <MapDrawControl
         className="absolute top-3 right-3"
         mode={drawMode}
-        onModeChange={setDrawMode}
+        onModeChange={onDrawModeChange}
         disabled={!canDraw}
       />
 
       {drawMode ? (
         <MapDrawBanner
-          className="absolute top-3 left-1/2 w-[min(22rem,calc(100%-6rem))] -translate-x-1/2"
+          className="absolute top-3 left-1/2 w-[min(30rem,calc(100%-6rem))] -translate-x-1/2"
           mode={drawMode}
           points={draw.points}
+          lineWidthMeters={lineWidth}
+          onLineWidthChange={setLineWidth}
           onDone={draw.finish}
           onCancel={draw.cancel}
         />
