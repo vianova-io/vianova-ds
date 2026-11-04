@@ -816,6 +816,7 @@
         "@vianova/table",
         "@vianova/textarea",
         "@vianova/toggle-group",
+        "@vianova/tooltip",
         "@vianova/trip-report",
         "@vianova/use-mobile",
         "@vianova/utils"
