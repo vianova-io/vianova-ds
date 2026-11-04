@@ -40,7 +40,7 @@ const VARIANTS = [
   {
     id: "edges",
     label: "Proposed",
-    note: "Layers at the left edge and Charts at the right at every width. Basemap in the corner stack with zoom.",
+    note: "Layers at the left edge and Widgets at the right at every width. Basemap in the corner stack with zoom.",
   },
 ] as const;
 

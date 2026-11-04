@@ -1822,7 +1822,7 @@ export function MapWorkspace({
   const edgeBar = topBar === "edges";
   const PANEL_META = {
     data: { label: "Data layers", Icon: Layers, controls: dataPaneId },
-    charts: { label: "Charts", Icon: BarChart3, controls: chartsPaneId },
+    charts: { label: "Widgets", Icon: BarChart3, controls: chartsPaneId },
   } as const;
 
   /** lg and up: both panels fit, so each is its own toggle. */
@@ -2796,7 +2796,7 @@ export function MapWorkspace({
         onOpenChange={(next) => setPane(next ? "charts" : null)}
         snap={traySnap}
         onSnapChange={setTraySnap}
-        label="Charts"
+        label="Widgets"
         // bottom-10, not the tray's own bottom-0: MapLibre's attribution
         // sits bottom-right at z-index 2 and this is z-20, so a tray docked to
         // the edge hides the credit the tiles are served under. 40px is the
@@ -2815,16 +2815,16 @@ export function MapWorkspace({
           )}
         >
           <FloatingPanelHeader className="border-b border-border p-3">
-            <FloatingPanelTitle className="px-0">Charts</FloatingPanelTitle>
+            <FloatingPanelTitle className="px-0">Widgets</FloatingPanelTitle>
             <FloatingPanelActions>
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label="Collapse charts"
+                aria-label="Collapse widgets"
               >
                 <Minimize2 />
               </Button>
-              <Button variant="ghost" size="icon-sm" aria-label="Add chart">
+              <Button variant="ghost" size="icon-sm" aria-label="Add widget">
                 <Plus />
               </Button>
             </FloatingPanelActions>
@@ -2835,7 +2835,7 @@ export function MapWorkspace({
               value={chartLayer}
               onValueChange={(value) => setChartLayer(value ?? "flows")}
             >
-              <SelectTrigger className="w-full" aria-label="Chart source layer">
+              <SelectTrigger className="w-full" aria-label="Widget source layer">
                 {/* Base UI renders the raw value unless given a mapping, which
                   would show "flows" instead of the layer name. */}
                 <SelectValue>
@@ -2856,7 +2856,7 @@ export function MapWorkspace({
               <InputGroupAddon>
                 <Search />
               </InputGroupAddon>
-              <InputGroupInput placeholder="Search charts" />
+              <InputGroupInput placeholder="Search widgets" />
             </InputGroup>
           </div>
 

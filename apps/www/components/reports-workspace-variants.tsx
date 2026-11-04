@@ -22,12 +22,12 @@ const VARIANTS: Array<{ id: FilterDisplay; label: string; note: string }> = [
   {
     id: "count",
     label: "Prod",
-    note: "A filter icon and a count beside the dataset, on charts filtered beyond the report. The list opens on click, or in a bottom tray on a phone.",
+    note: "A filter icon and a count beside the dataset, on widgets filtered beyond the report. The list opens on click, or in a bottom tray on a phone.",
   },
   {
     id: "labels",
     label: "UX ideation",
-    note: "The filters only that chart is under, as labels under its header: “Type: Sidewalk parking +1”. One line; what does not fit folds into a “+2” that opens the full list. Open Parking compliance to see them.",
+    note: "The filters only that widget is under, as labels under its header: “Type: Sidewalk parking +1”. One line; what does not fit folds into a “+2” that opens the full list. Open Parking compliance to see them.",
   },
 ];
 
@@ -39,11 +39,11 @@ export function ReportsWorkspaceVariants() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
-          Chart filters
+          Widget filters
         </span>
         <div
           role="radiogroup"
-          aria-label="Chart filters"
+          aria-label="Widget filters"
           className="border-border bg-card flex items-center gap-1 rounded-lg border p-1"
         >
           {VARIANTS.map((v) => (

@@ -14,7 +14,7 @@ export default function FloatingPanelDefault() {
     <div className="flex h-56 w-full items-start justify-start rounded-lg bg-surface-sunken p-3">
       <FloatingPanel className="max-h-full w-64">
         <FloatingPanelHeader className="border-b border-border p-3">
-          <FloatingPanelTitle className="px-0">Charts</FloatingPanelTitle>
+          <FloatingPanelTitle className="px-0">Widgets</FloatingPanelTitle>
           <FloatingPanelActions>
             <Button variant="ghost" size="icon-sm" aria-label="Add">
               <Plus />

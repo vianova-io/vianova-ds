@@ -47,7 +47,7 @@ function ChartCardHeader({
         {title}
       </span>
       {action === undefined ? (
-        <Button variant="ghost" size="icon-xs" aria-label="Chart options">
+        <Button variant="ghost" size="icon-xs" aria-label="Widget options">
           <MoreHorizontal />
         </Button>
       ) : (

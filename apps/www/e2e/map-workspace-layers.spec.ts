@@ -676,13 +676,13 @@ test.describe("the panel is compact", () => {
   });
 });
 
-test.describe("the charts follow the layer", () => {
+test.describe("the widgets follow the layer", () => {
   test.use({ viewport: WIDE });
 
   const source = (page: Page) =>
-    page.getByRole("combobox", { name: "Chart source layer" });
+    page.getByRole("combobox", { name: "Widget source layer" });
 
-  test("switching a layer on points the charts at it", async ({ page }) => {
+  test("switching a layer on points the widgets at it", async ({ page }) => {
     await open(page);
     await expect(source(page)).toContainText("Vehicle Flows");
 
@@ -695,7 +695,7 @@ test.describe("the charts follow the layer", () => {
     await expect(block(page).getByText(/^By /).first()).toBeVisible();
   });
 
-  test("switching it off hands the charts back", async ({ page }) => {
+  test("switching it off hands the widgets back", async ({ page }) => {
     await open(page);
     await toggle(page, "Vehicle events").click();
     await expect(source(page)).toContainText("Vehicle events");

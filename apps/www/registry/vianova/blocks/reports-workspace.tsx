@@ -616,7 +616,7 @@ type Template = {
 };
 
 /**
- * What "Add charts" and the in-cell picker offer, each with the cells it asks
+ * What "Add widgets" and the in-cell picker offer, each with the cells it asks
  * for. A chart is 4 by 2, as in the product; a time series reads better wide.
  */
 const LIBRARY: Template[] = [
@@ -2518,7 +2518,7 @@ function WidgetSettings({
           />
           {!METRICS[widget.metric].count ? (
             <p className="text-muted-foreground text-xs">
-              A share of an average means nothing, so this chart always shows
+              A share of an average means nothing, so this widget always shows
               values.
             </p>
           ) : null}
@@ -2596,7 +2596,7 @@ function FilterDetails({
         <DrawerContent>
           <DrawerHeader className="flex-row items-center justify-between gap-2 border-b pb-3 text-left">
             <DrawerTitle className="text-base font-semibold">
-              Filters on this chart
+              Filters on this widget
             </DrawerTitle>
             <DrawerDescription className="sr-only">
               {chart}, from {DATASETS[dataset].label}
@@ -2641,7 +2641,7 @@ function FilterDetails({
         {children}
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 gap-2 p-3">
-        <p className="text-sm font-medium">Filters on this chart</p>
+        <p className="text-sm font-medium">Filters on this widget</p>
         <dl className="space-y-1.5 text-xs">
           {rows.map((r) => (
             <div key={r.id} className="flex justify-between gap-3">
@@ -2679,8 +2679,8 @@ function CardFilters({
       filters={filters}
       dataset={dataset}
       chart={chart}
-      label={`${applied.length} ${applied.length === 1 ? "filter" : "filters"} on this chart`}
-      title="Filters on this chart"
+      label={`${applied.length} ${applied.length === 1 ? "filter" : "filters"} on this widget`}
+      title="Filters on this widget"
       className={{
         mobile:
           "text-muted-foreground active:text-foreground focus-visible:ring-ring -mr-1.5 inline-flex min-h-8 min-w-8 shrink-0 items-center justify-center gap-1 rounded-md px-1.5 text-xs focus-visible:ring-2 focus-visible:outline-none",
@@ -2833,7 +2833,7 @@ function CardFilterLabels({
       </div>
       <ul
         ref={rowRef}
-        aria-label="Filters on this chart"
+        aria-label="Filters on this widget"
         // The vertical padding keeps focus rings and the phone's larger tap
         // target clear of the clip.
         className="-my-1.5 flex w-full min-w-0 items-center gap-1 overflow-hidden py-1.5"
@@ -2845,7 +2845,7 @@ function CardFilterLabels({
               filters={filters}
               dataset={dataset}
               chart={chart}
-              label={`${hidden} more ${hidden === 1 ? "filter" : "filters"} on this chart`}
+              label={`${hidden} more ${hidden === 1 ? "filter" : "filters"} on this widget`}
               className={{
                 // A 32px target around the 20px chip.
                 mobile: cn(
@@ -2933,9 +2933,9 @@ function WidgetCard({
           <Icon className="text-muted-foreground size-4 shrink-0" aria-hidden />
           <InlineEdit
             variant="title"
-            label="chart title"
+            label="widget title"
             value={widget.title}
-            placeholder="Untitled chart"
+            placeholder="Untitled widget"
             onValueChange={(next) => {
               if (next) onChange({ ...widget, title: next });
             }}
@@ -3038,7 +3038,7 @@ function WidgetCard({
         open={confirming}
         onOpenChange={setConfirming}
         title={`Delete “${name}”?`}
-        description="It comes off this dashboard. The chart stays in the library."
+        description="It comes off this dashboard. The widget stays in the library."
         confirmLabel="Delete"
         destructive
         onConfirm={onDelete}
@@ -3050,7 +3050,7 @@ function WidgetCard({
       >
         {exportFailed ? (
           <p role="alert" className="text-destructive mb-2 text-xs">
-            Couldn&apos;t draw this chart as an image.
+            Couldn&apos;t draw this widget as an image.
           </p>
         ) : null}
         <WidgetBody widget={widget} data={data} />
@@ -3329,7 +3329,7 @@ const ReportCanvas = React.forwardRef<
   const [hinted, setHinted] = React.useState<{ x: number; y: number } | null>(
     null,
   );
-  // Where the Add charts dialog was opened from: a cell or a drawn area, or
+  // Where the Add widgets dialog was opened from: a cell or a drawn area, or
   // null for "anywhere" (the stacked layout). Undefined while it is closed.
   const [adding, setAdding] = React.useState<Target | null | undefined>(
     undefined,
@@ -3396,7 +3396,7 @@ const ReportCanvas = React.forwardRef<
             behavior: "smooth",
           });
           setSaid(
-            "Nothing was added. Choose Chart or Text at the end of the dashboard.",
+            "Nothing was added. Choose Widget or Text at the end of the dashboard.",
           );
           return;
         }
@@ -3410,7 +3410,7 @@ const ReportCanvas = React.forwardRef<
               focusCell({ x, y });
               setHinted({ x, y });
               setSaid(
-                `Row ${y + 1}, column ${x + 1} is free. Nothing was added: choose Chart or Text there.`,
+                `Row ${y + 1}, column ${x + 1} is free. Nothing was added: choose Widget or Text there.`,
               );
               return;
             }
@@ -3486,7 +3486,7 @@ const ReportCanvas = React.forwardRef<
     setSaid(
       added.length === 1
         ? `Added ${nameOf(added[0]!)} at row ${first.y + 1}, column ${first.x + 1}, ${first.w} by ${first.h} cells.`
-        : `Added ${added.length} charts, the first at row ${first.y + 1}, column ${first.x + 1}.`,
+        : `Added ${added.length} widgets, the first at row ${first.y + 1}, column ${first.x + 1}.`,
     );
   };
 
@@ -3603,7 +3603,7 @@ const ReportCanvas = React.forwardRef<
           >
             <Button variant="outline" onClick={() => setAdding(null)}>
               <ChartColumn data-icon="inline-start" />
-              Create a chart
+              Create a widget
             </Button>
             <Button variant="outline" onClick={() => placeText(null)}>
               <Type data-icon="inline-start" />
@@ -3738,7 +3738,7 @@ const ReportCanvas = React.forwardRef<
       className="report-canvas"
     >
       <p id="report-canvas-help" className="sr-only">
-        Empty cells: use the arrow keys to move between them, then Tab to Chart
+        Empty cells: use the arrow keys to move between them, then Tab to Widget
         or Text. Move a widget with its grip and the arrow keys; hold Shift to
         resize it.
       </p>
@@ -3859,7 +3859,7 @@ const ReportCanvas = React.forwardRef<
                     />
                     {/* Said in the live region too, so it is not sight-only. */}
                     <TooltipContent side="top">
-                      Nothing added yet — choose Chart or Text here.
+                      Nothing added yet — choose Widget or Text here.
                     </TooltipContent>
                   </Tooltip>
                 ) : null}
@@ -3869,8 +3869,8 @@ const ReportCanvas = React.forwardRef<
                       variant="outline"
                       size="xs"
                       tabIndex={isCurrent ? 0 : -1}
-                      aria-label="Create a chart here"
-                      title="Create a chart"
+                      aria-label="Create a widget here"
+                      title="Create a widget"
                       className="bg-background hover:border-primary hover:text-primary w-full min-w-0 shadow-xs"
                       onClick={() =>
                         setAdding({
@@ -3882,7 +3882,7 @@ const ReportCanvas = React.forwardRef<
                     >
                       <ChartColumn />
                       <span className="hidden truncate @[4.5rem]:inline">
-                        Chart
+                        Widget
                       </span>
                     </Button>
                     <Button
@@ -4038,9 +4038,9 @@ const ReportCanvas = React.forwardRef<
                   className="hover:border-primary/60 focus-visible:ring-ring flex flex-col items-start gap-1 rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:outline-none"
                 >
                   <ChartColumn className="text-primary size-5" aria-hidden />
-                  <span className="text-sm font-medium">Chart</span>
+                  <span className="text-sm font-medium">Widget</span>
                   <span className="text-muted-foreground text-xs">
-                    Pick from your chart library
+                    Pick from your widget library
                   </span>
                 </button>
                 <button
@@ -4066,7 +4066,7 @@ const ReportCanvas = React.forwardRef<
 });
 
 /* -------------------------------------------------------------------------- */
-/* Add charts                                                                  */
+/* Add widgets                                                                 */
 /* -------------------------------------------------------------------------- */
 
 /**
@@ -4162,7 +4162,7 @@ const TYPE_OPTIONS = CHART_TYPES.map((t) => ({
 }));
 
 /**
- * The chart library, laid out as the product's "Add charts": a toolbar of
+ * The widget library, laid out as the product's "Add widgets": a toolbar of
  * search and facet filters over a grid of chart cards. Cards are ticked, not
  * placed one by one, and the ticks survive filtering; the footer adds them all.
  */
@@ -4213,9 +4213,9 @@ function AddChartsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[min(52rem,calc(100svh-4rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(80rem,calc(100vw-4rem))]">
         <DialogHeader className="border-b px-4 py-3">
-          <DialogTitle className="text-base">Add charts</DialogTitle>
+          <DialogTitle className="text-base">Add widgets</DialogTitle>
           <DialogDescription className="sr-only">
-            Pick one or more charts from your library, then add them.
+            Pick one or more widgets from your library, then add them.
           </DialogDescription>
         </DialogHeader>
         <div className="bg-muted/30 flex flex-wrap items-center gap-2 border-b px-4 py-3">
@@ -4226,8 +4226,8 @@ function AddChartsDialog({
             <InputGroupInput
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search charts…"
-              aria-label="Search charts"
+              placeholder="Search widgets…"
+              aria-label="Search widgets"
             />
           </InputGroup>
           <FacetFilter
@@ -4240,8 +4240,8 @@ function AddChartsDialog({
           />
           <FacetFilter
             icon={ChartLine}
-            label="Chart type"
-            searchLabel="Look for chart type"
+            label="Widget type"
+            searchLabel="Look for widget type"
             options={TYPE_OPTIONS}
             value={types}
             onChange={setTypes}
@@ -4283,7 +4283,7 @@ function AddChartsDialog({
                     aria-hidden
                   />
                 </span>
-                Create a new chart
+                Create a new widget
               </button>
             </li>
             {items.map((w) => {
@@ -4345,7 +4345,7 @@ function AddChartsDialog({
           </ul>
           {items.length === 0 ? (
             <p className="text-muted-foreground py-12 text-center text-sm">
-              No chart in the library matches these filters.
+              No widget in the library matches these filters.
             </p>
           ) : null}
         </div>
@@ -4357,7 +4357,7 @@ function AddChartsDialog({
               onOpenChange(false);
             }}
           >
-            Add charts ({picked.length})
+            Add widgets ({picked.length})
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -4653,7 +4653,7 @@ function ReportFilterBar({
               <PopoverContent align="start" className="w-64 p-0">
                 {ds ? (
                   <p className="text-muted-foreground border-b px-3 py-2 text-xs">
-                    Only charts from {ds.label}
+                    Only widgets from {ds.label}
                   </p>
                 ) : null}
                 <ValuePicker
@@ -4946,7 +4946,7 @@ function ReportView({
           <TriangleAlert />
           <AlertTitle>Couldn&apos;t load the {DATASETS[id].noun}</AlertTitle>
           <AlertDescription>
-            {DATASETS[id].label} didn&apos;t load, so its charts are empty.
+            {DATASETS[id].label} didn&apos;t load, so its widgets are empty.
             Nothing was changed.
           </AlertDescription>
           <AlertAction>
@@ -5103,7 +5103,7 @@ function ReportList({
             <EmptyDescription>
               {query
                 ? `No dashboard matches “${query}”.`
-                : "Create one to put charts from your data side by side."}
+                : "Create one to put widgets from your data side by side."}
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>

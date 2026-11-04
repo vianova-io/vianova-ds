@@ -26,7 +26,7 @@ const grabber = (page: Page) =>
  * The switcher's own buttons.
  *
  * Scoped: the docs page prints the block's source under the demo, so a bare
- * getByRole("button", { name: "Charts" }) matches the switcher, the lg
+ * getByRole("button", { name: "Widgets" }) matches the switcher, the lg
  * disclosure and the listing, and fails strict mode for a reason that has
  * nothing to do with the tray.
  */
@@ -100,11 +100,11 @@ test.describe("the phone's bottom tray", () => {
 
   test("the other button swaps rather than closing", async ({ page }) => {
     await open(page);
-    await switcherButton(page, "Charts").click();
+    await switcherButton(page, "Widgets").click();
 
     await expect(openTray(page)).toHaveCount(1);
     await expect(
-      page.getByRole("slider", { name: "Charts height" }),
+      page.getByRole("slider", { name: "Widgets height" }),
     ).toBeVisible();
     await expect(grabber(page)).toHaveCount(0);
   });
@@ -117,7 +117,7 @@ test.describe("the phone's bottom tray", () => {
     await page.keyboard.press("ArrowDown");
     await expect(openTray(page)).toHaveAttribute("data-snap", "peek");
 
-    await switcherButton(page, "Charts").click();
+    await switcherButton(page, "Widgets").click();
     // Only one tray is ever on screen, so a reader who dragged it down means
     // it to stay down when they look at the other panel.
     await expect(openTray(page)).toHaveAttribute("data-snap", "peek");

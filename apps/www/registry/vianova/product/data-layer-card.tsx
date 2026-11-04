@@ -226,7 +226,7 @@ export function DataLayerCard({
               <MoreHorizontal />
             </Button>
           )}
-          <Button variant="ghost" size="icon-xs" aria-label="Layer charts">
+          <Button variant="ghost" size="icon-xs" aria-label="Layer widgets">
             <BarChart3 />
           </Button>
           <Button

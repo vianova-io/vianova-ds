@@ -48,14 +48,14 @@ test("the + goes to the first free cell and says it added nothing", async ({
   // Scoped to the tooltip itself: this page also prints the block's source,
   // so the bare string matches the code listing as well.
   await expect(hintTooltip(page)).toHaveText(
-    "Nothing added yet — choose Chart or Text here.",
+    "Nothing added yet — choose Widget or Text here.",
   );
 
   // And it really did not insert.
   expect(await canvas.locator("[data-slot=report-widget]").count()).toBe(before);
 
   // The cell it landed on holds focus and offers the two ways in.
-  await expect(canvas.getByRole("button", { name: "Create a chart here" })).toBeVisible();
+  await expect(canvas.getByRole("button", { name: "Create a widget here" })).toBeVisible();
   await expect(canvas.getByRole("button", { name: "Create text here" })).toBeVisible();
 });
 
