@@ -31,6 +31,10 @@ import {
   DropdownMenuTrigger,
 } from "@/registry/vianova/ui/dropdown-menu";
 import { Kbd } from "@/registry/vianova/ui/kbd";
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/registry/vianova/ui/toggle-group";
 import { resolveCssColor } from "@/registry/vianova/lib/css-color";
 import { cn } from "@/registry/vianova/lib/utils";
 import { corridorAround } from "@/registry/vianova/lib/zone-geometry";
@@ -128,6 +132,54 @@ const MODES: {
   { value: "line", id: "line", key: "L", icon: Route },
 ];
 
+/**
+ * S/F/C/P/L and Escape, on the window.
+ *
+ * Extracted so the split control and the open toolbar below share one
+ * listener rather than each growing their own: two copies would both fire on
+ * `P`, which is harmless today only because setting the same mode twice is.
+ *
+ * Only ever enable it on one control at a time -- `enabled` is how a surface
+ * that shows both silences the one that is not in charge.
+ */
+export function useMapDrawShortcuts({
+  mode,
+  onModeChange,
+  enabled = true,
+}: {
+  mode: DrawMode | null;
+  onModeChange: (mode: DrawMode | null) => void;
+  enabled?: boolean;
+}) {
+  // Read through a ref so the listener is attached once, not re-attached on
+  // every mode change the reader makes.
+  const stateRef = React.useRef({ mode, onModeChange });
+  stateRef.current = { mode, onModeChange };
+
+  React.useEffect(() => {
+    if (!enabled) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || event.defaultPrevented || isForeignKey(event)) return;
+      const { mode: current, onModeChange: change } = stateRef.current;
+      if (event.key === "Escape") {
+        if (current !== null) change(null);
+        return;
+      }
+      const key = event.key.toLowerCase();
+      // `in`, because KEY_TO_MODE.s is null and a truthiness test would drop
+      // the one shortcut that stops a drawing.
+      if (!(key in KEY_TO_MODE)) return;
+      const picked = KEY_TO_MODE[key]!;
+      if (picked !== current) {
+        event.preventDefault();
+        change(picked ?? null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [enabled]);
+}
+
 /** `s` maps to null, so membership is tested with `in`, not truthiness. */
 const KEY_TO_MODE: Record<string, DrawMode | null> = {
   s: null,
@@ -196,33 +248,7 @@ export function MapDrawControl({
   // caller passing an inline object would defeat the memo anyway.
   const t = { ...DEFAULT_LABELS, ...labels };
 
-  // Read through a ref so the listener is attached once, not re-attached on
-  // every mode change the reader makes.
-  const stateRef = React.useRef({ mode, onModeChange });
-  stateRef.current = { mode, onModeChange };
-
-  React.useEffect(() => {
-    if (!shortcuts || disabled) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat || event.defaultPrevented || isForeignKey(event)) return;
-      const { mode: current, onModeChange: change } = stateRef.current;
-      if (event.key === "Escape") {
-        if (current !== null) change(null);
-        return;
-      }
-      const key = event.key.toLowerCase();
-      // `in`, because KEY_TO_MODE.s is null and a truthiness test would drop
-      // the one shortcut that stops a drawing.
-      if (!(key in KEY_TO_MODE)) return;
-      const picked = KEY_TO_MODE[key]!;
-      if (picked !== current) {
-        event.preventDefault();
-        change(picked ?? null);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [shortcuts, disabled]);
+  useMapDrawShortcuts({ mode, onModeChange, enabled: shortcuts && !disabled });
 
   const current = MODES.find((m) => m.value === mode) ?? MODES[0]!;
   const CurrentIcon = current.icon;
@@ -371,6 +397,77 @@ export const MIN_POINTS: Record<DrawMode, number> = {
 
 /** Which modes are drawn by clicking points rather than by dragging. */
 const isPointMode = (mode: DrawMode) => mode === "polygon" || mode === "line";
+
+/**
+ * Every tool at once, as one bar.
+ *
+ * The split control is right when drawing is an aside -- one button, and the
+ * tools folded behind a chevron for the rare switch. It is wrong once drawing
+ * is the task: a reader mid-session switches tools constantly, and each
+ * switch through a menu is two presses and a disappearing list.
+ *
+ * So a surface that opens a drawing session shows this instead, and the
+ * tools are a row of five you can see and count. Same modes, same labels,
+ * same shortcuts -- `useMapDrawShortcuts` is shared, not copied, so there is
+ * one keyboard path and no way for the two to drift.
+ *
+ * Icon-only, which makes `aria-label` the accessible name rather than a
+ * second name competing with a visible one. The shortcut rides in `title`.
+ */
+export function MapDrawToolbar({
+  mode,
+  onModeChange,
+  labels,
+  shortcuts = true,
+  disabled,
+  className,
+}: {
+  mode: DrawMode | null;
+  onModeChange: (mode: DrawMode | null) => void;
+  labels?: Partial<MapDrawLabels>;
+  shortcuts?: boolean;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const t = { ...DEFAULT_LABELS, ...labels };
+  useMapDrawShortcuts({ mode, onModeChange, enabled: shortcuts && !disabled });
+
+  return (
+    <ToggleGroup
+      data-slot="map-draw-toolbar"
+      aria-label={t.chooseTool}
+      variant="outline"
+      size="sm"
+      spacing={0}
+      disabled={disabled}
+      value={[mode ?? SELECT]}
+      onValueChange={(next) => {
+        // The group's value is an array, so it can report none selected --
+        // which for a tool row would mean no tool at all, not Select. Ignore
+        // that and keep whatever was armed.
+        const picked = next[0];
+        if (!picked) return;
+        onModeChange(picked === SELECT ? null : (picked as DrawMode));
+      }}
+      className={cn("bg-card/95 backdrop-blur", className)}
+    >
+      {MODES.map((m) => {
+        const Icon = m.icon;
+        const name = t[m.id];
+        return (
+          <ToggleGroupItem
+            key={m.id}
+            value={m.value ?? SELECT}
+            aria-label={name}
+            title={shortcuts ? `${name} (${m.key})` : name}
+          >
+            <Icon />
+          </ToggleGroupItem>
+        );
+      })}
+    </ToggleGroup>
+  );
+}
 
 /**
  * The one-line instruction for the mode being drawn, floated over the map.

@@ -44,6 +44,9 @@ const TYPES = {
   ".mjs": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  // What GitHub Pages serves it as, so a fetch of one behaves here as it does
+  // there rather than falling through to application/octet-stream.
+  ".geojson": "application/geo+json; charset=utf-8",
   ".txt": "text/plain; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",

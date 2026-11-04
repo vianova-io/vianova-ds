@@ -1,19 +1,19 @@
 "use client";
 
 import * as React from "react";
+import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeft,
-  Braces,
   Circle,
-  FileUp,
+  Download,
   LayoutGrid,
-  Link2,
   List as ListIcon,
   PencilLine,
   Route,
   Search,
   Shapes,
   Spline,
+  X,
 } from "lucide-react";
 
 import {
@@ -30,12 +30,18 @@ import {
   corridorAround,
   type Position,
 } from "@/registry/vianova/lib/zone-geometry";
+import {
+  FloatingPanel,
+  FloatingPanelBody,
+  FloatingPanelHeader,
+  FloatingPanelTitle,
+} from "@/registry/vianova/product/floating-panel";
 import { SliderField } from "@/registry/vianova/patterns/slider-field";
 import { TagInput } from "@/registry/vianova/patterns/tag-input";
 import { Badge } from "@/registry/vianova/ui/badge";
 import { Button } from "@/registry/vianova/ui/button";
 import { Checkbox } from "@/registry/vianova/ui/checkbox";
-import { ChoiceCard, ChoiceCardGroup } from "@/registry/vianova/ui/choice-card";
+import { Input } from "@/registry/vianova/ui/input";
 import {
   Field,
   FieldDescription,
@@ -49,6 +55,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/registry/vianova/ui/sheet";
+import { Spinner } from "@/registry/vianova/ui/spinner";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/registry/vianova/ui/tabs";
 import { Textarea } from "@/registry/vianova/ui/textarea";
 import {
   ToggleGroup,
@@ -377,8 +390,54 @@ const ROW_LIMIT = 100;
  */
 const NO_ZONES: PickerZone[] = [];
 
-type Source = "zones" | "draw" | "paste" | "upload" | "url";
+/**
+ * Three, not five.
+ *
+ * Pasting, uploading and fetching a link were three tiles, but they are one
+ * thing: bytes, parsed, previewed, added. Only the way the bytes arrive
+ * differs, and a reader who has a file does not need to be asked which of
+ * three doors it came through -- `import` takes all three and works out which
+ * it was given. What is left are the three answers that are genuinely
+ * different: zones you already have, a zone that does not exist yet, and a
+ * zone someone else made.
+ */
+type Source = "zones" | "draw" | "import";
 type View = "cards" | "list";
+
+/**
+ * The source row.
+ *
+ * `label` is the visible word and therefore the accessible name; `hint` is a
+ * `title` only. Putting the hint in `aria-label` would be
+ * label-content-name-mismatch -- a serious WCAG 2.1 A failure that the block's
+ * own axe run treats as blocking -- because "Library" is not contained in
+ * "Select from your zones".
+ */
+const SOURCES: {
+  value: Source;
+  label: string;
+  hint: string;
+  icon: React.ReactNode;
+}[] = [
+  {
+    value: "zones",
+    label: "Library",
+    hint: "Select from your zones",
+    icon: <Shapes />,
+  },
+  {
+    value: "draw",
+    label: "Draw",
+    hint: "Draw on the map",
+    icon: <PencilLine />,
+  },
+  {
+    value: "import",
+    label: "Import",
+    hint: "Bring in shapes from a file, your clipboard or a link",
+    icon: <Download />,
+  },
+];
 
 /**
  * The drawing tools this sheet can hand off to.
@@ -395,31 +454,31 @@ const DRAW_TOOLS: {
   value: ZoneDrawTool;
   title: string;
   description: string;
-  icon: React.ReactNode;
+  Icon: LucideIcon;
 }[] = [
   {
     value: "polygon",
     title: "Polygon",
     description: "A point per corner",
-    icon: <DrawZoneIcon />,
+    Icon: DrawZoneIcon,
   },
   {
     value: "circle",
     title: "Circle",
     description: "Out from a centre",
-    icon: <Circle />,
+    Icon: Circle,
   },
   {
     value: "freehand",
     title: "Free hand",
     description: "Trace the outline",
-    icon: <Spline />,
+    Icon: Spline,
   },
   {
     value: "line",
     title: "Line",
     description: "A street and its width",
-    icon: <Route />,
+    Icon: Route,
   },
 ];
 
@@ -447,6 +506,7 @@ export function ZonePicker({
   excludeIds,
   onAdd,
   onDraw,
+  urlSample,
   title = "Add zones",
   side = "right",
 }: {
@@ -466,6 +526,15 @@ export function ZonePicker({
    * separate habit parked on the map's own toolbar.
    */
   onDraw?: (tool: ZoneDrawTool) => void;
+  /**
+   * A GeoJSON URL to offer as "Try a sample" in Import.
+   *
+   * Left out, the link path is still there -- it just cannot be demonstrated,
+   * because only a host that allows requests from other sites can be fetched
+   * from a browser and most open-data portals do not. A file served beside
+   * the page always can, so the URL belongs to whoever is serving it.
+   */
+  urlSample?: string;
   title?: string;
   side?: "left" | "right";
 }) {
@@ -479,6 +548,7 @@ export function ZonePicker({
           chrome="sheet"
           zones={zones}
           excludeIds={excludeIds}
+          urlSample={urlSample}
           title={title}
           onCancel={() => onOpenChange(false)}
           onAdd={(chosen) => {
@@ -516,6 +586,7 @@ export function ZonePickerPanel({
   excludeIds,
   onAdd,
   onDraw,
+  urlSample,
   onBack,
   backLabel = "Back",
   title = "Add zones",
@@ -527,6 +598,15 @@ export function ZonePickerPanel({
   excludeIds?: string[];
   onAdd: (zones: PickerZone[]) => void;
   onDraw?: (tool: ZoneDrawTool) => void;
+  /**
+   * A GeoJSON URL to offer as "Try a sample" in Import.
+   *
+   * Left out, the link path is still there -- it just cannot be demonstrated,
+   * because only a host that allows requests from other sites can be fetched
+   * from a browser and most open-data portals do not. A file served beside
+   * the page always can, so the URL belongs to whoever is serving it.
+   */
+  urlSample?: string;
   /** Leaves without adding anything. The back arrow and Cancel both call it. */
   onBack: () => void;
   /** What the back arrow names: where leaving returns to, not this screen. */
@@ -557,6 +637,7 @@ export function ZonePickerPanel({
         onCancel={onBack}
         onAdd={onAdd}
         onDraw={onDraw}
+        urlSample={urlSample}
         onPreviewChange={onPreviewChange}
         onSelectionChange={onSelectionChange}
       />
@@ -573,6 +654,7 @@ function ZonePickerBody({
   onCancel,
   onAdd,
   onDraw,
+  urlSample,
   onPreviewChange,
   onSelectionChange,
 }: {
@@ -585,6 +667,8 @@ function ZonePickerBody({
   onCancel: () => void;
   onAdd: (zones: PickerZone[]) => void;
   onDraw?: (tool: ZoneDrawTool) => void;
+  /** A GeoJSON URL to offer as "Try a sample" in Import. */
+  urlSample?: string;
   onPreviewChange?: (zone: PickerZone | null) => void;
   onSelectionChange?: (zones: PickerZone[]) => void;
 }) {
@@ -592,35 +676,32 @@ function ZonePickerBody({
   const [selected, setSelected] = React.useState<ReadonlySet<string>>(
     () => new Set(),
   );
-  const [paste, setPaste] = React.useState<{ text: string; radius: number }>({
-    text: "",
-    radius: 0,
+  // Import state lives here, not in the body that draws it, so switching to
+  // the library to check a name and coming back does not throw away a dropped
+  // file or a half-typed link. The bodies are swapped, not kept mounted --
+  // keeping all three alive would mount the library's hundred rows while
+  // someone is pasting -- so anything that must survive the swap lives above
+  // it.
+  const [imported, setImported] = React.useState<ImportState>({
+    status: "empty",
   });
-  // The upload source parses on its own -- reading a file is asynchronous and
-  // a zip has to be inflated first -- and reports what it found up here, so
-  // the footer counts uploaded zones the same way it counts pasted ones.
-  const [uploaded, setUploaded] = React.useState<PickerZone[]>([]);
+  const [importText, setImportText] = React.useState("");
+  const [importRadius, setImportRadius] = React.useState(0);
 
   const parsed = React.useMemo(
-    () =>
-      paste.text.trim()
-        ? parseGeoJsonZones(paste.text, { radiusMeters: paste.radius })
-        : null,
-    [paste],
+    () => parseImport(imported, importRadius),
+    [imported, importRadius],
   );
-  const pastedZones =
-    parsed && "zones" in parsed ? parsed.zones : NO_ZONES;
+  const importedZones = parsed && "zones" in parsed ? parsed.zones : NO_ZONES;
 
   const chosen = React.useMemo(
     () =>
       source === "zones"
         ? zones.filter((z) => selected.has(z.id))
-        : source === "paste"
-          ? pastedZones
-          : source === "upload"
-            ? uploaded
-            : NO_ZONES,
-    [source, zones, selected, pastedZones, uploaded],
+        : source === "import"
+          ? importedZones
+          : NO_ZONES,
+    [source, zones, selected, importedZones],
   );
 
   // Reported rather than returned, because what the map beside the panel has
@@ -667,71 +748,60 @@ function ZonePickerBody({
         </header>
       )}
 
-      {/* One scroll region for the whole body, with the padding inside it so a
-          focus ring at the edge is never cut by the overflow. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pt-1 pb-4">
-        <ChoiceCardGroup
-          aria-label="Zone source"
-          columns={2}
-          value={source}
-          onValueChange={(v) => setSource(v as Source)}
-        >
-          <ChoiceCard
-            value="zones"
-            icon={<Shapes />}
-            title="Select from your zones"
-          />
-          {/* Second, not last: drawing is how a zone that does not exist yet
-              gets made, which is the other half of "add zones" and was only
-              reachable from the map's own toolbar. */}
-          {onDraw ? (
-            <ChoiceCard
-              value="draw"
-              icon={<PencilLine />}
-              title="Draw on the map"
-            />
-          ) : null}
-          <ChoiceCard
-            value="paste"
-            icon={<Braces />}
-            title="Paste shape code"
-          />
-          <ChoiceCard
-            value="upload"
-            icon={<FileUp />}
-            title="Upload shape file"
-          />
-          <ChoiceCard
-            value="url"
-            icon={<Link2 />}
-            title="Pull from url"
-            badge="Soon"
-            disabled
-          />
-        </ChoiceCardGroup>
+      <Tabs
+        value={source}
+        onValueChange={(v) => setSource(v as Source)}
+        className="flex min-h-0 flex-1 flex-col gap-0"
+      >
+        {/* Pinned above the scroll region, not inside it. A switcher that
+            scrolls away stops being a switcher, and a 3px focus ring drawn
+            4px below the top edge of an `overflow-y-auto` ancestor is clipped
+            -- which is the defect the focus-ring suite exists to catch. */}
+        <TabsList aria-label="Zone source" className="mx-4 mb-3 w-auto">
+          {SOURCES.map((s) =>
+            // Drawing is only offered when there is a map to draw on.
+            s.value === "draw" && !onDraw ? null : (
+              <TabsTrigger key={s.value} value={s.value} title={s.hint}>
+                {s.icon}
+                {s.label}
+              </TabsTrigger>
+            ),
+          )}
+        </TabsList>
 
-        {source === "zones" ? (
-          <ZoneList
-            zones={zones}
-            excludeIds={excludeIds}
-            selected={selected}
-            onSelectedChange={setSelected}
-            onPreviewChange={onPreviewChange}
-          />
-        ) : source === "draw" && onDraw ? (
-          <DrawSource onDraw={onDraw} />
-        ) : source === "upload" ? (
-          <UploadSource onZonesChange={setUploaded} />
-        ) : (
-          <PasteSource
-            text={paste.text}
-            radius={paste.radius}
-            onTextChange={(text) => setPaste((p) => ({ ...p, text }))}
-            onRadiusChange={(radius) => setPaste((p) => ({ ...p, radius }))}
-            parsed={parsed}
-          />
-        )}
-      </div>
+        {/* One panel whose value tracks the active tab, rather than one per
+            source: the bodies are genuinely swapped, so the library's rows
+            are not mounted while someone is importing. What has to survive
+            the swap is held above this. The scroll region's padding is inside
+            it, so a focus ring at the edge is never cut by the overflow. */}
+        <TabsContent
+          value={source}
+          className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pt-1 pb-4"
+        >
+          {source === "zones" ? (
+            <ZoneList
+              zones={zones}
+              excludeIds={excludeIds}
+              selected={selected}
+              onSelectedChange={setSelected}
+              onPreviewChange={onPreviewChange}
+            />
+          ) : source === "draw" && onDraw ? (
+            <DrawSource onDraw={onDraw} />
+          ) : (
+            <ImportSource
+              state={imported}
+              onStateChange={setImported}
+              text={importText}
+              onTextChange={setImportText}
+              radius={importRadius}
+              onRadiusChange={setImportRadius}
+              parsed={parsed}
+              urlSample={urlSample}
+            />
+          )}
+        </TabsContent>
+      </Tabs>
 
       <div
         className={cn(
@@ -1083,9 +1153,10 @@ const ZoneRow = React.memo(function ZoneRow({
 /**
  * The drawing tools, chosen here rather than on the map.
  *
- * The map's own menu stays -- it is how someone already looking at the map
- * switches tools mid-task. This is the other way in: from the rule that needs
- * an area, without having to know the toolbar exists.
+ * The map's own toolbar stays -- it is how someone already looking at the map
+ * switches tools mid-shape. This is the other way in: from the rule that needs
+ * an area, without having to know the toolbar is there. Both arm the same
+ * session, so there is one behaviour and not two.
  */
 function DrawSource({
   onDraw,
@@ -1096,35 +1167,48 @@ function DrawSource({
   return (
     <div data-slot="zone-picker-draw" className="flex flex-col gap-3">
       <p className="text-muted-foreground text-sm">
-        Pick a tool and the map takes over. The shape is added to this rule as
-        soon as you finish it.
+        Pick a tool and the map takes over. Shapes you finish are listed there
+        until you add them.
       </p>
       {/*
-       * `action`, not `select`: each card does something the moment it is
-       * pressed. Held as a selection it needed a second press to arm, and the
+       * Buttons, not a radio group. Each one does something the moment it is
+       * pressed: held as a selection it needed a second press to arm, and the
        * tools read as dead until that was found -- which it was not, because
-       * the button repeated the name of the source tile above it.
+       * the confirming button repeated the name of the tile above it.
        *
-       * Action mode also keeps the keyboard honest. In a radio group the
-       * arrow keys move the selection, so browsing the tools would arm one.
-       * Buttons are each their own tab stop and do nothing until pressed.
+       * It also keeps the keyboard honest. In a radio group the arrow keys
+       * move the selection, so browsing the tools would arm one and throw the
+       * reader onto the map. Buttons are each their own tab stop and do
+       * nothing until pressed.
+       *
+       * The sentence each tool used to carry is a `title` now. On a button
+       * that already has visible text a title describes rather than names, so
+       * the accessible name stays the word on the button -- which is what
+       * keeps "Line" findable and keeps axe quiet about a name that does not
+       * contain its own label.
        */}
-      <ChoiceCardGroup
+      {/* Two by two rather than one welded row: four tools at their natural
+          width overrun a 390px phone, and a grid that always holds its shape
+          beats a row that reflows into something else below a breakpoint. */}
+      <div
+        role="group"
         aria-label="Drawing tool"
-        columns={2}
-        mode="action"
-        onChoose={(v) => onDraw(v as ZoneDrawTool)}
+        className="grid grid-cols-2 gap-2"
       >
         {DRAW_TOOLS.map((t) => (
-          <ChoiceCard
+          <Button
             key={t.value}
-            value={t.value}
-            icon={t.icon}
-            title={t.title}
-            description={t.description}
-          />
+            variant="outline"
+            size="sm"
+            title={t.description}
+            className="justify-start"
+            onClick={() => onDraw(t.value)}
+          >
+            <t.Icon data-icon="inline-start" />
+            {t.title}
+          </Button>
         ))}
-      </ChoiceCardGroup>
+      </div>
     </div>
   );
 }
@@ -1138,12 +1222,25 @@ function DrawSource({
  * correct one. The outlines are what tell the two apart, so they are shown
  * before the Add button is reached, not after.
  */
-function ZonePreview({ zones }: { zones: PickerZone[] }) {
+function ZonePreview({
+  zones,
+  source,
+}: {
+  zones: PickerZone[];
+  /**
+   * What they came from, named. One tab now takes a file, a paste and a link,
+   * so "2 zones found" on its own no longer says which of the three is on
+   * screen -- and that is exactly the question when a dropped file and a
+   * pasted blob disagree.
+   */
+  source?: string;
+}) {
   const shown = zones.slice(0, ROW_LIMIT);
   return (
     <div data-slot="zone-picker-preview" className="flex flex-col gap-2">
       <p className="text-sm font-medium">
         {plural(zones.length, "zone", "zones")} found
+        {source ? ` in ${source}` : null}
       </p>
       <ul
         role="list"
@@ -1168,21 +1265,35 @@ function ZonePreview({ zones }: { zones: PickerZone[] }) {
     </div>
   );
 }
-
 /* -------------------------------------------------------------------------- */
-/* Upload                                                                     */
+/* Import                                                                     */
 /* -------------------------------------------------------------------------- */
 
-/** What a chosen file turned out to hold, kept so a width change re-reads it. */
-type UploadedFile =
+/**
+ * What the chosen input turned out to hold, kept so a radius change re-reads
+ * it rather than asking for the file or the link again.
+ */
+type ImportedFile =
   | { kind: "geojson"; text: string }
   | { kind: "shapefile"; shp: ArrayBuffer; dbf?: ArrayBuffer; prj?: string };
 
-type UploadState =
+/**
+ * `via` says which of the three ways in produced this, because the chrome
+ * differs: a dropped file names itself on the dropzone, a fetched link names
+ * itself under the preview, and pasted text is already on screen and needs
+ * neither.
+ */
+type ImportState =
   | { status: "empty" }
-  | { status: "reading" }
+  | { status: "reading"; what: "file" | "link" }
   | { status: "error"; message: string }
-  | { status: "ready"; label: string; note?: string; file: UploadedFile };
+  | {
+      status: "ready";
+      via: "file" | "paste" | "link";
+      label: string;
+      note?: string;
+      file: ImportedFile;
+    };
 
 const isExtension = (name: string, ...extensions: string[]) =>
   extensions.some((e) => name.toLowerCase().endsWith(e));
@@ -1195,58 +1306,158 @@ const own = (bytes: Uint8Array): ArrayBuffer =>
   ) as ArrayBuffer;
 
 /**
- * A shapefile or a GeoJSON file, read in the browser.
- *
- * Zipped is the normal case and the one the label asks for: a shapefile is
- * three or four files that mean nothing apart, and every GIS exports them
- * together. The separate parts are accepted too, because someone who has
- * already unzipped them should not have to zip them again.
+ * Said rather than assumed. Without a .prj the numbers could be metres in any
+ * of a hundred national grids, and read as degrees those land in the Atlantic
+ * -- silently, because they are still perfectly good numbers.
  */
-function UploadSource({
-  onZonesChange,
+const NO_PRJ =
+  "No .prj came with this file, so its numbers are read as longitude and latitude. Check the shapes below are where you expect.";
+
+/**
+ * Shapes, whatever shape they arrived in.
+ *
+ * One function for all three ways in, because past this point there is no
+ * difference between them: a file, a paste and a link all end as bytes to be
+ * parsed, grown by the radius, previewed and added.
+ */
+function parseImport(state: ImportState, radiusMeters: number) {
+  if (state.status !== "ready") return null;
+  if (state.file.kind === "geojson") {
+    return parseGeoJsonZones(state.file.text, {
+      radiusMeters,
+      namePrefix: "Imported zone",
+    });
+  }
+  const read = readShapefile(state.file, { radiusMeters });
+  if ("error" in read) return read;
+  const createdAt = new Date().toISOString();
+  return {
+    zones: read.zones.map((zone, i) => ({
+      id: `imported-${i + 1}`,
+      name: zone.name,
+      tags: ["imported"],
+      ring: zone.ring,
+      createdAt,
+    })),
+  };
+}
+
+/**
+ * What the reader has typed, judged by looking at it.
+ *
+ * GeoJSON and a web address cannot be mistaken for each other -- one opens
+ * with a brace or a bracket, the other with a scheme -- so one field takes
+ * both and nobody has to say which they meant. `unknown` is everything else,
+ * and it is reported as a hint rather than an error, because the first letter
+ * of "https" is `unknown` too.
+ */
+type Typed = "empty" | "json" | "link" | "unknown";
+
+function sniff(value: string): Typed {
+  const v = value.trim();
+  if (!v) return "empty";
+  if (v.startsWith("{") || v.startsWith("[")) return "json";
+  if (/^https?:\/\//i.test(v)) return "link";
+  return "unknown";
+}
+
+/** The last path segment of a link, for naming what came back. */
+function linkLabel(url: string): string {
+  try {
+    // Resolved against the page, so a same-origin link -- "/data/bays.geojson",
+    // which is the one kind guaranteed to be fetchable -- is named by its file
+    // like any other. Bare, `new URL` throws on it and the preview ends up
+    // headed "found in /data/bays.geojson".
+    const base =
+      typeof window === "undefined" ? "http://localhost/" : window.location.href;
+    const { pathname, hostname } = new URL(url, base);
+    const last = pathname.split("/").filter(Boolean).pop();
+    return last || hostname;
+  } catch {
+    return url;
+  }
+}
+
+const HINTS: Record<Typed, string> = {
+  empty:
+    "A Feature, FeatureCollection or geometry — or a link to one. Each polygon becomes a zone.",
+  json: "A Feature, FeatureCollection or geometry. Each polygon becomes a zone.",
+  link: "Press Fetch to read it.",
+  unknown:
+    "That is neither GeoJSON nor a link. GeoJSON starts with {, and a link starts with https://.",
+};
+
+/**
+ * One tab for every shape someone already has.
+ *
+ * Pasting, uploading and fetching a link were three tiles in the chooser, and
+ * they are not three features: all three end as bytes, parsed, grown by the
+ * radius, previewed and added. Only the arrival differs, so only the arrival
+ * is on screen -- a dropzone for files, and one field that takes pasted
+ * GeoJSON or a link and tells them apart itself.
+ *
+ * Using one clears the other, so there is never a question which of them the
+ * preview below is showing.
+ *
+ * The link is fetched from the browser, which is a real limit worth knowing
+ * before someone reports it as a bug: this page is a static export with no
+ * server, so a host that does not allow other sites to read it cannot be
+ * fetched here at all, and the browser reports every such failure -- along
+ * with being offline, a bad name and a bad certificate -- as one opaque
+ * error with nothing readable behind it. Hence one sentence covering all of
+ * them, pointing at the dropzone, which always works. Behind an API of your
+ * own this is a server-side fetch and the limit goes away.
+ */
+function ImportSource({
+  state,
+  onStateChange,
+  text,
+  onTextChange,
+  radius,
+  onRadiusChange,
+  parsed,
+  urlSample,
 }: {
-  onZonesChange: (zones: PickerZone[]) => void;
+  state: ImportState;
+  onStateChange: (state: ImportState) => void;
+  text: string;
+  onTextChange: (text: string) => void;
+  radius: number;
+  onRadiusChange: (radius: number) => void;
+  parsed: ReturnType<typeof parseImport>;
+  /**
+   * A GeoJSON URL that is known to answer, offered as "Try a sample".
+   *
+   * Without one the link path cannot be shown working: a browser can only
+   * fetch a host that allows requests from other sites, and most of the
+   * portals a city would reach for do not. A file served beside the page is
+   * same-origin, so it always answers -- which is why this is the consumer's
+   * to supply rather than a URL hard-coded here.
+   */
+  urlSample?: string;
 }) {
-  const [state, setState] = React.useState<UploadState>({ status: "empty" });
-  const [radius, setRadius] = React.useState(0);
+  const id = React.useId();
+  const errorId = `${id}-error`;
+  const kind = sniff(text);
 
-  const parsed = React.useMemo(() => {
-    if (state.status !== "ready") return null;
-    if (state.file.kind === "geojson") {
-      return parseGeoJsonZones(state.file.text, {
-        radiusMeters: radius,
-        namePrefix: "Uploaded zone",
-      });
-    }
-    const read = readShapefile(state.file, { radiusMeters: radius });
-    if ("error" in read) return read;
-    const createdAt = new Date().toISOString();
-    return {
-      zones: read.zones.map((zone, i) => ({
-        id: `uploaded-${i + 1}`,
-        name: zone.name,
-        tags: ["uploaded"],
-        ring: zone.ring,
-        createdAt,
-      })),
-    };
-  }, [state, radius]);
-
-  // setState is stable, so this settles after one render rather than looping.
-  React.useEffect(() => {
-    onZonesChange(parsed && "zones" in parsed ? parsed.zones : []);
-  }, [parsed, onZonesChange]);
+  // Held in a ref and aborted before each new fetch, so a slow first link
+  // cannot land after a second one and quietly replace it.
+  const inFlight = React.useRef<AbortController | null>(null);
+  React.useEffect(() => () => inFlight.current?.abort(), []);
 
   const accept = async (files: File[]) => {
-    setState({ status: "reading" });
+    // A file wins over whatever is in the field, and says so by emptying it.
+    onTextChange("");
+    onStateChange({ status: "reading", what: "file" });
     try {
       const zip = files.find((f) => isExtension(f.name, ".zip"));
       if (zip) {
         const entries = await unzip(await zip.arrayBuffer());
         const parts = collectShapefileParts(entries);
         if (parts.shp) {
-          setState({
+          onStateChange({
             status: "ready",
+            via: "file",
             label: zip.name,
             note:
               parts.shpCount > 1
@@ -1267,14 +1478,15 @@ function UploadSource({
           isExtension(e.name, ".geojson", ".json"),
         );
         if (!geo) {
-          setState({
+          onStateChange({
             status: "error",
             message: "This zip holds no .shp or GeoJSON file.",
           });
           return;
         }
-        setState({
+        onStateChange({
           status: "ready",
+          via: "file",
           label: zip.name,
           file: {
             kind: "geojson",
@@ -1288,8 +1500,9 @@ function UploadSource({
       if (shp) {
         const dbf = files.find((f) => isExtension(f.name, ".dbf"));
         const prj = files.find((f) => isExtension(f.name, ".prj"));
-        setState({
+        onStateChange({
           status: "ready",
+          via: "file",
           label: shp.name,
           note: prj ? undefined : NO_PRJ,
           file: {
@@ -1304,19 +1517,20 @@ function UploadSource({
 
       const geo = files.find((f) => isExtension(f.name, ".geojson", ".json"));
       if (geo) {
-        setState({
+        onStateChange({
           status: "ready",
+          via: "file",
           label: geo.name,
           file: { kind: "geojson", text: await geo.text() },
         });
         return;
       }
-      setState({
+      onStateChange({
         status: "error",
         message: "Choose a zipped shapefile, a .shp, or a GeoJSON file.",
       });
     } catch (e) {
-      setState({
+      onStateChange({
         status: "error",
         message:
           e instanceof ShapefileError
@@ -1326,103 +1540,191 @@ function UploadSource({
     }
   };
 
+  const change = (value: string) => {
+    onTextChange(value);
+    const typed = sniff(value);
+    // GeoJSON parses as it is typed, the way the paste box always did. A link
+    // cannot -- fetching on every keystroke would be absurd -- so it waits
+    // for Fetch, and anything else clears what was there rather than shouting
+    // at someone who is still typing.
+    onStateChange(
+      typed === "json"
+        ? {
+            status: "ready",
+            via: "paste",
+            label: "pasted GeoJSON",
+            file: { kind: "geojson", text: value },
+          }
+        : { status: "empty" },
+    );
+  };
+
+  const fetchLink = async (from?: string) => {
+    const url = (from ?? text).trim();
+    if (/\.zip(\?|#|$)/i.test(url)) {
+      onStateChange({
+        status: "error",
+        message: "That link is a zipped shapefile. Drop the file above instead.",
+      });
+      return;
+    }
+    if (
+      /^http:\/\//i.test(url) &&
+      typeof window !== "undefined" &&
+      window.location.protocol === "https:"
+    ) {
+      onStateChange({
+        status: "error",
+        message:
+          "This page is served over https, so it can only fetch https links.",
+      });
+      return;
+    }
+
+    inFlight.current?.abort();
+    const call = new AbortController();
+    inFlight.current = call;
+    onStateChange({ status: "reading", what: "link" });
+
+    try {
+      const res = await fetch(url, { signal: call.signal });
+      if (call.signal.aborted) return;
+      if (!res.ok) {
+        onStateChange({
+          status: "error",
+          message: `That link answered ${res.status}. Check it is public and still there.`,
+        });
+        return;
+      }
+      const body = await res.text();
+      if (call.signal.aborted) return;
+      if (body.trimStart().startsWith("<")) {
+        onStateChange({
+          status: "error",
+          message:
+            "That link returned a web page, not GeoJSON. Link straight to the .geojson file.",
+        });
+        return;
+      }
+      onStateChange({
+        status: "ready",
+        via: "link",
+        label: linkLabel(url),
+        file: { kind: "geojson", text: body },
+      });
+    } catch {
+      if (call.signal.aborted) return;
+      onStateChange({
+        status: "error",
+        message:
+          "That link could not be fetched. The server has to allow requests from other sites, and many file hosts do not — drop the file above instead.",
+      });
+    }
+  };
+
+  /*
+   * Fills the field and fetches in one press.
+   *
+   * The URL is passed through rather than read back off `text`, which has not
+   * been committed yet when this runs. The field then visibly holds a link
+   * and the Fetch button appears already spinning, so one press shows the
+   * whole path rather than hiding it.
+   */
+  const sample = async () => {
+    if (!urlSample) return;
+    onTextChange(urlSample);
+    await fetchLink(urlSample);
+  };
+
   const error =
     state.status === "error"
       ? state.message
       : parsed && "error" in parsed
         ? parsed.error
         : null;
+  const fetching = state.status === "reading" && state.what === "link";
+  const droppedName =
+    state.status === "ready" && state.via === "file" ? state.label : null;
+  const previewSource =
+    state.status === "ready" && state.via !== "paste" ? state.label : undefined;
 
   return (
-    <div data-slot="zone-picker-upload" className="flex flex-col gap-5">
+    <div data-slot="zone-picker-import" className="flex flex-col gap-5">
       <FileDropzone
         multiple
         accept=".zip,.shp,.dbf,.prj,.shx,.cpg,.geojson,.json"
         onFiles={accept}
-        label={
-          state.status === "ready" ? state.label : "Drop a shapefile here"
-        }
+        label={droppedName ?? "Drop a shapefile or GeoJSON"}
         hint={
-          state.status === "reading"
+          state.status === "reading" && state.what === "file"
             ? "Reading…"
-            : "A zipped .shp, its separate parts, or a GeoJSON file"
+            : "A zipped .shp, its separate parts, or a .geojson file"
         }
       />
 
+      <Field data-invalid={error ? true : undefined}>
+        <FieldLabel htmlFor={id}>Or paste GeoJSON or a link</FieldLabel>
+        <Textarea
+          id={id}
+          value={text}
+          onChange={(e) => change(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && kind === "link" && !e.shiftKey) {
+              e.preventDefault();
+              void fetchLink();
+            }
+          }}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder={'{ "type": "Feature", … }   or   https://…'}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+          className="max-h-60 min-h-20 font-mono text-xs md:text-xs"
+        />
+        <FieldDescription>{HINTS[kind]}</FieldDescription>
+        {/* Fetch appears only for a link, so the field teaches what it accepts
+            by what it offers: pasted GeoJSON has already been read by the time
+            a button could be pressed. The sample appears only while the field
+            is empty, so it can never overwrite something half-typed -- and it
+            gives way to Fetch the moment it fills the field, which is how the
+            two presses it saves are still visible. */}
+        {kind === "link" || (urlSample && kind === "empty") ? (
+          <div className="flex justify-end gap-2">
+            {urlSample && kind === "empty" ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={fetching}
+                onClick={() => void sample()}
+              >
+                Try a sample
+              </Button>
+            ) : null}
+            {kind === "link" ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={fetching}
+                onClick={() => void fetchLink()}
+              >
+                {fetching ? <Spinner data-icon="inline-start" /> : null}
+                {fetching ? "Fetching…" : "Fetch"}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </Field>
+
       {error ? (
-        <p role="alert" className="text-destructive text-sm">
+        <p role="alert" id={errorId} className="text-destructive text-sm">
           {error}
         </p>
       ) : null}
       {state.status === "ready" && state.note ? (
         <p className="text-muted-foreground text-sm">{state.note}</p>
       ) : null}
-
-      <SliderField
-        label="Increase zone radius"
-        description="Grows points and lines into zones. Polygons are added as drawn."
-        value={radius}
-        onValueChange={setRadius}
-        min={0}
-        max={100}
-        unit="m"
-        marks={[0, 50, 100]}
-      />
-
-      {parsed && "zones" in parsed ? <ZonePreview zones={parsed.zones} /> : null}
-    </div>
-  );
-}
-
-/**
- * Said rather than assumed. Without a .prj the numbers could be metres in any
- * of a hundred national grids, and read as degrees those land in the Atlantic
- * -- silently, because they are still perfectly good numbers.
- */
-const NO_PRJ =
-  "No .prj came with this file, so its numbers are read as longitude and latitude. Check the shapes below are where you expect.";
-
-function PasteSource({
-  text,
-  radius,
-  onTextChange,
-  onRadiusChange,
-  parsed,
-}: {
-  text: string;
-  radius: number;
-  onTextChange: (text: string) => void;
-  onRadiusChange: (radius: number) => void;
-  parsed: ReturnType<typeof parseGeoJsonZones> | null;
-}) {
-  const id = React.useId();
-  const error = parsed && "error" in parsed ? parsed.error : null;
-  const errorId = `${id}-error`;
-
-  return (
-    <div data-slot="zone-picker-paste" className="flex flex-col gap-5">
-      <Field data-invalid={error ? true : undefined}>
-        <FieldLabel htmlFor={id}>Paste GeoJSON</FieldLabel>
-        <Textarea
-          id={id}
-          value={text}
-          onChange={(e) => onTextChange(e.target.value)}
-          spellCheck={false}
-          autoComplete="off"
-          placeholder='{ "type": "Feature", "geometry": { "type": "Polygon", … } }'
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? errorId : undefined}
-          className="max-h-60 min-h-32 font-mono text-xs md:text-xs"
-        />
-        {error ? (
-          <FieldError id={errorId}>{error}</FieldError>
-        ) : (
-          <FieldDescription>
-            A Feature, FeatureCollection or geometry. Each polygon becomes a
-            zone.
-          </FieldDescription>
-        )}
-      </Field>
 
       <SliderField
         label="Increase zone radius"
@@ -1435,7 +1737,236 @@ function PasteSource({
         marks={[0, 50, 100]}
       />
 
-      {parsed && "zones" in parsed ? <ZonePreview zones={parsed.zones} /> : null}
+      {parsed && "zones" in parsed ? (
+        <ZonePreview zones={parsed.zones} source={previewSource} />
+      ) : null}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Drawing session                                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A zone's name, renamed in place.
+ *
+ * A real bordered input, not text that becomes one on click: production
+ * renames from this list, and a borderless field reads as a label nobody
+ * thinks to type into -- which was the report this answers.
+ *
+ * The draft is local so each keystroke is cheap. The rename is published on
+ * blur or Enter, and Escape puts the old name back.
+ */
+export function ZoneNameField({
+  name,
+  onRename,
+  autoFocus,
+  className,
+}: {
+  name: string;
+  onRename: (name: string) => void;
+  /** Takes focus with the text selected, for a name just made up for you. */
+  autoFocus?: boolean;
+  className?: string;
+}) {
+  const [draft, setDraft] = React.useState<string | null>(null);
+  const field = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    const el = field.current;
+    // Two copies of the drawing panel are mounted -- a column above lg, a
+    // tray below it -- and only one is displayed. Focusing the hidden one
+    // would swallow the focus rather than move it, and `offsetParent` is null
+    // exactly when an ancestor is `display: none`.
+    if (!autoFocus || !el || el.offsetParent === null) return;
+    el.focus();
+    el.select();
+  }, [autoFocus]);
+
+  const commit = () => {
+    if (draft === null) return;
+    const next = draft.trim();
+    setDraft(null);
+    // An emptied field is a slip, not a request for a nameless zone.
+    if (next && next !== name) onRename(next);
+  };
+
+  return (
+    <Input
+      ref={field}
+      aria-label={`Rename ${name}`}
+      className={cn("h-8", className)}
+      value={draft ?? name}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit();
+        }
+        if (e.key === "Escape") setDraft(null);
+      }}
+    />
+  );
+}
+
+/** What the map is waiting for, per tool. */
+const DRAW_PROMPTS: Record<ZoneDrawTool, string> = {
+  polygon: "Click to place the first corner.",
+  circle: "Press and drag from the centre.",
+  freehand: "Press and drag to trace an outline.",
+  line: "Click along the route.",
+};
+
+/**
+ * Drawing, as a place rather than an instant.
+ *
+ * Drawing used to end the moment a shape closed: it was named from a counter,
+ * committed to the rule and to everyone's zone library in the same tick, and
+ * the tool disarmed. Drawing two zones meant going back through the picker
+ * twice, and a name could only be fixed afterwards -- in a table where the
+ * rename is global, because zones are shared by id.
+ *
+ * So the shapes land here first. The tool stays armed, each finished shape
+ * arrives with a name you can type over, and nothing reaches the rule until
+ * Add. Cancel leaves no trace, which is the part the old path could not
+ * offer at all.
+ */
+export function ZoneDraftPanel({
+  chrome,
+  tool,
+  drafts,
+  ruleName,
+  focusId,
+  onRename,
+  onRemove,
+  onPreviewChange,
+  onCancel,
+  onAdd,
+  className,
+}: {
+  /** A column beside the map, or a tray docked over it on a phone. */
+  chrome: "panel" | "tray";
+  /** The armed tool, or null when drawing has stopped but drafts remain. */
+  tool: ZoneDrawTool | null;
+  drafts: PickerZone[];
+  /** Named on the way back, as the picker's back row names it. */
+  ruleName?: string;
+  /** The draft whose name field should take focus, with its text selected. */
+  focusId?: string | null;
+  onRename: (id: string, name: string) => void;
+  onRemove: (id: string) => void;
+  onPreviewChange?: (zone: PickerZone | null) => void;
+  onCancel: () => void;
+  onAdd: () => void;
+  className?: string;
+}) {
+  const rows = (
+    <ul role="list" className="flex flex-col gap-2">
+      {drafts.map((zone) => (
+        <li
+          key={zone.id}
+          className="bg-card flex items-center gap-2 rounded-lg border p-2"
+          onPointerEnter={() => onPreviewChange?.(zone)}
+          onPointerLeave={() => onPreviewChange?.(null)}
+          onFocus={() => onPreviewChange?.(zone)}
+          onBlur={() => onPreviewChange?.(null)}
+        >
+          <ZoneThumbnail ring={zone.ring} size={24} />
+          <ZoneNameField
+            name={zone.name}
+            autoFocus={zone.id === focusId}
+            onRename={(next) => onRename(zone.id, next)}
+            className="min-w-0 flex-1"
+          />
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Remove ${zone.name}`}
+            onClick={() => onRemove(zone.id)}
+          >
+            <X />
+          </Button>
+        </li>
+      ))}
+    </ul>
+  );
+
+  const empty = (
+    <p className="text-muted-foreground text-sm">
+      {tool
+        ? `${DRAW_PROMPTS[tool]} Shapes you finish are listed here.`
+        : "Pick a tool on the map to carry on."}
+    </p>
+  );
+
+  const footer = (
+    <div className="mt-auto flex flex-row justify-end gap-2 border-t p-4">
+      <Button variant="outline" onClick={onCancel}>
+        Cancel
+      </Button>
+      <Button disabled={drafts.length === 0} onClick={onAdd}>
+        {drafts.length
+          ? `Add ${plural(drafts.length, "zone", "zones")}`
+          : "Add zones"}
+      </Button>
+    </div>
+  );
+
+  if (chrome === "tray") {
+    return (
+      <FloatingPanel
+        data-slot="zone-draft-panel"
+        data-chrome="tray"
+        // The tray owns the geometry and this fills it. pt-2 clears the
+        // grabber laid over the top edge; the bottom corners go because the
+        // tray is docked to one.
+        className={cn("h-full w-full rounded-b-none pt-2", className)}
+      >
+        <FloatingPanelHeader>
+          <FloatingPanelTitle>Drawn zones</FloatingPanelTitle>
+          <span className="text-muted-foreground ml-auto text-sm">
+            {drafts.length}
+          </span>
+        </FloatingPanelHeader>
+        <FloatingPanelBody className="flex flex-col gap-3">
+          {drafts.length ? rows : empty}
+        </FloatingPanelBody>
+        {footer}
+      </FloatingPanel>
+    );
+  }
+
+  return (
+    <div
+      data-slot="zone-draft-panel"
+      data-chrome="panel"
+      className={cn("flex min-h-0 flex-1 flex-col", className)}
+    >
+      {/* The same back row the picker uses: the arrow names where it returns
+          to, the heading names where you are. */}
+      <header className="space-y-2 border-b px-4 pt-3 pb-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-ml-2 max-w-full"
+          onClick={onCancel}
+        >
+          <ArrowLeft data-icon="inline-start" />
+          <span className="truncate">{ruleName ?? "Back"}</span>
+        </Button>
+        <div className="space-y-0.5">
+          <h2 className="text-xl font-semibold tracking-tight">Draw zones</h2>
+          <p className="text-muted-foreground text-sm">
+            Each shape you finish is listed here. Rename it, or keep drawing.
+          </p>
+        </div>
+      </header>
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-3 pb-4">
+        {drafts.length ? rows : empty}
+      </div>
+      {footer}
     </div>
   );
 }
