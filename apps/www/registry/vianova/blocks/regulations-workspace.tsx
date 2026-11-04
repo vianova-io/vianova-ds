@@ -131,7 +131,7 @@ import { MapControls } from "@/registry/vianova/product/map-controls";
 import {
   DEFAULT_LINE_WIDTH_M,
   MapDrawBanner,
-  MapDrawControl,
+  MapDrawToolbar,
   useMapDraw,
   type DrawMode,
 } from "@/registry/vianova/product/map-draw-control";
@@ -147,9 +147,13 @@ import {
   type RuleType,
 } from "@/registry/vianova/product/rule-type-icon";
 import {
+  ZoneDraftPanel,
+  ZoneNameField,
   ZonePickerPanel,
   type PickerZone,
+  type ZoneDrawTool,
 } from "@/registry/vianova/product/zone-picker";
+import { BottomTray, type TraySnap } from "@/registry/vianova/patterns/bottom-tray";
 import { SegmentedControl } from "@/registry/vianova/product/segmented-control";
 import {
   useCategoryShapeLayer,
@@ -188,6 +192,17 @@ declare const process: { env: Record<string, string | undefined> };
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const WORKER_URL = `${BASE_PATH}/maplibre/maplibre-gl-worker.mjs`;
+/*
+ * Six real Lisbon parking bays, served beside this page.
+ *
+ * Import's link field cannot be demonstrated against anything else: a browser
+ * only fetches a host that allows requests from other sites, and most city
+ * open-data portals, ArcGIS and every Drive or Dropbox share link do not.
+ * Behind an API this is a server-side fetch and all of them work, so the
+ * limit is the demo's and not the product's -- and this file is what lets
+ * someone see the path work at all. Same-origin, so it always answers.
+ */
+const SAMPLE_GEOJSON = `${BASE_PATH}/data/parking-bays-lisbon.geojson`;
 
 /** Lisbon, where every sample zone is. */
 const LISBON: [number, number] = [-9.142, 38.722];
@@ -227,6 +242,25 @@ const formatDate = (iso: string) => dateFmt.format(new Date(iso));
 let seq = 0;
 /** Ids for things made in this session. Prefixed so they never collide with a sample's. */
 const uid = (prefix: string) => `${prefix}-new-${++seq}`;
+
+/**
+ * A run of drawing, from the first tool press to Add or Cancel.
+ *
+ * `drafts` are finished shapes that have not reached the rule or anyone's
+ * zone library yet, which is what makes Cancel leave no trace. `ruleId` is
+ * carried so the session cannot outlive the rule it was started from -- a
+ * rule deleted mid-draw must not have its shapes land on whichever rule is
+ * selected next.
+ */
+type DrawSession = {
+  tool: DrawMode | null;
+  drafts: PickerZone[];
+  focusId: string | null;
+  ruleId: string;
+};
+
+/** One empty array, so no-session renders do not rebuild the drafts layer. */
+const NO_DRAFTS: PickerZone[] = [];
 
 /** Deep enough for a regulation: its rules and their arrays are the only nested values. */
 const cloneRegulation = (reg: Regulation): Regulation => ({
@@ -1030,12 +1064,20 @@ function RegulationEditor({
   /** Everything ticked so far, drawn and framed before it is committed. */
   const [candidates, setCandidates] = React.useState<PickerZone[]>([]);
   /*
-   * The tool being drawn with, held here rather than inside the map, because
-   * two things arm it now: the map's own toolbar, and "Draw on the map" in
-   * the Add zones screen. That screen is the settings column, a sibling of
-   * the map, so the one piece of state they share has to sit above both.
+   * Drawing, held here rather than inside the map, because two things start
+   * it: the map's own toolbar, and the Draw tab in Add zones. That tab is in
+   * the settings column, a sibling of the map, so the state they share has to
+   * sit above both.
+   *
+   * Two bits, not one. `session` is open from the first tool press until Add
+   * or Cancel; `session.tool` is what is armed right now, and it can be null
+   * inside an open session. Without the split, Escape would have to choose
+   * between leaving a list on screen that nothing can add to, and throwing
+   * away shapes someone just drew.
    */
-  const [drawMode, setDrawMode] = React.useState<DrawMode | null>(null);
+  const [session, setSession] = React.useState<DrawSession | null>(null);
+  const drawMode = session?.tool ?? null;
+  const [traySnap, setTraySnap] = React.useState<TraySnap>("peek");
   const [focusZone, setFocusZone] = React.useState<{ id: string; at: number } | null>(null);
   /*
    * Below lg the settings and the map take turns rather than stacking: stacked,
@@ -1086,13 +1128,20 @@ function RegulationEditor({
   };
 
   const discard = () => {
+    // Unadded shapes are not part of `draft`, so a revert would leave them
+    // drawn on a regulation that no longer expects them.
+    setSession(null);
     if (isNew) return onClose();
     const original = JSON.parse(baseline) as Regulation;
     setDraft(original);
     if (!original.rules.some((r) => r.id === selected)) setSelected(original.rules[0]?.id ?? RULE_RAIL_GLOBAL);
   };
 
-  const back = () => (dirty ? setConfirmLeave(true) : onClose());
+  const back = () => {
+    setSession(null);
+    if (dirty) return setConfirmLeave(true);
+    onClose();
+  };
 
   /** Leaves Add zones without adding, and takes its drawing off the map. */
   const stopPicking = () => {
@@ -1121,17 +1170,121 @@ function RegulationEditor({
     updateRule(into, { zoneIds: [...new Set([...target.zoneIds, ...made.map((z) => z.id)])] });
   };
 
+  /**
+   * Arms a tool, opening a session if one is not already running.
+   *
+   * The single entry point, so the map's toolbar and the Draw tab cannot
+   * disagree about what drawing is. Disarming with nothing drawn closes the
+   * session; with drafts in hand it only stops drawing, because the list and
+   * its Add button still have work to do.
+   */
+  const armTool = (tool: DrawMode | null) => {
+    if (!rule) return;
+    const ruleId = rule.id;
+    setSession((s) => {
+      if (tool === null) {
+        return !s || s.drafts.length === 0 ? null : { ...s, tool: null };
+      }
+      return s && s.ruleId === ruleId
+        ? { ...s, tool }
+        : { tool, drafts: [], focusId: null, ruleId };
+    });
+  };
+
+  /** Leaves the session, taking every unadded shape with it. */
+  const cancelSession = () => {
+    setSession(null);
+    setPreview(null);
+    setPane("settings");
+  };
+
+  /**
+   * The shapes reach the rule here, and only here.
+   *
+   * `onZonesCreated` is called once with the whole batch rather than per
+   * shape: until this point a draft is a label on something that does not
+   * exist yet, so renaming one is local. A second later the same edit renames
+   * a library zone everywhere it is used, because rules reference zones by id.
+   */
+  const commitSession = () => {
+    if (!session || !rule) return;
+    onZonesCreated(session.drafts);
+    addZones(session.drafts, rule.id);
+    setSession(null);
+    setPreview(null);
+    setPane("settings");
+  };
+
+  const renameDraft = (id: string, name: string) =>
+    setSession((s) =>
+      s
+        ? {
+            ...s,
+            drafts: s.drafts.map((z) => (z.id === id ? { ...z, name } : z)),
+            focusId: null,
+          }
+        : s,
+    );
+
+  const removeDraft = (id: string) =>
+    setSession((s) =>
+      s ? { ...s, drafts: s.drafts.filter((z) => z.id !== id) } : s,
+    );
+
+  /*
+   * A session cannot outlive its rule.
+   *
+   * Switching rules mid-draw, or deleting the one being drawn on, would
+   * otherwise leave shapes queued against a rule that is no longer on screen
+   * -- and Add would put them on whichever rule got selected instead.
+   */
+  const sessionRuleId = session?.ruleId;
+  React.useEffect(() => {
+    if (sessionRuleId && sessionRuleId !== rule?.id) {
+      setSession(null);
+      setPreview(null);
+    }
+  }, [sessionRuleId, rule?.id]);
+
+  const draftPanel =
+    session && rule ? (
+      <ZoneDraftPanel
+        chrome="panel"
+        tool={session.tool as ZoneDrawTool | null}
+        drafts={session.drafts}
+        focusId={session.focusId}
+        ruleName={multi ? `${draft.name} · ${rule.name}` : draft.name}
+        onRename={renameDraft}
+        onRemove={removeDraft}
+        onPreviewChange={setPreview}
+        onCancel={cancelSession}
+        onAdd={commitSession}
+      />
+    ) : null;
+
   return (
     <div className="flex h-full flex-col lg:flex-row">
       {/* Panel */}
       <section
-        aria-label={picking ? "Add zones" : "Regulation settings"}
+        aria-label={
+          session ? "Draw zones" : picking ? "Add zones" : "Regulation settings"
+        }
         className={cn(
-          "bg-background flex min-w-0 flex-col lg:h-full lg:w-[460px] lg:shrink-0 lg:flex-none lg:border-r",
+          "bg-background flex min-w-0 flex-col lg:h-full lg:shrink-0 lg:flex-none lg:border-r",
+          // Narrower during a session: it holds a list of names, not a form,
+          // and the map is where the work is happening.
+          session ? "lg:w-[340px]" : "lg:w-[460px]",
           pane === "settings" ? "min-h-0 flex-1" : "shrink-0",
         )}
       >
-        {picking && rule ? (
+        {session && rule ? (
+          // Below lg the map pane owns the screen and the tray carries this
+          // instead, so the column keeps out of the way rather than mounting
+          // a second copy of the same list.
+          <div className="hidden min-h-0 flex-1 flex-col lg:flex">
+            {draftPanel}
+          </div>
+        ) : picking && rule ? (
           <ZonePickerPanel
             zones={zones}
             excludeIds={rule.zoneIds}
@@ -1139,6 +1292,7 @@ function RegulationEditor({
             // regulation, the regulation itself when there is only one.
             backLabel={multi ? `${draft.name} · ${rule.name}` : draft.name}
             onBack={stopPicking}
+            urlSample={SAMPLE_GEOJSON}
             onPreviewChange={setPreview}
             onSelectionChange={setCandidates}
             onAdd={(picked) => {
@@ -1155,7 +1309,7 @@ function RegulationEditor({
               // reader on the settings with nothing to draw on.
               stopPicking();
               setPane("map");
-              setDrawMode(tool);
+              armTool(tool);
             }}
           />
         ) : (
@@ -1320,24 +1474,72 @@ function RegulationEditor({
         focusZone={focusZone}
         canDraw={Boolean(rule)}
         drawMode={drawMode}
-        onDrawModeChange={setDrawMode}
+        onDrawModeChange={armTool}
         candidates={candidates}
+        drafts={session?.drafts ?? NO_DRAFTS}
         preview={preview}
         onDrawn={(ring) => {
           if (!rule) return;
-          const zone: PickerZone = {
-            id: uid("zone"),
-            name: `Drawn zone ${seq}`,
-            tags: ["drawn"],
-            ring,
-            createdAt: new Date().toISOString(),
-          };
-          onZonesCreated([zone]);
-          addZones([zone], rule.id);
-          // Back to the rule the zone just joined: the change is there, and so
-          // is the save bar.
-          setPane("settings");
+          const id = uid("zone");
+          setSession((s) => {
+            if (!s) return s;
+            return {
+              ...s,
+              // Numbered from the rule's own count rather than a counter
+              // shared with rules and regulations, so the first zone drawn
+              // on an empty rule is Zone 1 and not Zone 7.
+              drafts: [
+                ...s.drafts,
+                {
+                  id,
+                  name: `Zone ${rule.zoneIds.length + s.drafts.length + 1}`,
+                  tags: ["drawn"],
+                  ring,
+                  createdAt: new Date().toISOString(),
+                },
+              ],
+              focusId: id,
+            };
+          });
+          // Raised once, on the first shape, so the auto-focused name field is
+          // reachable without overruling anyone who then drags the tray back
+          // down to see the map.
+          if (!session?.drafts.length) setTraySnap("half");
         }}
+        tray={
+          // Two mounts of one list, exactly one of them visible: above lg this
+          // wrapper is hidden and the column holds it, below lg the column is.
+          // The hidden one is display:none, so it is out of the accessibility
+          // tree and cannot take the focus the name field asks for.
+          <div className="contents lg:hidden">
+            <BottomTray
+              open={session !== null}
+              onOpenChange={(open) => {
+                if (!open) cancelSession();
+              }}
+              snap={traySnap}
+              onSnapChange={setTraySnap}
+              label="Drawn zones"
+              // Clear of MapLibre's attribution, which paints over anything
+              // docked to the bottom edge.
+              className="inset-x-2 bottom-10"
+            >
+              {session && rule ? (
+                <ZoneDraftPanel
+                  chrome="tray"
+                  tool={session.tool as ZoneDrawTool | null}
+                  drafts={session.drafts}
+                  focusId={session.focusId}
+                  onRename={renameDraft}
+                  onRemove={removeDraft}
+                  onPreviewChange={setPreview}
+                  onCancel={cancelSession}
+                  onAdd={commitSession}
+                />
+              ) : null}
+            </BottomTray>
+          </div>
+        }
       />
 
       <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
@@ -1888,45 +2090,6 @@ function AllOrSome({
 
 const ZONE_PAGE = 8;
 
-/**
- * A zone's name, renamed in place.
- *
- * A real bordered input, not text that becomes one on click: production
- * renames from this list, and a borderless field reads as a label nobody
- * thinks to type into -- which was the report this answers.
- *
- * The draft is local so each keystroke is cheap. The rename is published on
- * blur or Enter, and Escape puts the old name back.
- */
-function ZoneNameField({ name, onRename }: { name: string; onRename: (name: string) => void }) {
-  const [draft, setDraft] = React.useState<string | null>(null);
-
-  const commit = () => {
-    if (draft === null) return;
-    const next = draft.trim();
-    setDraft(null);
-    // An emptied field is a slip, not a request for a nameless zone.
-    if (next && next !== name) onRename(next);
-  };
-
-  return (
-    <Input
-      aria-label={`Rename ${name}`}
-      className="h-8"
-      value={draft ?? name}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          commit();
-        }
-        if (e.key === "Escape") setDraft(null);
-      }}
-    />
-  );
-}
-
 function ZoneList({
   ids,
   zoneIndex,
@@ -2113,8 +2276,10 @@ function RegulationMap({
   drawMode,
   onDrawModeChange,
   candidates,
+  drafts,
   preview,
   onDrawn,
+  tray,
   className,
 }: {
   regulation: Regulation;
@@ -2124,12 +2289,16 @@ function RegulationMap({
   canDraw: boolean;
   /** Zones chosen in the Add zones panel but not yet added to the rule. */
   candidates: PickerZone[];
+  /** Shapes finished in this drawing session, not yet added to the rule. */
+  drafts: PickerZone[];
   /** The one being read in that panel, drawn over the rest. */
   preview: PickerZone | null;
   /** Owned above, because the Add zones screen arms it too. */
   drawMode: DrawMode | null;
   onDrawModeChange: (mode: DrawMode | null) => void;
   onDrawn: (ring: [number, number][]) => void;
+  /** The draft list as a tray, for the widths with no room for a column. */
+  tray?: React.ReactNode;
   className?: string;
 }) {
   const [map, setMap] = React.useState<MapLibreMap | null>(null);
@@ -2199,6 +2368,19 @@ function RegulationMap({
     () => candidates.map((z) => ({ ring: z.ring, category: "candidate" })),
     [candidates],
   );
+  /*
+   * What has just been drawn, in the same blue as a candidate: both are
+   * shapes on their way into the rule, and the only difference is where they
+   * came from.
+   *
+   * Deliberately NOT routed through `candidates`: the fit-to-selection effect
+   * below is keyed on how many there are, so a finished shape would fly the
+   * camera -- the map arguing with someone mid-draw. Drafts never move it.
+   */
+  const draftShapes = React.useMemo(
+    () => drafts.map((z) => ({ ring: z.ring, category: "candidate" })),
+    [drafts],
+  );
   const previewShapes = React.useMemo(
     () => (preview ? [{ ring: preview.ring, category: "candidate" }] : []),
     [preview],
@@ -2210,6 +2392,14 @@ function RegulationMap({
     styles: CANDIDATE_STYLES,
     width: 2,
     id: "regulation-candidates",
+  });
+  useCategoryShapeLayer({
+    map,
+    enabled: draftShapes.length > 0,
+    shapes: draftShapes,
+    styles: CANDIDATE_STYLES,
+    width: 2,
+    id: "regulation-drafts",
   });
   // The row being read, drawn again on top with a heavier outline. A second
   // layer rather than a second colour: the zone is the same zone, and what
@@ -2227,10 +2417,14 @@ function RegulationMap({
     map,
     mode: drawMode,
     lineWidthMeters: lineWidth,
-    onComplete: (ring) => {
-      onDrawn(ring);
-      onDrawModeChange(null);
-    },
+    /*
+     * The tool stays armed, so a run of zones is a run of drags rather than a
+     * trip back through the picker for each one. `useMapDraw`'s effect is
+     * keyed on the mode, so leaving it alone means no teardown: the pointer
+     * handlers, the held `dragPan` and the banner's corridor width all stay
+     * live. Escape or Select is how you stop.
+     */
+    onComplete: (ring) => onDrawn(ring),
     onCancel: () => onDrawModeChange(null),
   });
 
@@ -2302,7 +2496,10 @@ function RegulationMap({
         }
       />
 
-      <MapDrawControl
+      {/* The whole row, open on the map: during a session the tool is changed
+          here as often as it is chosen in the panel, and a split button hides
+          four of the five behind a press. */}
+      <MapDrawToolbar
         className="absolute top-3 right-3"
         mode={drawMode}
         onModeChange={onDrawModeChange}
@@ -2332,6 +2529,8 @@ function RegulationMap({
           />
         </div>
       ) : null}
+
+      {tray}
 
       <MapControls
         className="absolute right-3 bottom-10"

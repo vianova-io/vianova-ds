@@ -1,0 +1,227 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Baixa bay 9",
+        "tags": [
+          "parking",
+          "sample"
+        ]
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -9.13042,
+              38.71295
+            ],
+            [
+              -9.12986,
+              38.71295
+            ],
+            [
+              -9.12986,
+              38.71339
+            ],
+            [
+              -9.13042,
+              38.71339
+            ],
+            [
+              -9.13042,
+              38.71295
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Chiado / Bairro Alto bay 21",
+        "tags": [
+          "parking",
+          "sample"
+        ]
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -9.14802,
+              38.71093
+            ],
+            [
+              -9.14745,
+              38.71093
+            ],
+            [
+              -9.14745,
+              38.71137
+            ],
+            [
+              -9.14802,
+              38.71137
+            ],
+            [
+              -9.14802,
+              38.71093
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Baixa bay 25",
+        "tags": [
+          "parking",
+          "sample"
+        ]
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -9.14215,
+              38.7217
+            ],
+            [
+              -9.14159,
+              38.7217
+            ],
+            [
+              -9.14159,
+              38.72214
+            ],
+            [
+              -9.14215,
+              38.72214
+            ],
+            [
+              -9.14215,
+              38.7217
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Chiado / Bairro Alto bay 28",
+        "tags": [
+          "parking",
+          "sample"
+        ]
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -9.15128,
+              38.71701
+            ],
+            [
+              -9.15072,
+              38.71701
+            ],
+            [
+              -9.15072,
+              38.71745
+            ],
+            [
+              -9.15128,
+              38.71745
+            ],
+            [
+              -9.15128,
+              38.71701
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Baixa bay 29",
+        "tags": [
+          "parking",
+          "sample"
+        ]
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -9.13699,
+              38.71461
+            ],
+            [
+              -9.13643,
+              38.71461
+            ],
+            [
+              -9.13643,
+              38.71505
+            ],
+            [
+              -9.13699,
+              38.71505
+            ],
+            [
+              -9.13699,
+              38.71461
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Chiado / Bairro Alto bay 30",
+        "tags": [
+          "parking",
+          "sample"
+        ]
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -9.13486,
+              38.7139
+            ],
+            [
+              -9.13429,
+              38.7139
+            ],
+            [
+              -9.13429,
+              38.71434
+            ],
+            [
+              -9.13486,
+              38.71434
+            ],
+            [
+              -9.13486,
+              38.7139
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

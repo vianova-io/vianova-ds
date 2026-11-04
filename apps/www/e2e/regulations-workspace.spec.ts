@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { settle } from "./examples";
 import { zippedShapefile } from "./shapefile-fixture";
@@ -49,6 +49,81 @@ async function expectNoBlockingViolations(page: Page) {
     .analyze();
   const blocking = results.violations.filter((v) => BLOCKING.has(v.impact ?? ""));
   expect(blocking.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
+}
+
+/** Two polygons over Lisbon, named, as a city's export would arrive. */
+const FEATURES = JSON.stringify({
+  type: "FeatureCollection",
+  features: [
+    {
+      type: "Feature",
+      properties: { name: "Cais do Sodré" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [-9.146, 38.706],
+            [-9.142, 38.706],
+            [-9.142, 38.709],
+            [-9.146, 38.709],
+            [-9.146, 38.706],
+          ],
+        ],
+      },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Santos" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [-9.156, 38.704],
+            [-9.152, 38.704],
+            [-9.152, 38.707],
+            [-9.156, 38.707],
+            [-9.156, 38.704],
+          ],
+        ],
+      },
+    },
+  ],
+});
+
+/** Fleet cap, open, with its two zones -- the rule the drawing tests use. */
+async function fleetCap(page: Page) {
+  const root = await open(page);
+  await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
+  await expect(root.getByText("2 zones").first()).toBeVisible();
+  const map = root.getByRole("region", { name: "Map of the regulation's zones" });
+  // The column, not the tray: two copies of the list are mounted and only one
+  // is displayed, so every locator here has to say which.
+  const drafts = root.locator("[data-slot=zone-draft-panel][data-chrome=panel]");
+  return { root, map, drafts };
+}
+
+/**
+ * A square, drawn with the polygon tool wherever the map is free.
+ *
+ * `dx` shifts it, so a second one can be drawn without landing on the first.
+ *
+ * Clicked on the canvas with element-relative positions rather than at page
+ * coordinates worked out from the section's box. Arming a tool opens a
+ * drawing session, which narrows the settings column from 460 to 340 and lets
+ * the map grow into it -- so a box read a frame too early describes a map
+ * that has already moved, and `page.mouse` would click wherever that lands
+ * with nothing to say it missed. A locator click hit-tests, so a cover or a
+ * bad position fails saying which.
+ */
+async function square(map: Locator, dx = 0) {
+  const canvas = map.locator(".maplibregl-canvas");
+  const box = (await canvas.boundingBox())!;
+  for (const [x, y] of [[0.4, 0.4], [0.6, 0.4], [0.6, 0.6], [0.4, 0.6]] as const) {
+    await canvas.click({
+      position: { x: box.width * (x + dx), y: box.height * y },
+    });
+  }
+  await map.getByRole("button", { name: "Done" }).click();
 }
 
 test("a new regulation is created from a type, edited and saved", async ({ page }) => {
@@ -172,28 +247,91 @@ test("on a phone, rules are a strip and settings and map take turns", async ({ p
   await page.getByRole("menuitem", { name: "Duplicate" }).click();
   await expect(root.getByRole("tab", { name: /Parking bays \(copy\)/ })).toHaveAttribute("aria-selected", "true");
   await expect(root.getByRole("radio", { name: "Settings, edited" })).toBeChecked();
-});
 
-test("a polygon drawn with the map's draw control joins the rule, and the tool returns to Select", async ({ page }) => {
-  const root = await open(page);
-  await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
-  await expect(root.getByText("2 zones").first()).toBeVisible();
+  // A drawing session has no column to put its list in at this width, so the
+  // list is a tray over the map -- which means the map keeps its canvas and
+  // the two are on screen together, rather than taking turns.
+  await root.getByRole("button", { name: "Add zones" }).click();
+  const picker = root.locator("[data-slot=zone-picker-panel]");
+  await picker.getByRole("tab", { name: "Draw" }).click();
+  await picker.getByRole("button", { name: /^Polygon/ }).click();
 
-  // The same split control as the map workspace: the tool on the left, the
-  // menu of tools behind the chevron.
-  const map = root.getByRole("region", { name: "Map of the regulation's zones" });
-  await map.getByRole("button", { name: "Choose a drawing tool" }).click();
-  await page.getByRole("menuitemradio", { name: /Polygon/ }).click();
-  await expect(map.getByRole("button", { name: "Draw a zone" })).toHaveAttribute("aria-pressed", "true");
+  const tray = root.locator("[data-slot=bottom-tray]");
+  await expect(tray).toBeVisible();
+  await expect(map).toBeVisible();
+  // A peek until there is something to show, so the map keeps its room.
+  await expect(tray).toHaveAttribute("data-snap", "peek");
+  const grabber = tray.getByRole("slider", { name: "Drawn zones height" });
+  await expect(grabber).toBeVisible();
 
-  const box = (await map.boundingBox())!;
-  for (const [x, y] of [[0.4, 0.4], [0.6, 0.4], [0.6, 0.6], [0.4, 0.6]] as const) {
-    await page.mouse.click(box.x + box.width * x, box.y + box.height * y);
+  const canvas = map.locator(".maplibregl-canvas");
+  const box = (await canvas.boundingBox())!;
+  for (const [x, y] of [[0.3, 0.35], [0.65, 0.35], [0.5, 0.58]] as const) {
+    await canvas.click({ position: { x: box.width * x, y: box.height * y } });
   }
   await map.getByRole("button", { name: "Done" }).click();
 
-  await expect(root.getByText("3 zones").first()).toBeVisible();
-  await expect(map.getByRole("button", { name: "Draw a zone" })).toHaveAttribute("aria-pressed", "false");
+  // Raised once, on the first shape, so the name it just made up is reachable
+  // without a drag -- and not again, so anyone who pulls it back down to see
+  // the map keeps it there.
+  await expect(tray).toHaveAttribute("data-snap", "half");
+  await expect(tray.getByRole("listitem")).toHaveCount(1);
+  await expectNoBlockingViolations(page);
+
+  // Arrow keys reach every height: "drag it up to rename" has to work without
+  // a pointer, which is why the grabber is a slider and not a button.
+  await grabber.press("ArrowUp");
+  await expect(tray).toHaveAttribute("data-snap", "full");
+  await grabber.press("ArrowDown");
+  await expect(tray).toHaveAttribute("data-snap", "half");
+
+  // Raised once and not again. Pulled back down to see the map, a second
+  // shape leaves it where it was put -- the alternative, raising on every
+  // shape, would fight whoever lowered it on every shape they drew.
+  await grabber.press("ArrowDown");
+  await expect(tray).toHaveAttribute("data-snap", "peek");
+  for (const [x, y] of [[0.3, 0.2], [0.7, 0.22], [0.5, 0.42]] as const) {
+    await canvas.click({ position: { x: box.width * x, y: box.height * y } });
+  }
+  await map.getByRole("button", { name: "Done" }).click();
+  await expect(tray.getByRole("listitem")).toHaveCount(2);
+  await expect(tray).toHaveAttribute("data-snap", "peek");
+
+  await tray.getByRole("button", { name: "Cancel" }).click();
+  await expect(tray).toBeHidden();
+});
+
+test("a polygon drawn from the map's toolbar is collected, and the tool stays armed", async ({ page }) => {
+  const { root, map, drafts } = await fleetCap(page);
+
+  // The whole tool row is open on the map, where a split button used to show
+  // one tool and hide the other four behind a chevron. During a session the
+  // tool is changed about as often as it is first chosen, so hiding them was
+  // the wrong trade.
+  const polygon = map.getByRole("button", { name: "Polygon" });
+  await polygon.click();
+  await expect(polygon).toHaveAttribute("aria-pressed", "true");
+
+  await square(map);
+
+  // The shape is a draft in the left column, not a zone in the rule: nothing
+  // reaches the rule until Add. And the tool is STILL armed -- the assertion
+  // that used to read "false" here, and the whole point of the redesign: a
+  // run of zones is a run of drags, not a trip through the picker each time.
+  await expect(drafts.getByRole("listitem")).toHaveCount(1);
+  // Exactly one pending, so nothing has been counted twice. The rule's own
+  // "2 zones" is not assertable here -- the session has taken the column it
+  // was printed in -- and what proves nothing reached the rule is the count
+  // below, which goes 2 to 4, and Cancel's test further down.
+  await expect(drafts.getByRole("button", { name: "Add 1 zone" })).toBeVisible();
+  await expect(polygon).toHaveAttribute("aria-pressed", "true");
+
+  await square(map, -0.25);
+  await expect(drafts.getByRole("listitem")).toHaveCount(2);
+
+  await drafts.getByRole("button", { name: "Add 2 zones" }).click();
+  await expect(root.getByText("4 zones").first()).toBeVisible();
+  await expect(root.getByText("Unsaved changes")).toBeVisible();
 });
 
 test("Public is tinted where Private stays quiet, in the list and the editor", async ({ page }) => {
@@ -217,14 +355,11 @@ test("Public is tinted where Private stays quiet, in the list and the editor", a
   await expectNoBlockingViolations(page);
 });
 
-test("a line drawn with the map's draw control becomes a corridor zone, at the width the banner sets", async ({ page }) => {
-  const root = await open(page);
-  await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
-  await expect(root.getByText("2 zones").first()).toBeVisible();
+test("a line drawn from the map's toolbar becomes a corridor zone, at the width the banner sets", async ({ page }) => {
+  const { root, map, drafts } = await fleetCap(page);
 
-  const map = root.getByRole("region", { name: "Map of the regulation's zones" });
-  await map.getByRole("button", { name: "Choose a drawing tool" }).click();
-  await page.getByRole("menuitemradio", { name: /Line/ }).click();
+  const line = map.getByRole("button", { name: "Line" });
+  await line.click();
 
   // The width is the line tool's own control, and it is in the banner rather
   // than a panel because it is only judgeable against the street underneath.
@@ -234,9 +369,10 @@ test("a line drawn with the map's draw control becomes a corridor zone, at the w
 
   // Two points are enough for a line, where a polygon needs three -- so Done
   // is still refused after one and offered after two.
-  const box = (await map.boundingBox())!;
+  const canvas = map.locator(".maplibregl-canvas");
+  const box = (await canvas.boundingBox())!;
   const click = ([x, y]: readonly [number, number]) =>
-    page.mouse.click(box.x + box.width * x, box.y + box.height * y);
+    canvas.click({ position: { x: box.width * x, y: box.height * y } });
   const done = map.getByRole("button", { name: "Done" });
   await click([0.35, 0.35]);
   await expect(done).toBeDisabled();
@@ -244,17 +380,31 @@ test("a line drawn with the map's draw control becomes a corridor zone, at the w
   await click([0.7, 0.42]);
   await done.click();
 
-  await expect(root.getByText("3 zones").first()).toBeVisible();
-  await expect(map.getByRole("button", { name: "Draw a zone" })).toHaveAttribute("aria-pressed", "false");
+  await expect(drafts.getByRole("listitem")).toHaveCount(1);
+  await expect(line).toHaveAttribute("aria-pressed", "true");
+  // The banner stays mounted across a run of shapes, so the width someone set
+  // once is still set for the next street rather than back at the default.
+  await expect(width).toHaveValue("120");
+
+  await click([0.3, 0.7]);
+  await click([0.5, 0.78]);
+  await done.click();
+  await expect(drafts.getByRole("listitem")).toHaveCount(2);
+
+  await drafts.getByRole("button", { name: "Add 2 zones" }).click();
+  await expect(root.getByText("4 zones").first()).toBeVisible();
 });
 
-test("Add zones offers drawing, and one press on a tool hands over to the map", async ({ page }) => {
+test("Add zones offers drawing, and one press on a tool starts a drawing session", async ({ page }) => {
   const root = await open(page);
   await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
 
   await root.getByRole("button", { name: "Add zones" }).click();
   const panel = root.locator("[data-slot=zone-picker-panel]");
-  await panel.getByRole("radio", { name: "Draw on the map" }).click();
+  // The sources are tabs now: three short words in one row, where five cards
+  // with a sentence each used to fill the top of the panel before anything
+  // had been done.
+  await panel.getByRole("tab", { name: "Draw" }).click();
 
   // The tools are buttons, and pressing one is the whole action. This used to
   // need a second press on a footer button named after the source tile above
@@ -263,13 +413,17 @@ test("Add zones offers drawing, and one press on a tool hands over to the map", 
   // this test fails rather than quietly clicking through it.
   await panel.getByRole("button", { name: /^Line/ }).click();
 
-  // The panel steps back out to the rule it came from, so the map it just
-  // handed over to is unobstructed, and the tool it chose is the one now
-  // armed -- not the toolbar's own default.
+  // The picker gives way to the drawing session: the map it just handed over
+  // to is unobstructed, the list of shapes takes the column, and the tool it
+  // chose is the one armed -- not the toolbar's own default.
   await expect(panel).toHaveCount(0);
+  await expect(root.locator("[data-slot=zone-draft-panel][data-chrome=panel]")).toBeVisible();
   const map = root.getByRole("region", { name: "Map of the regulation's zones" });
-  await expect(map.getByRole("button", { name: "Draw a zone" })).toHaveAttribute("aria-pressed", "true");
+  await expect(map.getByRole("button", { name: "Line" })).toHaveAttribute("aria-pressed", "true");
   await expect(map.getByRole("spinbutton", { name: "Corridor width in metres" })).toBeVisible();
+  // Nothing named "Start drawing" or "Draw the zone" anywhere: if a confirm
+  // step comes back in any shape, this fails rather than being clicked past.
+  await expect(root.getByRole("button", { name: /^(Start|Continue|Draw) / })).toHaveCount(0);
 });
 
 test("a zipped shapefile uploads, previews its shapes and adds them to the rule", async ({ page }) => {
@@ -278,7 +432,10 @@ test("a zipped shapefile uploads, previews its shapes and adds them to the rule"
   await root.getByRole("button", { name: "Add zones" }).click();
 
   const panel = root.locator("[data-slot=zone-picker-panel]");
-  await panel.getByRole("radio", { name: "Upload shape file" }).click();
+  // Pasting, uploading and fetching a link are one tab: all three end at the
+  // same bytes, and only the way in differed. The dropzone is unchanged, and
+  // so is everything a dropped shapefile does.
+  await panel.getByRole("tab", { name: "Import" }).click();
   await panel.locator("input[type=file]").setInputFiles({
     name: "Zones.zip",
     mimeType: "application/zip",
@@ -304,7 +461,7 @@ test("a shapefile in a projection the reader cannot convert is refused by name",
   await root.getByRole("button", { name: "Add zones" }).click();
 
   const panel = root.locator("[data-slot=zone-picker-panel]");
-  await panel.getByRole("radio", { name: "Upload shape file" }).click();
+  await panel.getByRole("tab", { name: "Import" }).click();
   await panel.locator("input[type=file]").setInputFiles({
     name: "Zones.zip",
     mimeType: "application/zip",
@@ -317,4 +474,229 @@ test("a shapefile in a projection the reader cannot convert is refused by name",
   await expect(panel.getByRole("alert")).toContainText("EPSG:4326");
   await expect(panel.locator("[data-slot=zone-picker-preview]")).toHaveCount(0);
   await expect(panel.getByRole("button", { name: "Add zones" })).toBeDisabled();
+});
+
+test("a drawn shape arrives named, focused and ready to be typed over", async ({ page }) => {
+  const { root, map, drafts } = await fleetCap(page);
+  await map.getByRole("button", { name: "Polygon" }).click();
+  await square(map);
+
+  // Numbered from the rule's own zones -- Fleet cap has two -- rather than
+  // from a counter shared with rules and regulations, which is why the first
+  // zone drawn on a rule used to arrive as "Drawn zone 7".
+  const field = drafts.getByRole("textbox", { name: "Rename Zone 3" });
+  await expect(field).toBeFocused();
+  // Selected, not merely focused: the name is a guess, so typing replaces it
+  // and nobody has to clear it first.
+  expect(
+    await field.evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd]),
+  ).toEqual([0, 6]);
+  // The toolbar, the rows and the focus, judged by the same rules as the rest.
+  await expectNoBlockingViolations(page);
+
+  await page.keyboard.type("Praça do Comércio");
+  await page.keyboard.press("Enter");
+  await drafts.getByRole("button", { name: "Add 1 zone" }).click();
+
+  // Named before it existed, so the name is the one the rule gets -- where
+  // renaming afterwards goes through the zone library and renames it in every
+  // rule that shares it.
+  await expect(root.getByText("3 zones").first()).toBeVisible();
+  await expect(root.getByRole("textbox", { name: "Rename Praça do Comércio" })).toBeVisible();
+});
+
+test("the name field does not arm the drawing tools", async ({ page }) => {
+  const { map, drafts } = await fleetCap(page);
+  const polygon = map.getByRole("button", { name: "Polygon" });
+  await polygon.click();
+  await square(map);
+
+  const field = drafts.getByRole("textbox", { name: "Rename Zone 3" });
+  await expect(field).toBeFocused();
+
+  // P, C, S and L arm tools on the window, and Escape and Enter end a shape.
+  // Typed into a name they have to be letters: otherwise naming a zone
+  // "Praça" would arm Polygon on the P, and Enter would close a shape rather
+  // than accept the name. The coupling is one guard deep, so this is the
+  // thing here that is easiest to break without noticing.
+  await field.fill("");
+  await page.keyboard.type("pcsl");
+  await page.keyboard.press("Enter");
+
+  await expect(polygon).toHaveAttribute("aria-pressed", "true");
+  await expect(drafts.getByRole("listitem")).toHaveCount(1);
+  await expect(drafts.getByRole("textbox", { name: "Rename pcsl" })).toBeVisible();
+});
+
+test("Select stops drawing without discarding, and Cancel leaves no trace", async ({ page }) => {
+  const { root, map, drafts } = await fleetCap(page);
+  const polygon = map.getByRole("button", { name: "Polygon" });
+  await polygon.click();
+  await square(map);
+
+  // Stopping drawing is not throwing the work away: the list and its Add
+  // button still have something to do, so the session outlives the tool.
+  await map.getByRole("button", { name: "Select" }).click();
+  await expect(polygon).toHaveAttribute("aria-pressed", "false");
+  await expect(drafts.getByRole("listitem")).toHaveCount(1);
+
+  await drafts.getByRole("button", { name: "Cancel" }).click();
+  await expect(drafts).toHaveCount(0);
+  await expect(root.getByText("2 zones").first()).toBeVisible();
+
+  // And nothing reached the zone library either. The old path committed to the
+  // rule AND to everyone's library the instant a shape closed, so it could
+  // not have offered this at all.
+  await root.getByRole("button", { name: "Add zones" }).click();
+  const panel = root.locator("[data-slot=zone-picker-panel]");
+  await panel.getByRole("textbox", { name: "Search zones" }).fill("Zone 3");
+  await expect(panel.getByRole("checkbox", { name: "Zone 3", exact: true })).toHaveCount(0);
+});
+
+test("one import field takes pasted GeoJSON or a link, told apart by looking", async ({ page }) => {
+  // Fulfilled with the CORS header a real host would need: a cross-origin
+  // fetch without it fails before the status can even be read, which is the
+  // whole substance of the caveat the component documents.
+  await page.route("**/bays.geojson", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/geo+json",
+      headers: { "access-control-allow-origin": "*" },
+      body: FEATURES,
+    }),
+  );
+
+  const root = await open(page);
+  await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
+  await root.getByRole("button", { name: "Add zones" }).click();
+
+  const panel = root.locator("[data-slot=zone-picker-panel]");
+  await panel.getByRole("tab", { name: "Import" }).click();
+  const field = panel.getByRole("textbox", { name: "Or paste GeoJSON or a link" });
+  const fetchIt = panel.getByRole("button", { name: "Fetch" });
+  const preview = panel.locator("[data-slot=zone-picker-preview]");
+
+  // GeoJSON is read as it is typed, the way the paste box always was -- and no
+  // button appears, because there is nothing left to press.
+  await field.fill(FEATURES);
+  await expect(preview).toContainText("2 zones found");
+  await expect(preview).not.toContainText("found in");
+  await expect(fetchIt).toHaveCount(0);
+
+  // A link cannot be read on every keystroke, so it waits for Fetch. The
+  // button appearing is also how the field says it accepts one.
+  await field.fill("https://example.test/zones/bays.geojson");
+  await expect(preview).toHaveCount(0);
+  await expect(fetchIt).toBeVisible();
+  await fetchIt.click();
+  // Named, because one field now has three ways in and "2 zones found" alone
+  // no longer says which of them is on screen.
+  await expect(preview).toContainText("2 zones found in bays.geojson");
+
+  await panel.getByRole("button", { name: "Add 2 zones" }).click();
+  await expect(root.getByText("4 zones").first()).toBeVisible();
+});
+
+test("a link that cannot be fetched says what to do instead", async ({ page }) => {
+  const root = await open(page);
+  await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
+  await root.getByRole("button", { name: "Add zones" }).click();
+
+  const panel = root.locator("[data-slot=zone-picker-panel]");
+  await panel.getByRole("tab", { name: "Import" }).click();
+  const field = panel.getByRole("textbox", { name: "Or paste GeoJSON or a link" });
+  const alert = panel.getByRole("alert");
+  const fetchIt = panel.getByRole("button", { name: "Fetch" });
+
+  // A zip is refused by reading the link, with no request made: the dropzone
+  // above unpacks shapefiles and the fetch never could.
+  let hits = 0;
+  await page.route("**/zones.zip", (route) => {
+    hits += 1;
+    return route.abort("failed");
+  });
+  await field.fill("https://example.test/zones.zip");
+  await fetchIt.click();
+  await expect(alert).toContainText("Drop the file above instead");
+  expect(hits).toBe(0);
+
+  await page.route("**/missing.geojson", (route) =>
+    route.fulfill({
+      status: 404,
+      headers: { "access-control-allow-origin": "*" },
+      body: "not here",
+    }),
+  );
+  await field.fill("https://example.test/missing.geojson");
+  await fetchIt.click();
+  await expect(alert).toContainText("answered 404");
+
+  // The browser collapses a CORS refusal, a DNS failure, being offline and a
+  // bad certificate into one opaque TypeError with nothing readable from
+  // script -- so the sentence has to cover all of them and name the way out.
+  await page.route("**/blocked.geojson", (route) => route.abort("failed"));
+  await field.fill("https://example.test/blocked.geojson");
+  await fetchIt.click();
+  await expect(alert).toContainText("allow requests from other sites");
+  await expect(alert).toContainText("drop the file above instead");
+});
+
+test("the sources are three tabs in one row, and the bodies swap rather than remount", async ({ page }) => {
+  const root = await open(page);
+  await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
+  await root.getByRole("button", { name: "Add zones" }).click();
+
+  const panel = root.locator("[data-slot=zone-picker-panel]");
+  const list = panel.getByRole("tablist", { name: "Zone source" });
+  const tabs = list.getByRole("tab");
+  // Three short words, and the long phrasing is a title rather than an
+  // aria-label: a tab reading "Library" whose accessible name is "Select from
+  // your zones" is a label-in-name failure, which axe treats as blocking.
+  await expect(tabs).toHaveText(["Library", "Draw", "Import"]);
+  const ys = await tabs.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().y));
+  expect(Math.max(...ys) - Math.min(...ys)).toBeLessThan(2);
+  // Tabs, not radios: moving between them swaps which body is shown and
+  // commits nothing, so arrowing through cannot arm a tool or pick a zone.
+  await expect(list.getByRole("radio")).toHaveCount(0);
+
+  // And it is one panel whose body changes, so what has been typed survives a
+  // round trip -- the reason the sources are not five mounted panels.
+  await panel.getByRole("tab", { name: "Import" }).click();
+  const field = panel.getByRole("textbox", { name: "Or paste GeoJSON or a link" });
+  await field.fill("https://example.test/zones/bays.geojson");
+  await panel.getByRole("tab", { name: "Library" }).click();
+  await expect(field).toHaveCount(0);
+  await panel.getByRole("tab", { name: "Import" }).click();
+  await expect(field).toHaveValue("https://example.test/zones/bays.geojson");
+});
+
+test("Try a sample fetches the GeoJSON served beside the page", async ({ page }) => {
+  const root = await open(page);
+  await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
+  await root.getByRole("button", { name: "Add zones" }).click();
+
+  const panel = root.locator("[data-slot=zone-picker-panel]");
+  await panel.getByRole("tab", { name: "Import" }).click();
+  const field = panel.getByRole("textbox", { name: "Or paste GeoJSON or a link" });
+  const sample = panel.getByRole("button", { name: "Try a sample" });
+
+  // Deliberately NOT routed: this fetches the file out of the built export,
+  // which is the only way to know it shipped and is reachable under the
+  // basePath the Pages site adds. Every other link in this suite is a stub.
+  await expect(sample).toBeVisible();
+  await sample.click();
+
+  // One press fills the field and fetches, so what it did is visible rather
+  // than merely plausible -- and the sample gives way to Fetch, which is now
+  // what the field offers.
+  await expect(field).toHaveValue(/\/data\/parking-bays-lisbon\.geojson$/);
+  await expect(sample).toHaveCount(0);
+
+  const preview = panel.locator("[data-slot=zone-picker-preview]");
+  await expect(preview).toContainText("6 zones found in parking-bays-lisbon.geojson");
+  // Named from the file's own properties, not numbered by the reader.
+  await expect(preview).toContainText("Baixa bay 9");
+
+  await panel.getByRole("button", { name: "Add 6 zones" }).click();
+  await expect(root.getByText("8 zones").first()).toBeVisible();
 });
