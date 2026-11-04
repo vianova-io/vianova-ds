@@ -589,7 +589,6 @@ function ZonePickerBody({
   onSelectionChange?: (zones: PickerZone[]) => void;
 }) {
   const [source, setSource] = React.useState<Source>("zones");
-  const [tool, setTool] = React.useState<ZoneDrawTool>("polygon");
   const [selected, setSelected] = React.useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -719,8 +718,8 @@ function ZonePickerBody({
             onSelectedChange={setSelected}
             onPreviewChange={onPreviewChange}
           />
-        ) : source === "draw" ? (
-          <DrawSource value={tool} onValueChange={setTool} />
+        ) : source === "draw" && onDraw ? (
+          <DrawSource onDraw={onDraw} />
         ) : source === "upload" ? (
           <UploadSource onZonesChange={setUploaded} />
         ) : (
@@ -743,11 +742,11 @@ function ZonePickerBody({
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        {source === "draw" && onDraw ? (
-          // A different verb because it is a different ending: the sheet
-          // closes and the map takes over, and nothing has been added yet.
-          <Button onClick={() => onDraw(tool)}>Draw on the map</Button>
-        ) : (
+        {/* Drawing has no Add: picking a tool is the whole action, and it
+            happens on the card. A second button here, named after the source
+            tile that is already selected, read as the step someone had just
+            taken -- so it was never pressed, and the tools looked dead. */}
+        {source === "draw" ? null : (
           <Button disabled={chosen.length === 0} onClick={() => onAdd(chosen)}>
             {chosen.length
               ? `Add ${plural(chosen.length, "zone", "zones")}`
@@ -1089,23 +1088,32 @@ const ZoneRow = React.memo(function ZoneRow({
  * an area, without having to know the toolbar exists.
  */
 function DrawSource({
-  value,
-  onValueChange,
+  onDraw,
 }: {
-  value: ZoneDrawTool;
-  onValueChange: (tool: ZoneDrawTool) => void;
+  /** Arms the tool and hands the map over; nothing is held here. */
+  onDraw: (tool: ZoneDrawTool) => void;
 }) {
   return (
     <div data-slot="zone-picker-draw" className="flex flex-col gap-3">
       <p className="text-muted-foreground text-sm">
-        Pick a tool, then draw on the map. The shape is added to this rule as
+        Pick a tool and the map takes over. The shape is added to this rule as
         soon as you finish it.
       </p>
+      {/*
+       * `action`, not `select`: each card does something the moment it is
+       * pressed. Held as a selection it needed a second press to arm, and the
+       * tools read as dead until that was found -- which it was not, because
+       * the button repeated the name of the source tile above it.
+       *
+       * Action mode also keeps the keyboard honest. In a radio group the
+       * arrow keys move the selection, so browsing the tools would arm one.
+       * Buttons are each their own tab stop and do nothing until pressed.
+       */}
       <ChoiceCardGroup
         aria-label="Drawing tool"
         columns={2}
-        value={value}
-        onValueChange={(v) => onValueChange(v as ZoneDrawTool)}
+        mode="action"
+        onChoose={(v) => onDraw(v as ZoneDrawTool)}
       >
         {DRAW_TOOLS.map((t) => (
           <ChoiceCard

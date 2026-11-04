@@ -248,15 +248,20 @@ test("a line drawn with the map's draw control becomes a corridor zone, at the w
   await expect(map.getByRole("button", { name: "Draw a zone" })).toHaveAttribute("aria-pressed", "false");
 });
 
-test("Add zones offers drawing, and picking a tool there hands over to the map", async ({ page }) => {
+test("Add zones offers drawing, and one press on a tool hands over to the map", async ({ page }) => {
   const root = await open(page);
   await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
 
   await root.getByRole("button", { name: "Add zones" }).click();
   const panel = root.locator("[data-slot=zone-picker-panel]");
   await panel.getByRole("radio", { name: "Draw on the map" }).click();
-  await panel.getByRole("radio", { name: /^Line/ }).click();
-  await panel.getByRole("button", { name: "Draw on the map" }).click();
+
+  // The tools are buttons, and pressing one is the whole action. This used to
+  // need a second press on a footer button named after the source tile above
+  // it, which nobody found: Katell reported the tools as doing nothing. The
+  // press below is deliberately the only one -- if a confirm step comes back,
+  // this test fails rather than quietly clicking through it.
+  await panel.getByRole("button", { name: /^Line/ }).click();
 
   // The panel steps back out to the rule it came from, so the map it just
   // handed over to is unobstructed, and the tool it chose is the one now
