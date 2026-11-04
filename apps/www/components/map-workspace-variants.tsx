@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { asset } from "@/lib/asset";
 import { MapWorkspace } from "@/registry/vianova/blocks/map-workspace";
 import { cn } from "@/registry/vianova/lib/utils";
 
@@ -70,8 +71,12 @@ export function MapWorkspaceVariants() {
             </button>
           ))}
         </div>
+        {/* asset(), and absolute: basePath prefixes next/link and next/image
+            and nothing else, so a raw <a href> is left exactly as written.
+            Relative, it resolved under this page -- /blocks/map-workspace/
+            -- and 404'd on the project Pages site. */}
         <a
-          href="mockups/map-size/"
+          href={asset("/mockups/map-size/")}
           className="text-primary text-sm underline underline-offset-4"
         >
           Compare at four widths
