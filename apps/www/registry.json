@@ -363,6 +363,21 @@
       ]
     },
     {
+      "name": "shapefile",
+      "type": "registry:lib",
+      "title": "Shapefile",
+      "description": "Shapefile helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/shapefile.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "registryDependencies": [
+        "@vianova/zone-geometry"
+      ]
+    },
+    {
       "name": "size-expression",
       "type": "registry:lib",
       "title": "Size Expression",
@@ -403,6 +418,18 @@
       "dependencies": [
         "clsx",
         "tailwind-merge"
+      ]
+    },
+    {
+      "name": "zone-geometry",
+      "type": "registry:lib",
+      "title": "Zone Geometry",
+      "description": "Zone Geometry helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/zone-geometry.ts",
+          "type": "registry:lib"
+        }
       ]
     },
     {
@@ -710,6 +737,7 @@
         "@vianova/basemap-switcher",
         "@vianova/basemaps",
         "@vianova/button",
+        "@vianova/category-style",
         "@vianova/checkbox",
         "@vianova/choice-card",
         "@vianova/dialog",
@@ -752,8 +780,8 @@
     {
       "name": "reports-workspace",
       "type": "registry:block",
-      "title": "Reports workspace",
-      "description": "Reports workspace layout, composed from Vianova components.",
+      "title": "Dashboard workspace",
+      "description": "Dashboard workspace layout, composed from Vianova components.",
       "dependencies": [
         "lucide-react",
         "react-grid-layout",
@@ -2998,8 +3026,10 @@
         "@vianova/css-color",
         "@vianova/draw-zone-icon",
         "@vianova/dropdown-menu",
+        "@vianova/input-group",
         "@vianova/kbd",
-        "@vianova/utils"
+        "@vianova/utils",
+        "@vianova/zone-geometry"
       ],
       "files": [
         {
@@ -3428,13 +3458,17 @@
         "@vianova/button",
         "@vianova/checkbox",
         "@vianova/choice-card",
+        "@vianova/draw-zone-icon",
         "@vianova/field",
+        "@vianova/file-dropzone",
+        "@vianova/shapefile",
         "@vianova/sheet",
         "@vianova/slider-field",
         "@vianova/tag-input",
         "@vianova/textarea",
         "@vianova/toggle-group",
-        "@vianova/utils"
+        "@vianova/utils",
+        "@vianova/zone-geometry"
       ],
       "files": [
         {

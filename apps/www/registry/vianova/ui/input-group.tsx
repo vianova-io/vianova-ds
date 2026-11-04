@@ -124,7 +124,12 @@ function InputGroupInput({
     <Input
       data-slot="input-group-control"
       className={cn(
-        "h-full flex-1 rounded-none border-0 bg-transparent px-0 shadow-none ring-0 focus-visible:ring-0 disabled:bg-transparent aria-invalid:ring-0 dark:bg-transparent dark:disabled:bg-transparent",
+        // px-3 is Input's own padding, not an invention: the group tightens
+        // whichever side carries an addon (pl-1.5 / pr-1.5 above), and a side
+        // without one keeps the ordinary field inset. Left at px-0, a group
+        // with an addon on one side only -- a unit suffix, say -- put its text
+        // hard against the border.
+        "h-full flex-1 rounded-none border-0 bg-transparent px-3 shadow-none ring-0 focus-visible:ring-0 disabled:bg-transparent aria-invalid:ring-0 dark:bg-transparent dark:disabled:bg-transparent",
         className
       )}
       {...props}

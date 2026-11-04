@@ -63,6 +63,7 @@ import {
   ChartCardMetric,
 } from "@/registry/vianova/product/chart-card";
 import {
+  DEFAULT_LINE_WIDTH_M,
   MapDrawBanner,
   MapDrawControl,
   useMapDraw,
@@ -711,6 +712,8 @@ export function MapWorkspace({
 
   /** Null when the pointer is a pointer; a mode while a zone is being drawn. */
   const [drawMode, setDrawMode] = React.useState<DrawMode | null>(null);
+  /** How wide a corridor a drawn line filters, in metres. */
+  const [lineWidth, setLineWidth] = React.useState(DEFAULT_LINE_WIDTH_M);
   /** A drawn ring, kept as a spatial filter over the flows. */
   const [selection, setSelection] = React.useState<[number, number][] | null>(
     null,
@@ -742,6 +745,7 @@ export function MapWorkspace({
   const draw = useMapDraw({
     map,
     mode: drawMode,
+    lineWidthMeters: lineWidth,
     onComplete: (ring) => {
       setSelection(ring);
       setDrawMode(null);
@@ -2341,9 +2345,11 @@ export function MapWorkspace({
 
       {drawMode ? (
         <MapDrawBanner
-          className="absolute top-16 left-1/2 w-[min(22rem,calc(100%-6rem))] -translate-x-1/2"
+          className="absolute top-16 left-1/2 w-[min(30rem,calc(100%-6rem))] -translate-x-1/2"
           mode={drawMode}
           points={draw.points}
+          lineWidthMeters={lineWidth}
+          onLineWidthChange={setLineWidth}
           onDone={draw.finish}
           onCancel={draw.cancel}
         />

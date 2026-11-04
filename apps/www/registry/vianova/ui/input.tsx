@@ -18,6 +18,19 @@ const INPUT_SIZE = {
   lg: "h-10 px-3.5",
 } as const
 
+/**
+ * The browser's own spin buttons, off.
+ *
+ * They render at roughly 10px whatever the field's height, which is below the
+ * 24px target the rest of the system holds itself to, and they eat ~16px of a
+ * narrow box -- enough to clip a five-digit value. Where stepping is genuinely
+ * useful, a field supplies its own buttons at a real size; where it is not,
+ * the value is typed.
+ */
+const NO_SPINNER =
+  "[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none " +
+  "[&::-webkit-outer-spin-button]:appearance-none"
+
 function Input({
   className,
   type,
@@ -31,6 +44,7 @@ function Input({
       data-size={size}
       className={cn(
         INPUT_SIZE[size],
+        type === "number" && NO_SPINNER,
         "w-full min-w-0 rounded-lg border border-input bg-transparent py-1 text-base transition-colors outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
         className
       )}

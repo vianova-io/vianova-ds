@@ -70,6 +70,8 @@ export type Regulation = {
   /** Switched off by hand, whatever its dates say. */
   deactivated: boolean;
   createdAt: string;
+  /** Last time anyone saved a change to it. Equal to `createdAt` until one is made. */
+  updatedAt: string;
 };
 
 export type RegulationStatus = "active" | "scheduled" | "ending" | "inactive";
@@ -233,6 +235,7 @@ export const SAMPLE_REGULATIONS: Regulation[] = [
     visibility: "private",
     deactivated: false,
     createdAt: "2026-09-12T10:31:54Z",
+    updatedAt: "2026-09-24T08:15:00Z",
     global: { start: "2026-09-15" },
     rules: [
       {
@@ -265,6 +268,7 @@ export const SAMPLE_REGULATIONS: Regulation[] = [
     visibility: "public",
     deactivated: false,
     createdAt: "2026-02-20T09:00:00Z",
+    updatedAt: "2026-08-19T15:42:00Z",
     global: {},
     rules: [
       {
@@ -287,6 +291,7 @@ export const SAMPLE_REGULATIONS: Regulation[] = [
     visibility: "public",
     deactivated: false,
     createdAt: "2026-01-10T09:00:00Z",
+    updatedAt: "2026-09-30T11:05:00Z",
     global: {},
     rules: [
       {
@@ -308,6 +313,7 @@ export const SAMPLE_REGULATIONS: Regulation[] = [
     visibility: "public",
     deactivated: false,
     createdAt: "2026-05-18T09:00:00Z",
+    updatedAt: "2026-05-18T09:00:00Z",
     global: {},
     rules: [
       {
@@ -330,6 +336,7 @@ export const SAMPLE_REGULATIONS: Regulation[] = [
     visibility: "private",
     deactivated: false,
     createdAt: "2026-06-03T14:12:00Z",
+    updatedAt: "2026-07-21T10:28:00Z",
     global: {},
     rules: [
       {
@@ -352,6 +359,7 @@ export const SAMPLE_REGULATIONS: Regulation[] = [
     visibility: "private",
     deactivated: false,
     createdAt: "2026-09-28T16:40:00Z",
+    updatedAt: "2026-09-28T16:40:00Z",
     global: { start: "2026-11-01" },
     rules: [
       {
@@ -374,6 +382,7 @@ export const SAMPLE_REGULATIONS: Regulation[] = [
     visibility: "private",
     deactivated: false,
     createdAt: "2026-04-02T11:00:00Z",
+    updatedAt: "2026-09-18T13:50:00Z",
     global: {},
     rules: [
       {
@@ -396,6 +405,7 @@ export const SAMPLE_REGULATIONS: Regulation[] = [
     visibility: "public",
     deactivated: false,
     createdAt: "2025-05-20T09:00:00Z",
+    updatedAt: "2026-03-11T09:30:00Z",
     global: {},
     rules: [
       {

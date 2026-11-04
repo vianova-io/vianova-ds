@@ -9,6 +9,7 @@ import { resolveCssColor } from "@/registry/vianova/lib/css-color";
 import type { CategoryStyle } from "@/registry/vianova/lib/category-style";
 import { MapCanvas } from "@/registry/vianova/product/map-canvas";
 import {
+  DEFAULT_LINE_WIDTH_M,
   MapDrawBanner,
   MapDrawControl,
   useMapDraw,
@@ -28,6 +29,9 @@ const WORKER_URL = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/maplibre/maplibre
 export default function MapDrawControlDefault() {
   const [map, setMap] = React.useState<MapLibreMap | null>(null);
   const [mode, setMode] = React.useState<DrawMode | null>(null);
+  // The line tool's corridor width, which the banner edits while a route is
+  // being drawn. Held here because the banner and the hook must agree on it.
+  const [lineWidth, setLineWidth] = React.useState(DEFAULT_LINE_WIDTH_M);
   const [zones, setZones] = React.useState<CategoryShape[]>([]);
 
   // The zone colour is the theme's primary, resolved for MapLibre, which
@@ -46,6 +50,7 @@ export default function MapDrawControlDefault() {
   const { points, finish, cancel } = useMapDraw({
     map,
     mode,
+    lineWidthMeters: lineWidth,
     onComplete: (ring) => {
       setZones((current) => [...current, { ring, category: "drawn" }]);
       setMode(null);
@@ -72,6 +77,8 @@ export default function MapDrawControlDefault() {
           <MapDrawBanner
             mode={mode}
             points={points}
+            lineWidthMeters={lineWidth}
+            onLineWidthChange={setLineWidth}
             onDone={finish}
             onCancel={cancel}
             className="absolute bottom-3 left-1/2 w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2"
