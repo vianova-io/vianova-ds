@@ -247,6 +247,15 @@ test("on a phone, rules are a strip and settings and map take turns", async ({ p
   await page.getByRole("menuitem", { name: "Duplicate" }).click();
   await expect(root.getByRole("tab", { name: /Parking bays \(copy\)/ })).toHaveAttribute("aria-selected", "true");
   await expect(root.getByRole("radio", { name: "Settings, edited" })).toBeChecked();
+});
+
+// Its own test, not another leg of the one above: between them these two run
+// four axe scans, a map that has to reach full size and two drawn shapes, which
+// together sat just under the 30s default and tipped over it on a slow runner.
+test("on a phone, a drawing session is a tray over the map", async ({ page }) => {
+  const root = await open(page, { width: 390, height: 844 });
+  await root.locator("[data-slot=regulation-link]", { hasText: "Parking · Baixa and Chiado" }).click();
+  const map = root.getByRole("region", { name: "Map of the regulation's zones" });
 
   // A drawing session has no column to put its list in at this width, so the
   // list is a tray over the map -- which means the map keeps its canvas and
