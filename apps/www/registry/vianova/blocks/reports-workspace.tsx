@@ -69,6 +69,11 @@ import { Avatar, AvatarFallback } from "@/registry/vianova/ui/avatar";
 import { Badge } from "@/registry/vianova/ui/badge";
 import { Button } from "@/registry/vianova/ui/button";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/registry/vianova/ui/tooltip";
+import {
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
@@ -3196,6 +3201,15 @@ function nextFree(
  */
 type Target = { rect: Rect; drawn: boolean; mode: "choose" | "chart" };
 
+export type ReportCanvasHandle = {
+  /**
+   * Put the canvas's cursor on the first free cell and show what to do there,
+   * placing nothing. This is what the toolbar's `+` does now: it used to
+   * insert a widget, and in V2 it only takes you to where one would go.
+   */
+  goToFreeCell: () => void;
+};
+
 /**
  * The report as the product lays it out: a 12-column grid of cells, at least
  * six rows deep, with widgets placed by react-grid-layout as in the product.
@@ -3208,25 +3222,31 @@ type Target = { rect: Rect; drawn: boolean; mode: "choose" | "chart" };
  * Narrower than a usable grid, it stacks the widgets in reading order and
  * offers the same two choices at the end.
  */
-function ReportCanvas({
-  widgets,
-  data,
-  filters,
-  filterDisplay,
-  autoSelectId,
-  onChange,
-  onPlacedText,
-}: {
-  widgets: Widget[];
-  /** Per dataset: each chart draws from its own. */
-  data: Record<DatasetId, ReportData>;
-  filters: Filters;
-  filterDisplay?: FilterDisplay;
-  /** A text widget to focus as soon as it mounts. */
-  autoSelectId: string | null;
-  onChange: (widgets: Widget[]) => void;
-  onPlacedText: (id: string) => void;
-}) {
+const ReportCanvas = React.forwardRef<
+  ReportCanvasHandle,
+  {
+    widgets: Widget[];
+    /** Per dataset: each chart draws from its own. */
+    data: Record<DatasetId, ReportData>;
+    filters: Filters;
+    filterDisplay?: FilterDisplay;
+    /** A text widget to focus as soon as it mounts. */
+    autoSelectId: string | null;
+    onChange: (widgets: Widget[]) => void;
+    onPlacedText: (id: string) => void;
+  }
+>(function ReportCanvas(
+  {
+    widgets,
+    data,
+    filters,
+    filterDisplay,
+    autoSelectId,
+    onChange,
+    onPlacedText,
+  },
+  ref,
+) {
   const { width, containerRef, mounted } = useContainerWidth({
     measureBeforeMount: true,
   });
@@ -3305,6 +3325,10 @@ function ReportCanvas({
     [],
   );
   const [flash, setFlash] = React.useState<string | null>(null);
+  // The cell the `+` last sent us to, while its hint is still showing.
+  const [hinted, setHinted] = React.useState<{ x: number; y: number } | null>(
+    null,
+  );
   // Where the Add charts dialog was opened from: a cell or a drawn area, or
   // null for "anywhere" (the stacked layout). Undefined while it is closed.
   const [adding, setAdding] = React.useState<Target | null | undefined>(
@@ -3357,6 +3381,55 @@ function ReportCanvas({
         ?.focus(),
     );
   };
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      goToFreeCell: () => {
+        // Stacked, there is no grid to land on: the two choices already sit
+        // at the end of the column, permanently. Sending the cursor to a cell
+        // that is not rendered would make this button do nothing at all --
+        // the very thing the hint exists to prevent.
+        if (stacked) {
+          containerRef.current?.scrollIntoView({
+            block: "end",
+            behavior: "smooth",
+          });
+          setSaid(
+            "Nothing was added. Choose Chart or Text at the end of the dashboard.",
+          );
+          return;
+        }
+        // Read the grid here rather than from `free` below, which is computed
+        // past the stacked early return -- a hook may not be.
+        for (let y = 0; y < rows; y++)
+          for (let x = 0; x < GRID_COLUMNS; x++)
+            if (!taken(x, y)) {
+              // focus() scrolls the cell into view, and the cell's own
+              // onFocus lights it up.
+              focusCell({ x, y });
+              setHinted({ x, y });
+              setSaid(
+                `Row ${y + 1}, column ${x + 1} is free. Nothing was added: choose Chart or Text there.`,
+              );
+              return;
+            }
+        setSaid("Every cell is taken. Remove a widget to make room.");
+      },
+    }),
+    // `layouts` is a fresh array each render, so this re-reads the grid every
+    // time -- which is what we want: the handle must see the current layout,
+    // not the one from the render that first assigned it.
+    [rows, layouts, taken, focusCell, stacked, containerRef],
+  );
+
+  // The hint is a nudge, not a notice to dismiss: it goes on its own. Long
+  // enough to read a short sentence, which 1.4s (the flash) is not.
+  React.useEffect(() => {
+    if (!hinted) return;
+    const t = setTimeout(() => setHinted(null), 4500);
+    return () => clearTimeout(t);
+  }, [hinted]);
 
   const place = (t: Target | null, p: Placement) => {
     const min = minCells(p.spec);
@@ -3689,6 +3762,8 @@ function ReportCanvas({
               return;
             }
             if (!c || (hover && c.x === hover.x && c.y === hover.y)) return;
+            // The hint names a cell. Once the pointer picks another, it lies.
+            setHinted(null);
             setHover(c);
           }}
           onPointerLeave={() => {
@@ -3720,6 +3795,7 @@ function ReportCanvas({
             const isCurrent =
               !isTaken && current?.x === c.x && current?.y === c.y;
             const isHover = showHover && hover!.x === c.x && hover!.y === c.y;
+            const isHinted = !isTaken && hinted?.x === c.x && hinted?.y === c.y;
             return (
               <div
                 key={`${c.x}-${c.y}`}
@@ -3756,10 +3832,37 @@ function ReportCanvas({
                   "@container relative rounded-lg transition-colors duration-150 focus-visible:outline-none",
                   "bg-muted/40 focus-visible:ring-ring focus-visible:ring-2",
                   // Only the cell under the pointer lights up; where a chart
-                  // would land is shown once the picker is open.
-                  isHover && "bg-primary/10 ring-primary/50 ring-1",
+                  // would land is shown once the picker is open. The cell the
+                  // `+` sent us to stays lit while its hint is up, pointer or
+                  // no pointer.
+                  (isHover || isHinted) &&
+                    "bg-primary/10 ring-primary/50 ring-1",
                 )}
               >
+                {/* Why the `+` appeared to do nothing. It inserted a widget
+                    before V2, so landing on a lit cell with no explanation
+                    reads as a dead button. */}
+                {isHinted ? (
+                  <Tooltip
+                    open
+                    onOpenChange={(open) => {
+                      if (!open) setHinted(null);
+                    }}
+                  >
+                    <TooltipTrigger
+                      render={
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute inset-0"
+                        />
+                      }
+                    />
+                    {/* Said in the live region too, so it is not sight-only. */}
+                    <TooltipContent side="top">
+                      Nothing added yet — choose Chart or Text here.
+                    </TooltipContent>
+                  </Tooltip>
+                ) : null}
                 {isHover ? (
                   <div className="draggable-cancel absolute inset-0 z-20 flex flex-col items-stretch justify-center gap-1 p-1.5">
                     <Button
@@ -3960,7 +4063,7 @@ function ReportCanvas({
       {live}
     </div>
   );
-}
+});
 
 /* -------------------------------------------------------------------------- */
 /* Add charts                                                                  */
@@ -4762,6 +4865,9 @@ function ReportView({
     (id) => states[id].status === "error" && used.has(id),
   );
   const [exporting, setExporting] = React.useState(false);
+  // The toolbar's `+` has nothing to add any more; it drives the canvas's
+  // cursor instead, so it has to reach into it.
+  const canvasRef = React.useRef<ReportCanvasHandle>(null);
   const [exported, setExported] = React.useState<string | null>(null);
 
   // The text placed last, focused with its heading selected once it mounts.
@@ -4804,6 +4910,24 @@ function ReportView({
           />
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {/* V2: this used to insert a widget. It now only takes you to the
+              first free cell, which is why the cell explains itself when you
+              arrive. */}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Go to the first free cell"
+                  onClick={() => canvasRef.current?.goToFreeCell()}
+                >
+                  <Plus />
+                </Button>
+              }
+            />
+            <TooltipContent>Go to the first free cell</TooltipContent>
+          </Tooltip>
           <Button onClick={() => setExporting(true)}>
             <WandSparkles data-icon="inline-start" />
             Export report
@@ -4850,6 +4974,7 @@ function ReportView({
 
       <div className="@container min-w-0">
         <ReportCanvas
+          ref={canvasRef}
           widgets={report.widgets}
           data={data}
           filters={report.filters}
