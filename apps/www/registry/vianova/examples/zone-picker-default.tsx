@@ -4,7 +4,6 @@ import * as React from "react";
 
 import {
   type PickerZone,
-  ZoneDraftPanel,
   type ZoneDrawTool,
   ZonePicker,
   ZonePickerPanel,
@@ -164,52 +163,48 @@ export default function ZonePickerDefault() {
       <div className="flex h-[42rem] overflow-hidden rounded-lg border">
         {/* As wide as the settings column it stands in for. */}
         <div className="flex w-[26rem] shrink-0 flex-col border-r">
-          {drawing ? (
-            /*
-             * Drawing is a place, not an instant. The shapes collect here
-             * with names you can type over, the tool stays armed, and Cancel
-             * leaves no trace -- which is the part that committing each shape
-             * as it closed could not offer.
-             */
-            <ZoneDraftPanel
-              chrome="panel"
-              tool={tool}
-              onToolChange={setTool}
-              drafts={drafts}
-              ruleName="Fleet cap · Parking"
-              focusId={focusId}
-              onRename={(id, name) =>
-                setDrafts((prev) =>
-                  prev.map((z) => (z.id === id ? { ...z, name } : z)),
-                )
-              }
-              onRemove={(id) =>
-                setDrafts((prev) => prev.filter((z) => z.id !== id))
-              }
-              onPreviewChange={setPreview}
-              onCancel={endSession}
-              onAdd={() => {
-                add(drafts);
-                endSession();
-              }}
-            />
-          ) : picking ? (
+          {picking ? (
             <ZonePickerPanel
               zones={ZONES}
               excludeIds={added.map((z) => z.id)}
               backLabel="Fleet cap · Parking"
               urlSample={SAMPLE_GEOJSON}
-              onBack={() => setPicking(false)}
-              onPreviewChange={setPreview}
-              onDraw={(picked) => {
-                // One press arms it and hands the map over; the picker steps
-                // aside rather than waiting for a second, confirming press.
+              onBack={() => {
                 setPicking(false);
-                setTool(picked);
+                endSession();
               }}
+              onPreviewChange={setPreview}
+              /*
+               * One press arms the tool and the panel stays where it is: the
+               * tab row above is still switchable, and the shapes collect
+               * under the tools that made them. Picking a tool used to replace
+               * this panel with a second one carrying the same four tools,
+               * which took the library and the import field with it and left
+               * no way back that kept the shapes.
+               *
+               * Drawing is a place, not an instant. The tool stays armed, the
+               * names can be typed over as they arrive, and Cancel leaves no
+               * trace -- which is the part that committing each shape as it
+               * closed could not offer.
+               */
+              onDraw={setTool}
+              session={{
+                tool,
+                drafts,
+                focusId,
+                onRename: (id, name) =>
+                  setDrafts((prev) =>
+                    prev.map((z) => (z.id === id ? { ...z, name } : z)),
+                  ),
+                onRemove: (id) =>
+                  setDrafts((prev) => prev.filter((z) => z.id !== id)),
+              }}
+              /* Ticked zones, imported shapes and drawn ones alike: one
+                 staged list, three ways to fill it. */
               onAdd={(zones) => {
                 add(zones);
                 setPicking(false);
+                endSession();
               }}
             />
           ) : (

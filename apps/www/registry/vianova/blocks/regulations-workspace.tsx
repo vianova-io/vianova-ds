@@ -1072,9 +1072,10 @@ function RegulationEditor({
   const [candidates, setCandidates] = React.useState<PickerZone[]>([]);
   /*
    * Drawing, held here rather than inside the map, because two things start
-   * it: the map's own toolbar, and the Draw tab in Add zones. That tab is in
-   * the settings column, a sibling of the map, so the state they share has to
-   * sit above both.
+   * it: the map's own keyboard shortcuts, and the Draw tab in Add zones. That
+   * tab is in the settings column, a sibling of the map, so the state they
+   * share has to sit above both -- and the shapes arrive from the map while
+   * the list that holds them is in the column.
    *
    * Two bits, not one. `session` is open from the first tool press until Add
    * or Cancel; `session.tool` is what is armed right now, and it can be null
@@ -1150,11 +1151,24 @@ function RegulationEditor({
     onClose();
   };
 
-  /** Leaves Add zones without adding, and takes its drawing off the map. */
+  /**
+   * Leaves Add zones without adding, and takes its drawing off the map.
+   *
+   * One exit for the whole screen, because it is one screen: the library, the
+   * tools and the import field are three tabs of it, and a drawing session is
+   * something it holds rather than somewhere else it went. So this discards
+   * the ticks, the imported shapes and the drawn ones alike -- none of which
+   * has reached the rule, which is the thing the old auto-committing path
+   * could not offer at all.
+   */
   const stopPicking = () => {
     setPicking(false);
+    setSession(null);
     setPreview(null);
     setCandidates([]);
+    // Below lg the two take turns, and the tray that carries a session sits
+    // on the map pane. Leaving has to put the settings back.
+    setPane("settings");
   };
 
   const duplicateRule = (id: string) => {
@@ -1188,6 +1202,11 @@ function RegulationEditor({
   const armTool = (tool: DrawMode | null) => {
     if (!rule) return;
     const ruleId = rule.id;
+    // Arming opens Add zones if it is shut. Drawing lives in that panel's
+    // Draw tab now, and the map's own keyboard shortcuts can start a session
+    // from anywhere -- so the panel they open is the one showing the tool
+    // that was just armed, rather than a session with no tools in sight.
+    if (tool !== null) setPicking(true);
     setSession((s) => {
       if (tool === null) {
         return !s || s.drafts.length === 0 ? null : { ...s, tool: null };
@@ -1199,14 +1218,14 @@ function RegulationEditor({
   };
 
   /**
-   * The same, for the tool row inside the session panel.
+   * The same, for the tool row inside the tray.
    *
-   * It differs in one case, and only because the tools moved off the map: an
-   * Escape with nothing drawn closes the session, which was free when the
-   * toolbar stayed on screen behind it. Now the session IS the panel, so
-   * closing it takes the tools away too -- press Polygon twice before drawing
-   * anything and you would be back in settings, having asked for neither.
-   * Stopping from in here keeps the panel open with nothing armed.
+   * It differs in one case, and only because the tray is the whole session on
+   * a phone: closing it takes the tools away too, so pressing Polygon twice
+   * before drawing anything would drop the reader back on the map having
+   * asked for neither. Stopping from in here keeps the tray open with nothing
+   * armed. The panel above `lg` needs no such care -- its Draw tab holds the
+   * grid whether a session is open or not.
    */
   const setSessionTool = (tool: DrawMode | null) => {
     if (tool !== null) {
@@ -1216,28 +1235,26 @@ function RegulationEditor({
     setSession((s) => (s ? { ...s, tool: null } : s));
   };
 
-  /** Leaves the session, taking every unadded shape with it. */
-  const cancelSession = () => {
-    setSession(null);
-    setPreview(null);
-    setPane("settings");
-  };
-
   /**
-   * The shapes reach the rule here, and only here.
+   * Everything staged reaches the rule here, and only here.
    *
-   * `onZonesCreated` is called once with the whole batch rather than per
-   * shape: until this point a draft is a label on something that does not
+   * One list, whatever filled it: zones ticked in the library, shapes out of
+   * a file or a paste, and shapes drawn on the map. They are three tabs of
+   * one panel, so they commit together -- Add says how many it is about to
+   * add and adds exactly those.
+   *
+   * `onZonesCreated` takes the whole batch once rather than one shape at a
+   * time: until this point a draft is a label on something that does not
    * exist yet, so renaming one is local. A second later the same edit renames
    * a library zone everywhere it is used, because rules reference zones by id.
    */
-  const commitSession = () => {
-    if (!session || !rule) return;
-    onZonesCreated(session.drafts);
-    addZones(session.drafts, rule.id);
-    setSession(null);
-    setPreview(null);
-    setPane("settings");
+  const addStaged = (picked: PickerZone[]) => {
+    if (!rule) return;
+    // Drawn, pasted and uploaded zones are ones the library has never seen.
+    const fresh = picked.filter((z) => !zoneIndex.has(z.id));
+    if (fresh.length) onZonesCreated(fresh);
+    addZones(picked, rule.id);
+    stopPicking();
   };
 
   const renameDraft = (id: string, name: string) =>
@@ -1271,73 +1288,71 @@ function RegulationEditor({
     }
   }, [sessionRuleId, rule?.id]);
 
-  const draftPanel =
-    session && rule ? (
-      <ZoneDraftPanel
-        chrome="panel"
-        tool={session.tool as ZoneDrawTool | null}
-        drafts={session.drafts}
-        focusId={session.focusId}
-        onToolChange={setSessionTool}
-        ruleName={multi ? `${draft.name} · ${rule.name}` : draft.name}
-        onRename={renameDraft}
-        onRemove={removeDraft}
-        onPreviewChange={setPreview}
-        onCancel={cancelSession}
-        onAdd={commitSession}
-      />
-    ) : null;
-
   return (
     <div className="flex h-full flex-col lg:flex-row">
       {/* Panel */}
       <section
-        aria-label={
-          session ? "Draw zones" : picking ? "Add zones" : "Regulation settings"
-        }
+        /* One screen, one name, one width. Arming a tool used to swap this
+           for a second panel, retitle it and narrow it from 460 to 340 in the
+           same tick -- three things moving at once in answer to one press,
+           which is why it read as the panel jumping away rather than as a
+           tool being armed. The session is inside it now. */
+        aria-label={picking ? "Add zones" : "Regulation settings"}
         className={cn(
-          "bg-background flex min-w-0 flex-col lg:h-full lg:shrink-0 lg:flex-none lg:border-r",
-          // Narrower during a session: it holds a list of names, not a form,
-          // and the map is where the work is happening.
-          session ? "lg:w-[340px]" : "lg:w-[460px]",
+          "bg-background flex min-w-0 flex-col lg:h-full lg:w-[460px] lg:shrink-0 lg:flex-none lg:border-r",
           pane === "settings" ? "min-h-0 flex-1" : "shrink-0",
         )}
       >
-        {session && rule ? (
-          // Below lg the map pane owns the screen and the tray carries this
-          // instead, so the column keeps out of the way rather than mounting
-          // a second copy of the same list.
-          <div className="hidden min-h-0 flex-1 flex-col lg:flex">
-            {draftPanel}
+        {picking && rule ? (
+          /* Below lg the settings and the map take turns, so a session has to
+             hand this over: the tray docked on the map carries the same tools
+             and the same list, and the column keeps out of the way rather
+             than mounting a second copy of either. Hidden, not unmounted --
+             the ticks and the half-typed import inside it are still staged,
+             and Add still commits them. */
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col",
+              session && "max-lg:hidden",
+            )}
+          >
+            <ZonePickerPanel
+              zones={zones}
+              excludeIds={rule.zoneIds}
+              // Where the arrow returns to, named: the rule in a multi-rule
+              // regulation, the regulation itself when there is only one.
+              backLabel={multi ? `${draft.name} · ${rule.name}` : draft.name}
+              onBack={stopPicking}
+              urlSample={SAMPLE_GEOJSON}
+              onPreviewChange={setPreview}
+              onSelectionChange={setCandidates}
+              onAdd={addStaged}
+              // Opens on Draw when a tool is already armed, which is the case
+              // when a keyboard shortcut on the map opened this panel.
+              initialSource={session ? "draw" : undefined}
+              session={
+                session
+                  ? {
+                      tool: session.tool as ZoneDrawTool | null,
+                      drafts: session.drafts,
+                      focusId: session.focusId,
+                      onRename: renameDraft,
+                      onRemove: removeDraft,
+                    }
+                  : null
+              }
+              onDraw={(tool) => {
+                // Below lg the map and the settings take turns, so arming has
+                // to bring the map on screen: the tray that carries the
+                // session docks over it, and a tool armed on a hidden pane
+                // would strand the reader on the settings with nothing to
+                // draw on. Disarming does not -- it leaves the panel exactly
+                // where it is, which above lg is all that ever happens.
+                if (tool) setPane("map");
+                armTool(tool);
+              }}
+            />
           </div>
-        ) : picking && rule ? (
-          <ZonePickerPanel
-            zones={zones}
-            excludeIds={rule.zoneIds}
-            // Where the arrow returns to, named: the rule in a multi-rule
-            // regulation, the regulation itself when there is only one.
-            backLabel={multi ? `${draft.name} · ${rule.name}` : draft.name}
-            onBack={stopPicking}
-            urlSample={SAMPLE_GEOJSON}
-            onPreviewChange={setPreview}
-            onSelectionChange={setCandidates}
-            onAdd={(picked) => {
-              // Pasted and uploaded zones are ones the library has never seen.
-              const fresh = picked.filter((z) => !zoneIndex.has(z.id));
-              if (fresh.length) onZonesCreated(fresh);
-              addZones(picked, rule.id);
-              stopPicking();
-            }}
-            onDraw={(tool) => {
-              // Drawing happens on the map, so the panel steps back out to the
-              // rule first -- below lg that is also what puts the map on
-              // screen, and arming a tool on a hidden pane would strand the
-              // reader on the settings with nothing to draw on.
-              stopPicking();
-              setPane("map");
-              armTool(tool);
-            }}
-          />
         ) : (
           <>
         <header className="space-y-2 border-b px-4 pt-3 pb-3 lg:pb-4">
@@ -1543,7 +1558,7 @@ function RegulationEditor({
             <BottomTray
               open={session !== null}
               onOpenChange={(open) => {
-                if (!open) cancelSession();
+                if (!open) stopPicking();
               }}
               snap={traySnap}
               onSnapChange={setTraySnap}
@@ -1554,16 +1569,19 @@ function RegulationEditor({
             >
               {session && rule ? (
                 <ZoneDraftPanel
-                  chrome="tray"
                   tool={session.tool as ZoneDrawTool | null}
                   drafts={session.drafts}
                   focusId={session.focusId}
+                  // The panel this stands in for is hidden, not thrown away,
+                  // so anything ticked there before a tool was armed is still
+                  // staged -- and Add here commits it too.
+                  alsoAdding={candidates.length}
                   onToolChange={setSessionTool}
                   onRename={renameDraft}
                   onRemove={removeDraft}
                   onPreviewChange={setPreview}
-                  onCancel={cancelSession}
-                  onAdd={commitSession}
+                  onCancel={stopPicking}
+                  onAdd={() => addStaged([...candidates, ...session.drafts])}
                 />
               ) : null}
             </BottomTray>

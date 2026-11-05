@@ -96,10 +96,12 @@ async function fleetCap(page: Page) {
   await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
   await expect(root.getByText("2 zones").first()).toBeVisible();
   const map = root.getByRole("region", { name: "Map of the regulation's zones" });
-  // The column, not the tray: two copies of the list are mounted and only one
-  // is displayed, so every locator here has to say which.
-  const drafts = root.locator("[data-slot=zone-draft-panel][data-chrome=panel]");
-  return { root, map, drafts };
+  // The column, not the tray: a session is mounted twice at once, in the Add
+  // zones panel and in the tray the phone gets instead, and only one of the
+  // two is displayed. So everything here is scoped to the panel.
+  const panel = root.locator("[data-slot=zone-picker-panel]");
+  const drafts = panel.locator("[data-slot=zone-draft-list]");
+  return { root, map, panel, drafts };
 }
 
 /**
@@ -107,20 +109,19 @@ async function fleetCap(page: Page) {
  *
  * There is one way in now. The map used to carry the whole tool row, so a
  * test could arm one without opening anything; the tools have moved into the
- * column, where they stay for the rest of the session, and the map carries
- * only the banner. So: Add zones, the Draw tab, one press.
+ * Draw tab of Add zones, where they stay for the rest of the session, and the
+ * map carries only the banner. So: Add zones, the Draw tab, one press.
  *
- * `tools` is the grid inside the session's own column -- named, because the
- * phone tray mounts a second copy that is display:none at this width.
+ * `tools` is the grid in that tab -- scoped to the panel, because the phone
+ * tray mounts a second copy that is display:none at this width.
  */
 async function drawSession(page: Page, tool: string) {
-  const { root, map, drafts } = await fleetCap(page);
+  const { root, map, panel, drafts } = await fleetCap(page);
   await root.getByRole("button", { name: "Add zones" }).click();
-  const panel = root.locator("[data-slot=zone-picker-panel]");
   await panel.getByRole("tab", { name: "Draw" }).click();
   await panel.getByRole("button", { name: new RegExp(`^${tool}`) }).click();
   await expect(drafts).toBeVisible();
-  const tools = drafts.getByRole("group", { name: "Drawing tool" });
+  const tools = panel.getByRole("group", { name: "Drawing tool" });
   const armed = tools.getByRole("button", { name: tool });
   await expect(armed).toHaveAttribute("aria-pressed", "true");
 
@@ -147,13 +148,9 @@ async function drawSession(page: Page, tool: string) {
   // list carries a rule and a name of its own. With only a gap between them
   // a finished zone reads as a fifth tile in the grid: same rounded box,
   // same column, directly beneath. The tray says both in its own header.
-  if ((await drafts.getAttribute("data-chrome")) === "panel") {
-    await expect(
-      drafts.getByRole("heading", { name: "Drawn zones" }),
-    ).toBeVisible();
-  }
+  await expect(drafts.getByRole("heading", { name: "Drawn zones" })).toBeVisible();
 
-  return { root, map, drafts, tools };
+  return { root, map, panel, drafts, tools };
 }
 
 /**
@@ -162,12 +159,11 @@ async function drawSession(page: Page, tool: string) {
  * `dx` shifts it, so a second one can be drawn without landing on the first.
  *
  * Clicked on the canvas with element-relative positions rather than at page
- * coordinates worked out from the section's box. Arming a tool opens a
- * drawing session, which narrows the settings column from 460 to 340 and lets
- * the map grow into it -- so a box read a frame too early describes a map
- * that has already moved, and `page.mouse` would click wherever that lands
- * with nothing to say it missed. A locator click hit-tests, so a cover or a
- * bad position fails saying which.
+ * coordinates worked out from the section's box. The column no longer moves
+ * when a tool is armed -- it used to narrow from 460 to 340 and let the map
+ * grow into it -- but a locator click hit-tests where `page.mouse` does not,
+ * so a cover or a bad position fails saying which rather than clicking
+ * nothing.
  */
 async function square(map: Locator, dx = 0) {
   const canvas = map.locator(".maplibregl-canvas");
@@ -243,11 +239,11 @@ test("zones added from the picker land in the rule", async ({ page }) => {
   // Enter picks the top match without touching the list.
   //
   // Retried as a whole, because the picker filters on a useDeferredValue
-  // (zone-picker.tsx:639) and React is allowed to let that lag -- which it
+  // (zone-picker.tsx:954) and React is allowed to let that lag -- which it
   // does when the rest of this file is running beside it and MapLibre has the
   // CPU. Enter then runs against the previous filter, finds no unselected
   // match, and onDraftCommit returns without clearing the field
-  // (zone-picker.tsx:702-707): a silent no-op, so the keypress is simply lost.
+  // (zone-picker.tsx:1046-1051): a silent no-op, so the keypress is lost.
   // toPass re-presses rather than waiting on a value that will never change;
   // it still fails if Enter never commits.
   await expect(async () => {
@@ -316,11 +312,18 @@ test("on a phone, a drawing session is a tray over the map", async ({ page }) =>
   // the two are on screen together, rather than taking turns.
   await root.getByRole("button", { name: "Add zones" }).click();
   const picker = root.locator("[data-slot=zone-picker-panel]");
+  // Ticked in the library before a tool is armed. The panel is hidden rather
+  // than thrown away when the tray takes over, so the tick is still staged --
+  // and the tray's Add has to say so. Uncounted, it would offer to add one
+  // zone and quietly add two.
+  await picker.getByRole("textbox", { name: "Search zones" }).fill("Belém");
+  await picker.getByRole("checkbox", { name: "Belém", exact: true }).click();
   await picker.getByRole("tab", { name: "Draw" }).click();
   await picker.getByRole("button", { name: /^Polygon/ }).click();
 
   const tray = root.locator("[data-slot=bottom-tray]");
   await expect(tray).toBeVisible();
+  await expect(tray.getByRole("button", { name: "Add 1 zone" })).toBeVisible();
   await expect(map).toBeVisible();
   // A peek until there is something to show, so the map keeps its room.
   await expect(tray).toHaveAttribute("data-snap", "peek");
@@ -339,6 +342,8 @@ test("on a phone, a drawing session is a tray over the map", async ({ page }) =>
   // the map keeps it there.
   await expect(tray).toHaveAttribute("data-snap", "half");
   await expect(tray.getByRole("listitem")).toHaveCount(1);
+  // One drawn and one ticked, counted together by the one Add there is.
+  await expect(tray.getByRole("button", { name: "Add 2 zones" })).toBeVisible();
 
   /*
    * The rule dividing the tools from the list stands clear of both.
@@ -351,12 +356,20 @@ test("on a phone, a drawing session is a tray over the map", async ({ page }) =>
    * a divider -- and nothing in this file could see it. The list owns its
    * own top margin now, which is the same number in both chromes.
    */
-  const gridBottom = (await tray
-    .getByRole("group", { name: "Drawing tool" })
-    .boundingBox())!;
-  const rule = tray.locator("[data-slot=zone-draft-panel] ul[role=list]").locator("..");
-  const ruleBox = (await rule.boundingBox())!;
-  expect(ruleBox.y - (gridBottom.y + gridBottom.height)).toBeGreaterThan(4);
+  //
+  // Both boxes in one evaluation, not two `boundingBox()` round trips. The
+  // tray has just risen from peek to half, and its height is animated with
+  // the bottom edge pinned -- so two measurements a frame apart describe
+  // content at two different offsets, and their difference is whatever the
+  // transition was doing in between. It read 1.8px that way once, against a
+  // gap that is 12.
+  const gap = await tray.evaluate((el) => {
+    const grid = el.querySelector('[role="group"][aria-label="Drawing tool"]')!;
+    const list = el.querySelector("[data-slot=zone-draft-list]")!;
+    const g = grid.getBoundingClientRect();
+    return list.getBoundingClientRect().y - (g.y + g.height);
+  });
+  expect(gap).toBeGreaterThan(4);
 
   await expectNoBlockingViolations(page);
 
@@ -384,12 +397,12 @@ test("on a phone, a drawing session is a tray over the map", async ({ page }) =>
 });
 
 test("a polygon drawn in a session is collected, and the tool stays armed", async ({ page }) => {
-  const { root, map, drafts, tools } = await drawSession(page, "Polygon");
+  const { root, map, panel, drafts, tools } = await drawSession(page, "Polygon");
 
-  // The tool row lives in the column for the whole session, where the list it
-  // fills is. It used to float on the map -- the one surface that is also the
-  // drawing surface -- while the column showed drafts and no way to change
-  // tool at all.
+  // The tool row lives in the Draw tab for the whole session, where the list
+  // it fills is. It used to float on the map -- the one surface that is also
+  // the drawing surface -- while the column showed drafts and no way to
+  // change tool at all.
   const polygon = tools.getByRole("button", { name: "Polygon" });
 
   await square(map);
@@ -400,16 +413,16 @@ test("a polygon drawn in a session is collected, and the tool stays armed", asyn
   // run of zones is a run of drags, not a trip through the picker each time.
   await expect(drafts.getByRole("listitem")).toHaveCount(1);
   // Exactly one pending, so nothing has been counted twice. The rule's own
-  // "2 zones" is not assertable here -- the session has taken the column it
-  // was printed in -- and what proves nothing reached the rule is the count
+  // "2 zones" is not assertable here -- Add zones has taken the column it was
+  // printed in -- and what proves nothing reached the rule is the count
   // below, which goes 2 to 4, and Cancel's test further down.
-  await expect(drafts.getByRole("button", { name: "Add 1 zone" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Add 1 zone" })).toBeVisible();
   await expect(polygon).toHaveAttribute("aria-pressed", "true");
 
   await square(map, -0.25);
   await expect(drafts.getByRole("listitem")).toHaveCount(2);
 
-  await drafts.getByRole("button", { name: "Add 2 zones" }).click();
+  await panel.getByRole("button", { name: "Add 2 zones" }).click();
   await expect(root.getByText("4 zones").first()).toBeVisible();
   await expect(root.getByText("Unsaved changes")).toBeVisible();
 });
@@ -436,7 +449,7 @@ test("Public is tinted where Private stays quiet, in the list and the editor", a
 });
 
 test("a line drawn in a session becomes a corridor zone, at the width the banner sets", async ({ page }) => {
-  const { root, map, drafts, tools } = await drawSession(page, "Line");
+  const { root, map, panel, drafts, tools } = await drawSession(page, "Line");
 
   const line = tools.getByRole("button", { name: "Line" });
 
@@ -470,7 +483,7 @@ test("a line drawn in a session becomes a corridor zone, at the width the banner
   await done.click();
   await expect(drafts.getByRole("listitem")).toHaveCount(2);
 
-  await drafts.getByRole("button", { name: "Add 2 zones" }).click();
+  await panel.getByRole("button", { name: "Add 2 zones" }).click();
   await expect(root.getByText("4 zones").first()).toBeVisible();
 });
 
@@ -490,17 +503,32 @@ test("Add zones offers drawing, and one press on a tool starts a drawing session
   // it, which nobody found: Katell reported the tools as doing nothing. The
   // press below is deliberately the only one -- if a confirm step comes back,
   // this test fails rather than quietly clicking through it.
+  // Measured before the press, because the press must not move it. Arming a
+  // tool used to swap this panel for a second one, retitle it and narrow it
+  // from 460 to 340 in the same tick -- three things at once in answer to one
+  // press, which is why it read as the panel jumping away rather than as a
+  // tool being armed.
+  const column = root.getByRole("region", { name: "Add zones" });
+  const before = (await column.boundingBox())!;
+
   await panel.getByRole("button", { name: /^Line/ }).click();
 
-  // The picker gives way to the drawing session: the map it just handed over
-  // to is unobstructed, the list of shapes takes the column, and the tool it
-  // chose is the one armed -- not a toolbar's own default.
-  await expect(panel).toHaveCount(0);
-  const drafts = root.locator("[data-slot=zone-draft-panel][data-chrome=panel]");
+  // The panel stays, and stays the same panel: same width, same heading, same
+  // tab row, with Draw still the tab you are on. The map it just handed over
+  // to is beside it, and the tool pressed is the one armed -- not a toolbar's
+  // own default.
+  await expect(panel).toBeVisible();
+  expect((await column.boundingBox())!.width).toBe(before.width);
+  await expect(panel.getByRole("heading", { name: "Add zones" })).toBeVisible();
+  await expect(panel.getByRole("tab", { name: "Draw" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  const drafts = panel.locator("[data-slot=zone-draft-list]");
   await expect(drafts).toBeVisible();
   const map = root.getByRole("region", { name: "Map of the regulation's zones" });
   await expect(
-    drafts.getByRole("group", { name: "Drawing tool" }).getByRole("button", { name: "Line" }),
+    panel.getByRole("group", { name: "Drawing tool" }).getByRole("button", { name: "Line" }),
   ).toHaveAttribute("aria-pressed", "true");
   // And the map carries no tool row of its own: one place to pick a tool.
   await expect(map.getByRole("group", { name: "Drawing tool" })).toHaveCount(0);
@@ -508,6 +536,39 @@ test("Add zones offers drawing, and one press on a tool starts a drawing session
   // Nothing named "Start drawing" or "Draw the zone" anywhere: if a confirm
   // step comes back in any shape, this fails rather than being clicked past.
   await expect(root.getByRole("button", { name: /^(Start|Continue|Draw) / })).toHaveCount(0);
+});
+
+test("a session and the other two sources stage into one list, added together", async ({ page }) => {
+  const { root, map, panel, drafts } = await drawSession(page, "Polygon");
+  await square(map);
+  await expect(drafts.getByRole("listitem")).toHaveCount(1);
+
+  // Switching tab mid-session is a way of adding more, not of starting again:
+  // the drawn shape is still staged while the library is on screen, and the
+  // count in the footer says so. It used to be impossible to find out -- the
+  // session had replaced the panel, so the only route back to the library was
+  // Cancel, which threw the shape away.
+  await panel.getByRole("tab", { name: "Library" }).click();
+  await expect(drafts).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Add 1 zone" })).toBeVisible();
+
+  await panel.getByRole("textbox", { name: "Search zones" }).fill("Belém");
+  await panel.getByRole("checkbox", { name: "Belém", exact: true }).click();
+  await expect(panel.getByRole("button", { name: "Add 2 zones" })).toBeVisible();
+
+  // And back: the shape is where it was left, under the tool that is still
+  // armed, with the rest of the session intact.
+  await panel.getByRole("tab", { name: "Draw" }).click();
+  await expect(drafts.getByRole("listitem")).toHaveCount(1);
+  await expect(
+    panel.getByRole("group", { name: "Drawing tool" }).getByRole("button", { name: "Polygon" }),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  // One Add, and it adds both: the drawn one and the ticked one. Two zones in
+  // the rule became four.
+  await panel.getByRole("button", { name: "Add 2 zones" }).click();
+  await expect(root.getByText("4 zones").first()).toBeVisible();
+  await expect(root.getByText("Unsaved changes")).toBeVisible();
 });
 
 test("a zipped shapefile uploads, previews its shapes and adds them to the rule", async ({ page }) => {
@@ -561,7 +622,7 @@ test("a shapefile in a projection the reader cannot convert is refused by name",
 });
 
 test("a drawn shape arrives named, focused and ready to be typed over", async ({ page }) => {
-  const { root, map, drafts } = await drawSession(page, "Polygon");
+  const { root, map, panel, drafts } = await drawSession(page, "Polygon");
   await square(map);
 
   // Numbered from the rule's own zones -- Fleet cap has two -- rather than
@@ -579,7 +640,7 @@ test("a drawn shape arrives named, focused and ready to be typed over", async ({
 
   await page.keyboard.type("Praça do Comércio");
   await page.keyboard.press("Enter");
-  await drafts.getByRole("button", { name: "Add 1 zone" }).click();
+  await panel.getByRole("button", { name: "Add 1 zone" }).click();
 
   // Named before it existed, so the name is the one the rule gets -- where
   // renaming afterwards goes through the zone library and renames it in every
@@ -611,7 +672,7 @@ test("the name field does not arm the drawing tools", async ({ page }) => {
 });
 
 test("pressing the armed tool stops drawing without discarding, and Cancel leaves no trace", async ({ page }) => {
-  const { root, map, drafts, tools } = await drawSession(page, "Polygon");
+  const { root, map, panel, drafts, tools } = await drawSession(page, "Polygon");
   const polygon = tools.getByRole("button", { name: "Polygon" });
   await square(map);
 
@@ -626,15 +687,17 @@ test("pressing the armed tool stops drawing without discarding, and Cancel leave
   await expect(polygon).toHaveAttribute("aria-pressed", "false");
   await expect(drafts.getByRole("listitem")).toHaveCount(1);
 
-  await drafts.getByRole("button", { name: "Cancel" }).click();
-  await expect(drafts).toHaveCount(0);
+  // Cancel is the panel's own, in the footer beside Add: one exit for the
+  // whole screen, because the session is part of it rather than somewhere
+  // else it went.
+  await panel.getByRole("button", { name: "Cancel" }).click();
+  await expect(panel).toHaveCount(0);
   await expect(root.getByText("2 zones").first()).toBeVisible();
 
   // And nothing reached the zone library either. The old path committed to the
   // rule AND to everyone's library the instant a shape closed, so it could
   // not have offered this at all.
   await root.getByRole("button", { name: "Add zones" }).click();
-  const panel = root.locator("[data-slot=zone-picker-panel]");
   await panel.getByRole("textbox", { name: "Search zones" }).fill("Zone 3");
   await expect(panel.getByRole("checkbox", { name: "Zone 3", exact: true })).toHaveCount(0);
 });
@@ -842,9 +905,6 @@ test("the map's search finds a place, and prefers the one near the map", async (
   await expect(search).toHaveCount(0);
 
   // And comes back when the session ends.
-  await root
-    .locator("[data-slot=zone-draft-panel][data-chrome=panel]")
-    .getByRole("button", { name: "Cancel" })
-    .click();
+  await picker.getByRole("button", { name: "Cancel" }).click();
   await expect(search).toBeVisible();
 });
