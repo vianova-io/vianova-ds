@@ -355,20 +355,41 @@ test.describe("docked below lg", () => {
 });
 
 test("the open chain has no serious or critical violations", async ({ page }) => {
-  // Axe walks the whole block, MapLibre's DOM included, and this page is the
-  // heaviest in the suite: ~18s alone, past 30s when four workers are sharing
-  // the machine. The default timeout makes it a load-dependent coin toss.
-  test.setTimeout(90_000);
   await page.setViewportSize(WIDE);
   await openWorkspace(page);
   await legendTrigger(page).click();
   await step(page, 1).getByRole("button", { name: "Preset" }).click();
   await expect(step(page, 2)).toBeVisible();
 
+  /*
+   * Scoped to the chain, which is what the name promises and what the
+   * assertion is about.
+   *
+   * It used to analyse the whole page behind two `.exclude()` calls for
+   * MapLibre, carrying a 90s timeout and a comment blaming the map. The map
+   * was never the cost. Measured on an idle machine at one worker: 54.1s in
+   * axe, against 1.0s to load and 3.1s to open the chain -- and of the 13,998
+   * elements it walked, exactly ONE was inside `.maplibregl-canvas-container`.
+   * The rest is the docs shell, overwhelmingly the syntax-highlighted copy of
+   * this block's own source that the page prints below the demo.
+   *
+   * So the test spent 54 seconds reading a code listing, and did it inside a
+   * 90s budget that four workers could not honour. It went flaky in three
+   * consecutive runs on branches that touched no map code.
+   *
+   * `a11y.spec.ts` already scopes its block tests for the same reason and
+   * says so. Here the same move costs 12 rules, all of them either about the
+   * docs shell itself -- `document-title`, `html-has-lang`, `meta-viewport`,
+   * `bypass` -- or simply inapplicable inside the chain today, and those
+   * return of their own accord if it ever grows a list or a scroll region.
+   * What it keeps is everything that reads an element: planting a nameless
+   * button, an unlabelled input and 1.2:1 text in the chain still reports
+   * `button-name`, `label` and `color-contrast`.
+   *
+   * 54.1s to 1.4s, same empty result, no timeout needed.
+   */
   const results = await new AxeBuilder({ page })
-    // MapLibre's own canvas and attribution are not ours to fix.
-    .exclude(".maplibregl-canvas-container")
-    .exclude(".maplibregl-ctrl-attrib")
+    .include('[data-slot="panel-step"]')
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
 

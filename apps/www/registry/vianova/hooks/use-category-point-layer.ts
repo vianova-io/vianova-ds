@@ -9,6 +9,9 @@ import {
 } from "@/registry/vianova/lib/category-style";
 import { resolveCssColor } from "@/registry/vianova/lib/css-color";
 
+/** The radius the dots were hardcoded to, and what icon-size was tuned against. */
+const DEFAULT_RADIUS = 9;
+
 export type CategoryPoint = {
   /** [longitude, latitude] */
   position: [number, number];
@@ -35,6 +38,7 @@ export function useCategoryPointLayer({
   styles,
   logoZoom,
   strokeColor,
+  radius = DEFAULT_RADIUS,
   id = "category-points",
 }: {
   map: MapLibreMap | null;
@@ -49,8 +53,25 @@ export function useCategoryPointLayer({
    * for a map that is drawn in a theme other than the one on screen.
    */
   strokeColor?: string;
+  /**
+   * The dot radius in px, at the zoom where the badge takes over.
+   *
+   * A number rather than an expression, unlike the ramp layer: the dots carry
+   * a category and no measure, so there is nothing on this layer to graduate
+   * by -- and icon-size has to be scaled to match, which cannot be done
+   * against an expression that already interpolates on zoom (MapLibre refuses
+   * to nest one zoom expression inside another).
+   */
+  radius?: number;
   id?: string;
 }) {
+  const dotsId = `${id}-dots`;
+
+  /* Read by build(), which runs again on style.load long after the effect
+     closed over its props. */
+  const radiusRef = React.useRef(radius);
+  radiusRef.current = radius;
+
   React.useEffect(() => {
     if (!map || !enabled || points.length === 0) return;
     const entries = Object.entries(styles);
@@ -128,7 +149,15 @@ export function useCategoryPointLayer({
           ] as unknown as DataDrivenPropertyValueSpecification<string>,
           // Grows towards the hand-over so the dot and the badge that replaces
           // it are close in size and the switch does not read as a jump.
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3, Math.max(9, logoZoom), 9],
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            8,
+            radiusRef.current / 3,
+            Math.max(9, logoZoom),
+            radiusRef.current,
+          ],
           "circle-stroke-color": stroke,
           "circle-stroke-width": 1.25,
         },
@@ -149,7 +178,18 @@ export function useCategoryPointLayer({
           // 0.7 of a 32px badge is about the dot it replaces, so the hand-over
           // does not jump; then it grows, because a logo needs room to be read
           // and a close-up map has plenty.
-          "icon-size": ["interpolate", ["linear"], ["zoom"], logoZoom, 0.7, logoZoom + 3, 1.3],
+          // Scaled with the dot it replaces, not fixed: 0.7 was tuned against a
+          // 9px radius, so a bigger dot needs a bigger badge or the hand-over
+          // becomes the jump the tuning existed to avoid.
+          "icon-size": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            logoZoom,
+            (0.7 * radiusRef.current) / DEFAULT_RADIUS,
+            logoZoom + 3,
+            (1.3 * radiusRef.current) / DEFAULT_RADIUS,
+          ],
           // Vehicles bunch up; hiding the ones that collide would make a busy
           // street look empty, which is the opposite of what the data says.
           "icon-allow-overlap": true,
@@ -167,5 +207,39 @@ export function useCategoryPointLayer({
       map.off("style.load", rebuild);
       remove();
     };
+    // No radius here: this effect rebuilds the source, re-renders every badge
+    // and re-adds the images, which is far too much for a slider. It reaches
+    // build() through radiusRef and the live layer through the effect below.
   }, [map, enabled, points, styles, logoZoom, strokeColor, id]);
+
+  /** A radius change repaints the dots; it does not re-render the badges. */
+  React.useEffect(() => {
+    if (!map) return;
+    try {
+      if (!map.getLayer(dotsId)) return;
+      map.setPaintProperty(dotsId, "circle-radius", [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        8,
+        radius / 3,
+        Math.max(9, logoZoom),
+        radius,
+      ]);
+      // The badge layer is layout, not paint, so it takes setLayoutProperty.
+      // Left in step with the dots for the reason given at build time.
+      if (!map.getLayer(`${id}-logos`)) return;
+      map.setLayoutProperty(`${id}-logos`, "icon-size", [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        logoZoom,
+        (0.7 * radius) / DEFAULT_RADIUS,
+        logoZoom + 3,
+        (1.3 * radius) / DEFAULT_RADIUS,
+      ]);
+    } catch {
+      /* the map is gone */
+    }
+  }, [map, dotsId, id, logoZoom, radius]);
 }

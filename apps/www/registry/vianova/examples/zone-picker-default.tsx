@@ -4,8 +4,12 @@ import * as React from "react";
 
 import {
   type PickerZone,
+  type ZoneDrawTool,
   ZonePicker,
+  ZonePickerPanel,
+  ZoneThumbnail,
 } from "@/registry/vianova/product/zone-picker";
+import { Badge } from "@/registry/vianova/ui/badge";
 import { Button } from "@/registry/vianova/ui/button";
 
 /** Mulberry32: a few lines, and the same zones on every render and every machine. */
@@ -96,28 +100,189 @@ function makeZones(n: number): PickerZone[] {
   return zones;
 }
 
+/*
+ * A GeoJSON file served beside this page, so Import's link field can be shown
+ * working. Any other host would have to allow requests from other sites, and
+ * most do not -- which is the caveat the component documents.
+ */
+declare const process: { env: Record<string, string | undefined> };
+const SAMPLE_GEOJSON = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/data/parking-bays-lisbon.geojson`;
+
 const ZONES = makeZones(300);
+/** Shapes for the drawing session to "finish", so the example needs no map. */
+const DRAWN = makeZones(306).slice(300);
 
 export default function ZonePickerDefault() {
+  const [picking, setPicking] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const [added, setAdded] = React.useState<PickerZone[]>(() =>
     ZONES.slice(0, 2),
   );
+  const [preview, setPreview] = React.useState<PickerZone | null>(null);
+  /*
+   * The drawing session, which in the product is held by the block around
+   * this: a tool that stays armed, the shapes finished so far, and the one
+   * whose name should take the focus. Nothing reaches `added` until Add.
+   */
+  const [tool, setTool] = React.useState<ZoneDrawTool | null>(null);
+  const [drafts, setDrafts] = React.useState<PickerZone[]>([]);
+  const [focusId, setFocusId] = React.useState<string | null>(null);
+  const drawing = tool !== null || drafts.length > 0;
+
+  const add = (zones: PickerZone[]) =>
+    setAdded((prev) => [...prev, ...zones]);
+
+  const endSession = () => {
+    setTool(null);
+    setDrafts([]);
+    setFocusId(null);
+    setPreview(null);
+  };
+
+  /** Stands in for a shape closing on the map. */
+  const finish = () => {
+    const shape = DRAWN[drafts.length % DRAWN.length]!;
+    const draft = {
+      ...shape,
+      id: `draft-${drafts.length + 1}`,
+      name: `Zone ${added.length + drafts.length + 1}`,
+      tags: ["drawn"],
+    };
+    setDrafts((prev) => [...prev, draft]);
+    setFocusId(draft.id);
+  };
 
   return (
-    <div className="flex flex-col items-start gap-3">
-      <Button onClick={() => setOpen(true)}>Add zones</Button>
-      <p className="text-sm text-muted-foreground">
-        {added.length
-          ? `In this rule: ${added.map((z) => z.name).join(", ")}`
-          : "No zones in this rule yet."}
-      </p>
+    <div className="flex flex-col gap-4">
+      {/*
+       * The in-depth screen: the column that held the rule gives way to the
+       * picker, and whatever sits beside it -- a map, in the product -- stays
+       * put. This is the default; the sheet below is for surfaces with no
+       * column to spare.
+       */}
+      <div className="flex h-[42rem] overflow-hidden rounded-lg border">
+        {/* As wide as the settings column it stands in for. */}
+        <div className="flex w-[26rem] shrink-0 flex-col border-r">
+          {picking ? (
+            <ZonePickerPanel
+              zones={ZONES}
+              excludeIds={added.map((z) => z.id)}
+              backLabel="Fleet cap · Parking"
+              urlSample={SAMPLE_GEOJSON}
+              onBack={() => {
+                setPicking(false);
+                endSession();
+              }}
+              onPreviewChange={setPreview}
+              /*
+               * One press arms the tool and the panel stays where it is: the
+               * tab row above is still switchable, and the shapes collect
+               * under the tools that made them. Picking a tool used to replace
+               * this panel with a second one carrying the same four tools,
+               * which took the library and the import field with it and left
+               * no way back that kept the shapes.
+               *
+               * Drawing is a place, not an instant. The tool stays armed, the
+               * names can be typed over as they arrive, and Cancel leaves no
+               * trace -- which is the part that committing each shape as it
+               * closed could not offer.
+               */
+              onDraw={setTool}
+              session={{
+                tool,
+                drafts,
+                focusId,
+                onRename: (id, name) =>
+                  setDrafts((prev) =>
+                    prev.map((z) => (z.id === id ? { ...z, name } : z)),
+                  ),
+                onRemove: (id) =>
+                  setDrafts((prev) => prev.filter((z) => z.id !== id)),
+              }}
+              /* Ticked zones, imported shapes and drawn ones alike: one
+                 staged list, three ways to fill it. */
+              onAdd={(zones) => {
+                add(zones);
+                setPicking(false);
+                endSession();
+              }}
+            />
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <header className="space-y-0.5 border-b px-4 pt-3 pb-4">
+                <h2 className="text-xl font-semibold tracking-tight">
+                  Parking
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  {added.length} zone{added.length === 1 ? "" : "s"} in this
+                  rule.
+                </p>
+              </header>
+              <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
+                {added.map((zone) => (
+                  <div
+                    key={zone.id}
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm"
+                  >
+                    <ZoneThumbnail ring={zone.ring} size={24} />
+                    <span className="truncate">{zone.name}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-auto border-t p-4">
+                <Button className="w-full" onClick={() => setPicking(true)}>
+                  Add zones
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+        {/*
+         * Standing in for the map. The point of the example is that this side
+         * never goes away, and that it hears about the row under the pointer.
+         */}
+        <div className="bg-muted/40 flex min-w-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+          {drawing ? (
+            <>
+              {preview ? <ZoneThumbnail ring={preview.ring} size={96} /> : null}
+              <p className="text-muted-foreground text-sm">
+                {tool
+                  ? `The map is armed for ${tool === "freehand" ? "free hand" : tool}.`
+                  : "Drawing stopped. The shapes are still listed."}
+              </p>
+              {/* There is no map in an example, so this is the shape closing. */}
+              <Button variant="outline" size="sm" disabled={!tool} onClick={finish}>
+                Finish a shape
+              </Button>
+            </>
+          ) : preview ? (
+            <>
+              <ZoneThumbnail ring={preview.ring} size={96} />
+              <Badge variant="secondary">{preview.name}</Badge>
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              The map stays here. Point at a zone in the list to preview it.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button variant="outline" onClick={() => setOpen(true)}>
+          Add zones in a sheet
+        </Button>
+        <p className="text-muted-foreground text-sm">
+          The same picker, for surfaces with no column to give up.
+        </p>
+      </div>
       <ZonePicker
         open={open}
         onOpenChange={setOpen}
         zones={ZONES}
         excludeIds={added.map((z) => z.id)}
-        onAdd={(zones) => setAdded((prev) => [...prev, ...zones])}
+        urlSample={SAMPLE_GEOJSON}
+        onAdd={add}
       />
     </div>
   );

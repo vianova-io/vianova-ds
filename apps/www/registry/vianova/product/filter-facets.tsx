@@ -367,14 +367,10 @@ function RangeFacet({
 
   if (!bounds) return null;
 
-  /**
-   * Spinner arrows removed, not for tidiness: they claim ~16px inside a box
-   * this narrow, which clipped a five-digit bound ("19778" read as "1977").
-   * A filter that misreports the range it covers is worse than an ugly one.
-   */
-  const numberBox =
-    "h-7 w-16 shrink-0 px-1 text-center text-xs [appearance:textfield] " +
-    "[&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
+  // Input suppresses the browser's spinner arrows on every number field now.
+  // It matters most here: they claim ~16px inside a box this narrow, which
+  // clipped a five-digit bound ("19778" read as "1977").
+  const numberBox = "h-7 w-16 shrink-0 px-1 text-center text-xs";
 
   return (
     <div className="flex items-center gap-1.5">

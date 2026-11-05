@@ -1,7 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, Circle, MousePointer2, Spline } from "lucide-react";
+import {
+  ChevronDown,
+  Circle,
+  MousePointer2,
+  Route,
+  Spline,
+} from "lucide-react";
 import type {
   FilterSpecification,
   GeoJSONSource,
@@ -12,6 +18,12 @@ import type {
 import { DrawZoneIcon } from "@/registry/vianova/product/draw-zone-icon";
 import { Button } from "@/registry/vianova/ui/button";
 import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from "@/registry/vianova/ui/input-group";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
@@ -19,10 +31,37 @@ import {
   DropdownMenuTrigger,
 } from "@/registry/vianova/ui/dropdown-menu";
 import { Kbd } from "@/registry/vianova/ui/kbd";
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/registry/vianova/ui/toggle-group";
 import { resolveCssColor } from "@/registry/vianova/lib/css-color";
 import { cn } from "@/registry/vianova/lib/utils";
+import { corridorAround } from "@/registry/vianova/lib/zone-geometry";
 
-export type DrawMode = "freehand" | "circle" | "polygon";
+export type DrawMode = "freehand" | "circle" | "polygon" | "line";
+
+/**
+ * How wide a line's corridor is, in metres, when the consumer names no width.
+ *
+ * Twenty metres is a two-way urban street with its parking lanes: wide enough
+ * that a route drawn down the middle of it covers the kerb on both sides,
+ * which is what a street-level regulation is about. Cities that regulate
+ * tram corridors or ring roads set their own.
+ */
+export const DEFAULT_LINE_WIDTH_M = 20;
+
+/**
+ * What a corridor width may be set to, in metres.
+ *
+ * One metre is a cycle lane's worth; a thousand is wider than any street and
+ * is there to stop a mistyped figure swallowing the city rather than to serve
+ * a real corridor.
+ */
+export const LINE_WIDTH_RANGE = { min: 1, max: 1000 } as const;
+
+const clampWidth = (n: number) =>
+  Math.min(LINE_WIDTH_RANGE.max, Math.max(LINE_WIDTH_RANGE.min, Math.round(n)));
 
 /**
  * Select is `null`, not a fourth DrawMode.
@@ -53,6 +92,7 @@ export type MapDrawLabels = {
   freehand: string;
   circle: string;
   polygon: string;
+  line: string;
   /** The tool button, and the prefix of its tooltip while idle. */
   draw: string;
   /** The prefix of the tool button's tooltip while a drawing is under way. */
@@ -66,6 +106,7 @@ const DEFAULT_LABELS: MapDrawLabels = {
   freehand: "Free hand",
   circle: "Circle",
   polygon: "Polygon",
+  line: "Line",
   draw: "Draw a zone",
   stop: "Stop drawing",
   chooseTool: "Choose a drawing tool",
@@ -84,7 +125,60 @@ const MODES: {
   // hexagon, it drops a vertex per click and closes the ring, and the handles
   // on the corners are what say so.
   { value: "polygon", id: "polygon", key: "P", icon: DrawZoneIcon },
+  // Last, and after Polygon rather than beside Free hand: a line is the one
+  // tool that does not draw the zone it makes -- it draws a route, and the
+  // zone is the corridor around it. Reading left to right, the three area
+  // tools come first and the line follows.
+  { value: "line", id: "line", key: "L", icon: Route },
 ];
+
+/**
+ * S/F/C/P/L and Escape, on the window.
+ *
+ * Extracted so the split control and the open toolbar below share one
+ * listener rather than each growing their own: two copies would both fire on
+ * `P`, which is harmless today only because setting the same mode twice is.
+ *
+ * Only ever enable it on one control at a time -- `enabled` is how a surface
+ * that shows both silences the one that is not in charge.
+ */
+export function useMapDrawShortcuts({
+  mode,
+  onModeChange,
+  enabled = true,
+}: {
+  mode: DrawMode | null;
+  onModeChange: (mode: DrawMode | null) => void;
+  enabled?: boolean;
+}) {
+  // Read through a ref so the listener is attached once, not re-attached on
+  // every mode change the reader makes.
+  const stateRef = React.useRef({ mode, onModeChange });
+  stateRef.current = { mode, onModeChange };
+
+  React.useEffect(() => {
+    if (!enabled) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || event.defaultPrevented || isForeignKey(event)) return;
+      const { mode: current, onModeChange: change } = stateRef.current;
+      if (event.key === "Escape") {
+        if (current !== null) change(null);
+        return;
+      }
+      const key = event.key.toLowerCase();
+      // `in`, because KEY_TO_MODE.s is null and a truthiness test would drop
+      // the one shortcut that stops a drawing.
+      if (!(key in KEY_TO_MODE)) return;
+      const picked = KEY_TO_MODE[key]!;
+      if (picked !== current) {
+        event.preventDefault();
+        change(picked ?? null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [enabled]);
+}
 
 /** `s` maps to null, so membership is tested with `in`, not truthiness. */
 const KEY_TO_MODE: Record<string, DrawMode | null> = {
@@ -92,6 +186,7 @@ const KEY_TO_MODE: Record<string, DrawMode | null> = {
   f: "freehand",
   c: "circle",
   p: "polygon",
+  l: "line",
 };
 
 /**
@@ -139,9 +234,9 @@ export function MapDrawControl({
   /** Overrides any of the control's words; the rest keep their defaults. */
   labels?: Partial<MapDrawLabels>;
   /**
-   * F, C and P pick a mode and Esc stops drawing. On by default because the
-   * menu shows the keys, and a hint for a key that does nothing is worse than
-   * no hint. Ignored while focus is in a text field or a modifier is held.
+   * F, C, P and L pick a mode and Esc stops drawing. On by default because
+   * the menu shows the keys, and a hint for a key that does nothing is worse
+   * than no hint. Ignored while focus is in a text field or a modifier held.
    */
   shortcuts?: boolean;
   disabled?: boolean;
@@ -153,33 +248,7 @@ export function MapDrawControl({
   // caller passing an inline object would defeat the memo anyway.
   const t = { ...DEFAULT_LABELS, ...labels };
 
-  // Read through a ref so the listener is attached once, not re-attached on
-  // every mode change the reader makes.
-  const stateRef = React.useRef({ mode, onModeChange });
-  stateRef.current = { mode, onModeChange };
-
-  React.useEffect(() => {
-    if (!shortcuts || disabled) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat || event.defaultPrevented || isForeignKey(event)) return;
-      const { mode: current, onModeChange: change } = stateRef.current;
-      if (event.key === "Escape") {
-        if (current !== null) change(null);
-        return;
-      }
-      const key = event.key.toLowerCase();
-      // `in`, because KEY_TO_MODE.s is null and a truthiness test would drop
-      // the one shortcut that stops a drawing.
-      if (!(key in KEY_TO_MODE)) return;
-      const picked = KEY_TO_MODE[key]!;
-      if (picked !== current) {
-        event.preventDefault();
-        change(picked ?? null);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [shortcuts, disabled]);
+  useMapDrawShortcuts({ mode, onModeChange, enabled: shortcuts && !disabled });
 
   const current = MODES.find((m) => m.value === mode) ?? MODES[0]!;
   const CurrentIcon = current.icon;
@@ -307,7 +376,98 @@ const BANNER_TEXT: Record<DrawMode, string> = {
     "Click to add points. Click the first point or press Enter to finish.",
   circle: "Press and drag from the centre.",
   freehand: "Press and drag to draw the outline.",
+  // The last point, not the first: a line is not closed, so clicking where it
+  // started would be a point like any other.
+  line: "Click along the route. Click the last point or press Enter to finish.",
 };
+
+/**
+ * The fewest points each mode needs before it has a shape worth keeping.
+ *
+ * A line is two, and this is the only place the difference from a polygon is
+ * written down -- the banner enables Done from it, and the hook refuses to
+ * finish below it, so the button and the key can never disagree.
+ */
+export const MIN_POINTS: Record<DrawMode, number> = {
+  polygon: 3,
+  line: 2,
+  circle: 0,
+  freehand: 0,
+};
+
+/** Which modes are drawn by clicking points rather than by dragging. */
+const isPointMode = (mode: DrawMode) => mode === "polygon" || mode === "line";
+
+/**
+ * Every tool at once, as one bar.
+ *
+ * The split control is right when drawing is an aside -- one button, and the
+ * tools folded behind a chevron for the rare switch. It is wrong once drawing
+ * is the task: a reader mid-session switches tools constantly, and each
+ * switch through a menu is two presses and a disappearing list.
+ *
+ * So a surface that opens a drawing session shows this instead, and the
+ * tools are a row of five you can see and count. Same modes, same labels,
+ * same shortcuts -- `useMapDrawShortcuts` is shared, not copied, so there is
+ * one keyboard path and no way for the two to drift.
+ *
+ * Icon-only, which makes `aria-label` the accessible name rather than a
+ * second name competing with a visible one. The shortcut rides in `title`.
+ */
+export function MapDrawToolbar({
+  mode,
+  onModeChange,
+  labels,
+  shortcuts = true,
+  disabled,
+  className,
+}: {
+  mode: DrawMode | null;
+  onModeChange: (mode: DrawMode | null) => void;
+  labels?: Partial<MapDrawLabels>;
+  shortcuts?: boolean;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const t = { ...DEFAULT_LABELS, ...labels };
+  useMapDrawShortcuts({ mode, onModeChange, enabled: shortcuts && !disabled });
+
+  return (
+    <ToggleGroup
+      data-slot="map-draw-toolbar"
+      aria-label={t.chooseTool}
+      variant="outline"
+      size="sm"
+      spacing={0}
+      disabled={disabled}
+      value={[mode ?? SELECT]}
+      onValueChange={(next) => {
+        // The group's value is an array, so it can report none selected --
+        // which for a tool row would mean no tool at all, not Select. Ignore
+        // that and keep whatever was armed.
+        const picked = next[0];
+        if (!picked) return;
+        onModeChange(picked === SELECT ? null : (picked as DrawMode));
+      }}
+      className={cn("bg-card/95 backdrop-blur", className)}
+    >
+      {MODES.map((m) => {
+        const Icon = m.icon;
+        const name = t[m.id];
+        return (
+          <ToggleGroupItem
+            key={m.id}
+            value={m.value ?? SELECT}
+            aria-label={name}
+            title={shortcuts ? `${name} (${m.key})` : name}
+          >
+            <Icon />
+          </ToggleGroupItem>
+        );
+      })}
+    </ToggleGroup>
+  );
+}
 
 /**
  * The one-line instruction for the mode being drawn, floated over the map.
@@ -318,13 +478,38 @@ const BANNER_TEXT: Record<DrawMode, string> = {
 export function MapDrawBanner({
   mode,
   points = 0,
+  lineWidthMeters = DEFAULT_LINE_WIDTH_M,
+  onLineWidthChange,
   onDone,
   onCancel,
   className,
 }: {
   mode: DrawMode;
-  /** Vertices placed so far. Only a polygon has a Done, and it needs three. */
+  /**
+   * Vertices placed so far. Only the click-to-place modes have a Done, and
+   * each has its own minimum -- three for a polygon, two for a line.
+   */
   points?: number;
+  /**
+   * The corridor width a line will become, in metres. Said out loud because a
+   * line is the one tool whose result is not what the reader drew: they draw
+   * a route down a street and get an area around it, and the number is how
+   * they know how far out it reaches before they commit to it.
+   */
+  lineWidthMeters?: number;
+  /**
+   * Makes that width editable here rather than only readable.
+   *
+   * It belongs in the banner and not in a panel elsewhere because the width
+   * is only knowable against the street under it: twenty metres is a lane too
+   * few on one avenue and a pavement too many on the next, and the only way
+   * to tell is to change it and watch the corridor move. Pass it with
+   * `useMapDraw`'s own `lineWidthMeters` and the preview follows each
+   * keystroke, mid-line, without losing the points already placed.
+   *
+   * Left out, the width is stated and not editable.
+   */
+  onLineWidthChange?: (meters: number) => void;
   onDone?: () => void;
   onCancel: () => void;
   className?: string;
@@ -334,18 +519,58 @@ export function MapDrawBanner({
       data-slot="map-draw-banner"
       role="status"
       className={cn(
-        "flex items-center gap-3 rounded-lg border border-border bg-card/95 py-1.5 pr-1.5 pl-3 text-sm text-card-foreground shadow-md backdrop-blur",
+        "flex flex-wrap items-center justify-end gap-x-3 gap-y-2 rounded-lg border border-border bg-card/95 py-1.5 pr-1.5 pl-3 text-sm text-card-foreground shadow-md backdrop-blur",
         className,
       )}
     >
-      <span>{BANNER_TEXT[mode]}</span>
+      {/* A floor on the text, so a banner too narrow for one row drops the
+          controls to a second one instead of squeezing the instruction into a
+          column a word wide -- which is what it did on the map pane of a
+          laptop-width regulation editor. */}
+      <span className="min-w-[13rem] flex-1">
+        {BANNER_TEXT[mode]}
+        {mode === "line" && !onLineWidthChange ? (
+          <span className="text-muted-foreground">
+            {" "}
+            {lineWidthMeters} m wide.
+          </span>
+        ) : null}
+      </span>
       <div className="flex shrink-0 items-center gap-1">
+        {mode === "line" && onLineWidthChange ? (
+          <InputGroup className="mr-1 h-8 w-[6.5rem]">
+            <InputGroupInput
+              type="number"
+              inputMode="numeric"
+              min={LINE_WIDTH_RANGE.min}
+              max={LINE_WIDTH_RANGE.max}
+              step={1}
+              value={lineWidthMeters}
+              aria-label="Corridor width in metres"
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                // An empty field reads as NaN. Dropping it leaves the last
+                // good width in place rather than collapsing the corridor to
+                // nothing between two keystrokes.
+                if (Number.isFinite(next)) onLineWidthChange(clampWidth(next));
+              }}
+              className="tabular-nums"
+            />
+            <InputGroupAddon align="inline-end">
+              <InputGroupText>m</InputGroupText>
+            </InputGroupAddon>
+          </InputGroup>
+        ) : null}
         <Button variant="ghost" size="sm" onClick={onCancel}>
           Cancel
           <Kbd aria-hidden>Esc</Kbd>
         </Button>
-        {mode === "polygon" && onDone ? (
-          <Button size="sm" onClick={onDone} disabled={points < 3}>
+        {isPointMode(mode) && onDone ? (
+          <Button
+            size="sm"
+            onClick={onDone}
+            disabled={points < MIN_POINTS[mode]}
+          >
             Done
           </Button>
         ) : null}
@@ -481,7 +706,8 @@ type Feature = {
 
 /**
  * Lets the reader draw a zone on a MapLibre map: a polygon point by point, a
- * circle from its centre, or an outline by hand.
+ * circle from its centre, an outline by hand, or a line down a street that
+ * becomes the corridor around it.
  *
  * Listens to pointer events on the canvas container rather than MapLibre's
  * mouse events, so a finger draws exactly as a mouse does. While a mode is
@@ -492,11 +718,18 @@ type Feature = {
 export function useMapDraw({
   map,
   mode,
+  lineWidthMeters = DEFAULT_LINE_WIDTH_M,
   onComplete,
   onCancel,
 }: {
   map: MapLibreMap | null;
   mode: DrawMode | null;
+  /**
+   * How wide the corridor around a drawn line is, in metres. Changing it
+   * mid-draw re-shapes the preview under the pointer rather than restarting
+   * the line, so a reader can widen a street and see the result at once.
+   */
+  lineWidthMeters?: number;
   /** A closed ring (first === last) of [longitude, latitude] pairs. */
   onComplete: (ring: [number, number][]) => void;
   onCancel?: () => void;
@@ -511,6 +744,16 @@ export function useMapDraw({
 
   const finishRef = React.useRef<() => void>(() => {});
   const cancelRef = React.useRef<() => void>(() => {});
+  // The width is read through a ref for the same reason the callbacks are: it
+  // must not be in the effect's deps, or widening a corridor would tear down
+  // the line being drawn. `renderRef` is how the change still reaches the
+  // preview -- see the effect below it.
+  const widthRef = React.useRef(lineWidthMeters);
+  widthRef.current = lineWidthMeters;
+  const renderRef = React.useRef<() => void>(() => {});
+  React.useEffect(() => {
+    renderRef.current();
+  }, [lineWidthMeters]);
 
   React.useEffect(() => {
     if (!map || !mode) return;
@@ -543,9 +786,9 @@ export function useMapDraw({
     const previousCursor = canvas.style.cursor;
     const previousTouchAction = container.style.touchAction;
     map.dragPan.disable();
-    // A polygon is finished with a double-click, which would otherwise also
-    // zoom the map in on the zone the reader has just drawn.
-    if (mode === "polygon") map.doubleClickZoom.disable();
+    // A polygon and a line are finished with a double-click, which would
+    // otherwise also zoom the map in on the zone just drawn.
+    if (isPointMode(mode)) map.doubleClickZoom.disable();
     canvas.style.cursor = "crosshair";
     // MapLibre's `touch-action: none` hangs off a class that disabling dragPan
     // removes, so a finger drawing a circle would scroll the page instead.
@@ -617,6 +860,17 @@ export function useMapDraw({
           line("edge", ring);
         }
         if (centre) vertex(centre);
+      } else if (mode === "line") {
+        // The corridor is drawn, not just the route: a line is the one tool
+        // whose result is a different shape from the gesture, so the area it
+        // will become is on screen before the reader commits to it. The
+        // route itself stays visible down the middle of it.
+        const path = cursor ? [...vertices, cursor] : vertices;
+        if (path.length >= 2) {
+          area(corridorAround(path, widthRef.current / 2));
+          line("edge", path);
+        }
+        vertices.forEach((v) => vertex(v));
       } else if (vertices.length >= 2) {
         if (vertices.length >= 3) area(vertices);
         line("edge", vertices);
@@ -714,9 +968,20 @@ export function useMapDraw({
       callbacks.current.onComplete(closed);
     };
 
-    const finishPolygon = () => {
-      if (mode !== "polygon" || vertices.length < 3) return;
-      complete(vertices);
+    /**
+     * Ends a click-to-place shape: a polygon as its own ring, a line as the
+     * corridor around it. Below the mode's minimum it does nothing, which is
+     * what makes Enter safe to press at any moment.
+     */
+    const finishShape = () => {
+      if (!isPointMode(mode) || vertices.length < MIN_POINTS[mode]) return;
+      // `complete` closes the ring it is handed; a corridor comes back closed
+      // already, so it passes through untouched.
+      complete(
+        mode === "line"
+          ? corridorAround(vertices, widthRef.current / 2)
+          : vertices,
+      );
     };
 
     const cancel = () => {
@@ -728,7 +993,7 @@ export function useMapDraw({
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0 || !event.isPrimary) return;
       pressed = { id: event.pointerId, ...local(event) };
-      if (mode === "polygon") return;
+      if (isPointMode(mode)) return;
       // Captured so a drag that leaves the map still ends the shape, rather
       // than leaving it stuck half-drawn waiting for a pointerup it never gets.
       container.setPointerCapture(event.pointerId);
@@ -744,7 +1009,7 @@ export function useMapDraw({
 
     const onPointerMove = (event: PointerEvent) => {
       const p = at(event);
-      if (mode === "polygon") {
+      if (isPointMode(mode)) {
         cursor = p;
         render();
         return;
@@ -770,18 +1035,23 @@ export function useMapDraw({
       const end = local(event);
       const moved = Math.hypot(end.x - start.x, end.y - start.y);
 
-      if (mode === "polygon") {
+      if (isPointMode(mode)) {
         // A drag is the reader moving on, not placing a point. With dragPan
         // off it does nothing to the map, so ignoring it is the least surprise.
         if (moved > CLICK_SLOP_PX) return;
         const p = at(event);
-        if (vertices.length >= 3 && nearFirst(p)) return finishPolygon();
+        // Closing on the first vertex is a polygon's gesture only. A line is
+        // open, so its first point is just a point, and a route that loops
+        // back past its own start must be allowed to.
+        if (mode === "polygon" && vertices.length >= 3 && nearFirst(p)) {
+          return finishShape();
+        }
         // A second click on the last vertex is the tail of a double-click.
-        // Finishing on it is what makes double-click close the polygon without
+        // Finishing on it is what makes double-click close the shape without
         // a dblclick listener that would race the two clicks before it.
         const last = vertices[vertices.length - 1];
         if (last && screenDistance(last, p) <= CLICK_SLOP_PX) {
-          if (vertices.length >= 3) finishPolygon();
+          finishShape();
           return;
         }
         vertices.push(p);
@@ -815,7 +1085,7 @@ export function useMapDraw({
     };
 
     const onPointerLeave = () => {
-      if (mode !== "polygon" || !cursor) return;
+      if (!isPointMode(mode) || !cursor) return;
       // Without this the rubber band stays pinned to wherever the pointer left
       // the map, pointing at nothing.
       cursor = null;
@@ -826,11 +1096,11 @@ export function useMapDraw({
       if (event.defaultPrevented || isForeignKey(event)) return;
       if (event.key === "Escape") {
         cancel();
-      } else if (mode === "polygon" && event.key === "Enter") {
+      } else if (isPointMode(mode) && event.key === "Enter") {
         event.preventDefault();
-        finishPolygon();
+        finishShape();
       } else if (
-        mode === "polygon" &&
+        isPointMode(mode) &&
         event.key === "Backspace" &&
         vertices.length > 0
       ) {
@@ -842,8 +1112,9 @@ export function useMapDraw({
       }
     };
 
-    finishRef.current = finishPolygon;
+    finishRef.current = finishShape;
     cancelRef.current = cancel;
+    renderRef.current = render;
 
     build();
     // setStyle (a basemap or theme switch) discards every custom layer, so
@@ -877,6 +1148,7 @@ export function useMapDraw({
       container.style.touchAction = previousTouchAction;
       finishRef.current = () => {};
       cancelRef.current = () => {};
+      renderRef.current = () => {};
       setPoints(0);
     };
   }, [map, mode]);

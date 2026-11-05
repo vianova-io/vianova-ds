@@ -13,7 +13,9 @@ import {
   Info,
   Lock,
   LocateFixed,
+  MapPin,
   Map as MapIcon,
+  Minus,
   MoreHorizontal,
   Plus,
   Power,
@@ -90,6 +92,7 @@ import { Input } from "@/registry/vianova/ui/input";
 import {
   InputGroup,
   InputGroupAddon,
+  InputGroupButton,
   InputGroupInput,
   InputGroupText,
 } from "@/registry/vianova/ui/input-group";
@@ -127,9 +130,10 @@ import { LegendCategorical } from "@/registry/vianova/product/legend-categorical
 import { MapCanvas } from "@/registry/vianova/product/map-canvas";
 import { MapControls } from "@/registry/vianova/product/map-controls";
 import {
+  DEFAULT_LINE_WIDTH_M,
   MapDrawBanner,
-  MapDrawControl,
   useMapDraw,
+  useMapDrawShortcuts,
   type DrawMode,
 } from "@/registry/vianova/product/map-draw-control";
 import {
@@ -144,15 +148,20 @@ import {
   type RuleType,
 } from "@/registry/vianova/product/rule-type-icon";
 import {
-  ZonePicker,
+  ZoneDraftPanel,
+  ZoneNameField,
+  ZonePickerPanel,
   type PickerZone,
+  type ZoneDrawTool,
 } from "@/registry/vianova/product/zone-picker";
+import { BottomTray, type TraySnap } from "@/registry/vianova/patterns/bottom-tray";
 import { SegmentedControl } from "@/registry/vianova/product/segmented-control";
 import {
   useCategoryShapeLayer,
   type CategoryShape,
 } from "@/registry/vianova/hooks/use-category-shape-layer";
 import { DEFAULT_BASEMAP_ID, type BasemapId } from "@/registry/vianova/lib/basemaps";
+import { CATEGORY_PALETTE } from "@/registry/vianova/lib/category-style";
 import {
   DEFAULT_BUFFER,
   OPERATORS,
@@ -184,6 +193,17 @@ declare const process: { env: Record<string, string | undefined> };
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const WORKER_URL = `${BASE_PATH}/maplibre/maplibre-gl-worker.mjs`;
+/*
+ * Six real Lisbon parking bays, served beside this page.
+ *
+ * Import's link field cannot be demonstrated against anything else: a browser
+ * only fetches a host that allows requests from other sites, and most city
+ * open-data portals, ArcGIS and every Drive or Dropbox share link do not.
+ * Behind an API this is a server-side fetch and all of them work, so the
+ * limit is the demo's and not the product's -- and this file is what lets
+ * someone see the path work at all. Same-origin, so it always answers.
+ */
+const SAMPLE_GEOJSON = `${BASE_PATH}/data/parking-bays-lisbon.geojson`;
 
 /** Lisbon, where every sample zone is. */
 const LISBON: [number, number] = [-9.142, 38.722];
@@ -224,6 +244,25 @@ let seq = 0;
 /** Ids for things made in this session. Prefixed so they never collide with a sample's. */
 const uid = (prefix: string) => `${prefix}-new-${++seq}`;
 
+/**
+ * A run of drawing, from the first tool press to Add or Cancel.
+ *
+ * `drafts` are finished shapes that have not reached the rule or anyone's
+ * zone library yet, which is what makes Cancel leave no trace. `ruleId` is
+ * carried so the session cannot outlive the rule it was started from -- a
+ * rule deleted mid-draw must not have its shapes land on whichever rule is
+ * selected next.
+ */
+type DrawSession = {
+  tool: DrawMode | null;
+  drafts: PickerZone[];
+  focusId: string | null;
+  ruleId: string;
+};
+
+/** One empty array, so no-session renders do not rebuild the drafts layer. */
+const NO_DRAFTS: PickerZone[] = [];
+
 /** Deep enough for a regulation: its rules and their arrays are the only nested values. */
 const cloneRegulation = (reg: Regulation): Regulation => ({
   ...reg,
@@ -239,9 +278,6 @@ const cloneRegulation = (reg: Regulation): Regulation => ({
 
 /** Rule types in a regulation, once each, in the order the rules are listed. */
 const typesOf = (reg: Regulation) => [...new Set(reg.rules.map((r) => r.type))];
-
-const zoneTotal = (reg: Regulation) =>
-  new Set(reg.rules.flatMap((r) => r.zoneIds)).size;
 
 /** Next free "<Type> N" name, so a second parking rule is "Parking 2", not another "Parking 1". */
 function nextRuleName(type: RuleType, rules: Rule[]) {
@@ -336,12 +372,15 @@ export function RegulationsWorkspace({
   className,
   regulations: initial = SAMPLE_REGULATIONS,
   status = "ready",
+  geocode,
   onRetry,
   onSave,
 }: {
   className?: string;
   regulations?: Regulation[];
   status?: "ready" | "loading" | "error";
+  /** Looks up places for the map's search field. Omitted, there is none. */
+  geocode?: Geocode;
   onRetry?: () => void;
   /** Called with the saved regulation, after the workspace has kept it. */
   onSave?: (regulation: Regulation) => void;
@@ -369,6 +408,7 @@ export function RegulationsWorkspace({
 
   const create = (type: RuleType) => {
     const id = uid("reg");
+    const now = new Date().toISOString();
     // Multi-parking is a container, not a rule: production starts one with a
     // parking rule, and no-parking rules are added beside it from the rail.
     const first: RuleType = type === "multi_parking" ? "parking" : type;
@@ -381,7 +421,8 @@ export function RegulationsWorkspace({
       global: { start: REFERENCE_DATE },
       visibility: "private",
       deactivated: false,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
     setDrafts((d) => ({ ...d, [id]: draft }));
     setCreating(false);
@@ -412,19 +453,24 @@ export function RegulationsWorkspace({
           zones={zones}
           zoneIndex={zoneIndex}
           zonesLoading={zonesLoading}
+          geocode={geocode}
           onZonesCreated={(made) => setZones((all) => [...made, ...all])}
           onZoneRename={(id, name) =>
             setZones((all) => all.map((z) => (z.id === id ? { ...z, name } : z)))
           }
           onSave={(reg) => {
+            // The list's "Last update" is what a save moves, so it is stamped
+            // here, where every save passes, rather than in the editor's own
+            // state where a draft could carry a time it never saved at.
+            const stamped = { ...reg, updatedAt: new Date().toISOString() };
             setRegulations((all) =>
-              all.some((r) => r.id === reg.id)
-                ? all.map((r) => (r.id === reg.id ? reg : r))
-                : [reg, ...all],
+              all.some((r) => r.id === stamped.id)
+                ? all.map((r) => (r.id === stamped.id ? stamped : r))
+                : [stamped, ...all],
             );
-            setDrafts(({ [reg.id]: _, ...rest }) => rest);
-            setView({ kind: "edit", id: reg.id, isNew: false });
-            onSave?.(reg);
+            setDrafts(({ [stamped.id]: _, ...rest }) => rest);
+            setView({ kind: "edit", id: stamped.id, isNew: false });
+            onSave?.(stamped);
           }}
           onDuplicate={(reg) => {
             const copy = cloneRegulation(reg);
@@ -432,6 +478,7 @@ export function RegulationsWorkspace({
             copy.name = `${reg.name} (copy)`;
             copy.visibility = "private";
             copy.createdAt = new Date().toISOString();
+            copy.updatedAt = copy.createdAt;
             setDrafts((d) => ({ ...d, [copy.id]: copy }));
             setView({ kind: "edit", id: copy.id, isNew: true });
           }}
@@ -652,7 +699,6 @@ function RegulationList({
                 <TableHead className="w-28">Rules</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead className="hidden sm:table-cell">Status</TableHead>
-                <TableHead className="hidden md:table-cell">Zones</TableHead>
                 <TableHead className="hidden md:table-cell">
                   <button
                     type="button"
@@ -664,6 +710,7 @@ function RegulationList({
                     {sort === "desc" ? <ArrowDown className="size-3.5" /> : <ArrowUp className="size-3.5" />}
                   </button>
                 </TableHead>
+                <TableHead className="hidden md:table-cell">Last update</TableHead>
                 <TableHead className="w-20">
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -726,25 +773,31 @@ function RegulationRow({
         <span className="text-muted-foreground block truncate text-xs">
           {RULE_TYPES[reg.kind].label}
           {reg.rules.length > 1 ? ` · ${reg.rules.length} rules` : ""}
-          <span className="sm:hidden"> · {STATUS_LABELS[status]}</span>
+          <span className="sm:hidden">
+            {" · "}
+            {STATUS_LABELS[status]}
+            {reg.visibility === "public" ? " · Public" : ""}
+          </span>
         </span>
       </TableCell>
       <TableCell className="hidden sm:table-cell">
-        <RegulationStatusBadge status={status} />
-      </TableCell>
-      <TableCell className="text-muted-foreground hidden tabular-nums md:table-cell">
-        {zoneTotal(reg)}
+        <span className="flex flex-wrap items-center gap-1">
+          <RegulationStatusBadge status={status} />
+          {reg.visibility === "public" ? <VisibilityBadge visibility="public" /> : null}
+        </span>
       </TableCell>
       <TableCell className="text-muted-foreground hidden whitespace-nowrap md:table-cell">
         {formatDate(reg.createdAt)}
       </TableCell>
+      <TableCell className="text-muted-foreground hidden whitespace-nowrap md:table-cell">
+        {formatDate(reg.updatedAt)}
+      </TableCell>
       <TableCell>
-        {/* Two controls side by side, as production's list has and as Save Map
-            does: downloading is the one thing people come to this row to do
-            besides opening it, and behind the ⋯ it cost two clicks to reach a
-            menu that held almost nothing else. It stays in the menu as well --
-            the menu is the full list of what a row can do, the icon is the
-            shortcut past it. */}
+        {/* Download alone. The ⋯ menu held Open and Download GeoJSON and
+            nothing else: the name opens the regulation and this icon downloads
+            it, so the menu was a second click to what was already one click
+            away. Anything a row gains later goes in the editor, not back
+            behind a ⋯. */}
         <div className="flex items-center justify-end gap-0.5">
           <Button
             variant="ghost"
@@ -754,22 +807,6 @@ function RegulationRow({
           >
             <Download />
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="ghost" size="icon-sm" aria-label={`Options for ${reg.name}`}>
-                  <MoreHorizontal />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={onOpen}>Open</DropdownMenuItem>
-              <DropdownMenuItem onClick={onDownload}>
-                <Download />
-                Download GeoJSON
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </TableCell>
     </TableRow>
@@ -781,10 +818,19 @@ function RegulationStatusBadge({ status }: { status: RegulationStatus }) {
 }
 
 function VisibilityBadge({ visibility }: { visibility: Regulation["visibility"] }) {
-  return (
-    <Badge variant="outline">
-      {visibility === "public" ? <Globe /> : <Lock />}
-      {visibility === "public" ? "Public" : "Private"}
+  // Only Public is tinted: it is the state with consequences outside the
+  // product -- the zones are served to anyone -- so it is the one that must
+  // not be missed. Private is the default and stays quiet. --info passes AA as
+  // text in both themes, which --warning would not.
+  return visibility === "public" ? (
+    <Badge variant="outline" data-visibility="public" className="border-info/30 bg-info/10 text-info">
+      <Globe />
+      Public
+    </Badge>
+  ) : (
+    <Badge variant="outline" data-visibility="private">
+      <Lock />
+      Private
     </Badge>
   );
 }
@@ -985,6 +1031,7 @@ function RegulationEditor({
   zones,
   zoneIndex,
   zonesLoading,
+  geocode,
   onZonesCreated,
   onZoneRename,
   onSave,
@@ -997,6 +1044,7 @@ function RegulationEditor({
   zones: PickerZone[];
   zoneIndex: Map<string, PickerZone>;
   zonesLoading: boolean;
+  geocode?: Geocode;
   onZonesCreated: (zones: PickerZone[]) => void;
   onZoneRename: (id: string, name: string) => void;
   onSave: (reg: Regulation) => void;
@@ -1009,7 +1057,35 @@ function RegulationEditor({
   const [saving, setSaving] = React.useState(false);
   const [confirmLeave, setConfirmLeave] = React.useState(false);
   const [confirmDeactivate, setConfirmDeactivate] = React.useState(false);
-  const [pickerOpen, setPickerOpen] = React.useState(false);
+  /*
+   * Adding zones is a screen, not an overlay.
+   *
+   * It was a sheet, which covered the map -- the one thing worth looking at
+   * while choosing an area. In its place the settings column goes one level
+   * deeper, the way it already does from the list into a regulation, and the
+   * map keeps its half of the screen and lights up what is being picked.
+   */
+  const [picking, setPicking] = React.useState(false);
+  /** The zone under the pointer in the panel, drawn on the map as you read. */
+  const [preview, setPreview] = React.useState<PickerZone | null>(null);
+  /** Everything ticked so far, drawn and framed before it is committed. */
+  const [candidates, setCandidates] = React.useState<PickerZone[]>([]);
+  /*
+   * Drawing, held here rather than inside the map, because two things start
+   * it: the map's own keyboard shortcuts, and the Draw tab in Add zones. That
+   * tab is in the settings column, a sibling of the map, so the state they
+   * share has to sit above both -- and the shapes arrive from the map while
+   * the list that holds them is in the column.
+   *
+   * Two bits, not one. `session` is open from the first tool press until Add
+   * or Cancel; `session.tool` is what is armed right now, and it can be null
+   * inside an open session. Without the split, Escape would have to choose
+   * between leaving a list on screen that nothing can add to, and throwing
+   * away shapes someone just drew.
+   */
+  const [session, setSession] = React.useState<DrawSession | null>(null);
+  const drawMode = session?.tool ?? null;
+  const [traySnap, setTraySnap] = React.useState<TraySnap>("peek");
   const [focusZone, setFocusZone] = React.useState<{ id: string; at: number } | null>(null);
   /*
    * Below lg the settings and the map take turns rather than stacking: stacked,
@@ -1060,13 +1136,40 @@ function RegulationEditor({
   };
 
   const discard = () => {
+    // Unadded shapes are not part of `draft`, so a revert would leave them
+    // drawn on a regulation that no longer expects them.
+    setSession(null);
     if (isNew) return onClose();
     const original = JSON.parse(baseline) as Regulation;
     setDraft(original);
     if (!original.rules.some((r) => r.id === selected)) setSelected(original.rules[0]?.id ?? RULE_RAIL_GLOBAL);
   };
 
-  const back = () => (dirty ? setConfirmLeave(true) : onClose());
+  const back = () => {
+    setSession(null);
+    if (dirty) return setConfirmLeave(true);
+    onClose();
+  };
+
+  /**
+   * Leaves Add zones without adding, and takes its drawing off the map.
+   *
+   * One exit for the whole screen, because it is one screen: the library, the
+   * tools and the import field are three tabs of it, and a drawing session is
+   * something it holds rather than somewhere else it went. So this discards
+   * the ticks, the imported shapes and the drawn ones alike -- none of which
+   * has reached the rule, which is the thing the old auto-committing path
+   * could not offer at all.
+   */
+  const stopPicking = () => {
+    setPicking(false);
+    setSession(null);
+    setPreview(null);
+    setCandidates([]);
+    // Below lg the two take turns, and the tray that carries a session sits
+    // on the map pane. Leaving has to put the settings back.
+    setPane("settings");
+  };
 
   const duplicateRule = (id: string) => {
     const src = draft.rules.find((r) => r.id === id);
@@ -1088,16 +1191,170 @@ function RegulationEditor({
     updateRule(into, { zoneIds: [...new Set([...target.zoneIds, ...made.map((z) => z.id)])] });
   };
 
+  /**
+   * Arms a tool, opening a session if one is not already running.
+   *
+   * The single entry point, so the Draw tab and the map's keyboard shortcuts
+   * cannot disagree about what drawing is. Disarming with nothing drawn
+   * closes the session; with drafts in hand it only stops drawing, because
+   * the list and its Add button still have work to do.
+   */
+  const armTool = (tool: DrawMode | null) => {
+    if (!rule) return;
+    const ruleId = rule.id;
+    // Arming opens Add zones if it is shut. Drawing lives in that panel's
+    // Draw tab now, and the map's own keyboard shortcuts can start a session
+    // from anywhere -- so the panel they open is the one showing the tool
+    // that was just armed, rather than a session with no tools in sight.
+    if (tool !== null) setPicking(true);
+    setSession((s) => {
+      if (tool === null) {
+        return !s || s.drafts.length === 0 ? null : { ...s, tool: null };
+      }
+      return s && s.ruleId === ruleId
+        ? { ...s, tool }
+        : { tool, drafts: [], focusId: null, ruleId };
+    });
+  };
+
+  /**
+   * The same, for the tool row inside the tray.
+   *
+   * It differs in one case, and only because the tray is the whole session on
+   * a phone: closing it takes the tools away too, so pressing Polygon twice
+   * before drawing anything would drop the reader back on the map having
+   * asked for neither. Stopping from in here keeps the tray open with nothing
+   * armed. The panel above `lg` needs no such care -- its Draw tab holds the
+   * grid whether a session is open or not.
+   */
+  const setSessionTool = (tool: DrawMode | null) => {
+    if (tool !== null) {
+      armTool(tool);
+      return;
+    }
+    setSession((s) => (s ? { ...s, tool: null } : s));
+  };
+
+  /**
+   * Everything staged reaches the rule here, and only here.
+   *
+   * One list, whatever filled it: zones ticked in the library, shapes out of
+   * a file or a paste, and shapes drawn on the map. They are three tabs of
+   * one panel, so they commit together -- Add says how many it is about to
+   * add and adds exactly those.
+   *
+   * `onZonesCreated` takes the whole batch once rather than one shape at a
+   * time: until this point a draft is a label on something that does not
+   * exist yet, so renaming one is local. A second later the same edit renames
+   * a library zone everywhere it is used, because rules reference zones by id.
+   */
+  const addStaged = (picked: PickerZone[]) => {
+    if (!rule) return;
+    // Drawn, pasted and uploaded zones are ones the library has never seen.
+    const fresh = picked.filter((z) => !zoneIndex.has(z.id));
+    if (fresh.length) onZonesCreated(fresh);
+    addZones(picked, rule.id);
+    stopPicking();
+  };
+
+  const renameDraft = (id: string, name: string) =>
+    setSession((s) =>
+      s
+        ? {
+            ...s,
+            drafts: s.drafts.map((z) => (z.id === id ? { ...z, name } : z)),
+            focusId: null,
+          }
+        : s,
+    );
+
+  const removeDraft = (id: string) =>
+    setSession((s) =>
+      s ? { ...s, drafts: s.drafts.filter((z) => z.id !== id) } : s,
+    );
+
+  /*
+   * A session cannot outlive its rule.
+   *
+   * Switching rules mid-draw, or deleting the one being drawn on, would
+   * otherwise leave shapes queued against a rule that is no longer on screen
+   * -- and Add would put them on whichever rule got selected instead.
+   */
+  const sessionRuleId = session?.ruleId;
+  React.useEffect(() => {
+    if (sessionRuleId && sessionRuleId !== rule?.id) {
+      setSession(null);
+      setPreview(null);
+    }
+  }, [sessionRuleId, rule?.id]);
+
   return (
     <div className="flex h-full flex-col lg:flex-row">
       {/* Panel */}
       <section
-        aria-label="Regulation settings"
+        /* One screen, one name, one width. Arming a tool used to swap this
+           for a second panel, retitle it and narrow it from 460 to 340 in the
+           same tick -- three things moving at once in answer to one press,
+           which is why it read as the panel jumping away rather than as a
+           tool being armed. The session is inside it now. */
+        aria-label={picking ? "Add zones" : "Regulation settings"}
         className={cn(
           "bg-background flex min-w-0 flex-col lg:h-full lg:w-[460px] lg:shrink-0 lg:flex-none lg:border-r",
           pane === "settings" ? "min-h-0 flex-1" : "shrink-0",
         )}
       >
+        {picking && rule ? (
+          /* Below lg the settings and the map take turns, so a session has to
+             hand this over: the tray docked on the map carries the same tools
+             and the same list, and the column keeps out of the way rather
+             than mounting a second copy of either. Hidden, not unmounted --
+             the ticks and the half-typed import inside it are still staged,
+             and Add still commits them. */
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col",
+              session && "max-lg:hidden",
+            )}
+          >
+            <ZonePickerPanel
+              zones={zones}
+              excludeIds={rule.zoneIds}
+              // Where the arrow returns to, named: the rule in a multi-rule
+              // regulation, the regulation itself when there is only one.
+              backLabel={multi ? `${draft.name} · ${rule.name}` : draft.name}
+              onBack={stopPicking}
+              urlSample={SAMPLE_GEOJSON}
+              onPreviewChange={setPreview}
+              onSelectionChange={setCandidates}
+              onAdd={addStaged}
+              // Opens on Draw when a tool is already armed, which is the case
+              // when a keyboard shortcut on the map opened this panel.
+              initialSource={session ? "draw" : undefined}
+              session={
+                session
+                  ? {
+                      tool: session.tool as ZoneDrawTool | null,
+                      drafts: session.drafts,
+                      focusId: session.focusId,
+                      onRename: renameDraft,
+                      onRemove: removeDraft,
+                    }
+                  : null
+              }
+              onDraw={(tool) => {
+                // Below lg the map and the settings take turns, so arming has
+                // to bring the map on screen: the tray that carries the
+                // session docks over it, and a tool armed on a hidden pane
+                // would strand the reader on the settings with nothing to
+                // draw on. Disarming does not -- it leaves the panel exactly
+                // where it is, which above lg is all that ever happens.
+                if (tool) setPane("map");
+                armTool(tool);
+              }}
+            />
+          </div>
+        ) : (
+          <>
         <header className="space-y-2 border-b px-4 pt-3 pb-3 lg:pb-4">
           <div className="flex items-center justify-between gap-2">
             <Button variant="ghost" size="sm" className="-ml-2" onClick={back}>
@@ -1211,7 +1468,12 @@ function RegulationEditor({
                 zoneIndex={zoneIndex}
                 zonesLoading={zonesLoading}
                 onChange={(next) => updateRule(rule.id, next)}
-                onAddZones={() => setPickerOpen(true)}
+                onAddZones={() => {
+                  // On a phone the panes take turns, and Add zones is the
+                  // settings pane's own next screen.
+                  setPane("settings");
+                  setPicking(true);
+                }}
                 onZoneRename={onZoneRename}
                 onLocate={(id) => {
                   setPane("map");
@@ -1240,6 +1502,8 @@ function RegulationEditor({
           message={isNew ? "Not saved yet" : undefined}
           saveLabel={isNew ? "Create regulation" : "Save"}
         />
+          </>
+        )}
       </section>
 
       {/* Map */}
@@ -1250,38 +1514,80 @@ function RegulationEditor({
         zoneIndex={zoneIndex}
         focusZone={focusZone}
         canDraw={Boolean(rule)}
+        drawMode={drawMode}
+        drawing={session !== null}
+        geocode={geocode}
+        onDrawModeChange={armTool}
+        candidates={candidates}
+        drafts={session?.drafts ?? NO_DRAFTS}
+        preview={preview}
         onDrawn={(ring) => {
           if (!rule) return;
-          const zone: PickerZone = {
-            id: uid("zone"),
-            name: `Drawn zone ${seq}`,
-            tags: ["drawn"],
-            ring,
-            createdAt: new Date().toISOString(),
-          };
-          onZonesCreated([zone]);
-          addZones([zone], rule.id);
-          // Back to the rule the zone just joined: the change is there, and so
-          // is the save bar.
-          setPane("settings");
+          const id = uid("zone");
+          setSession((s) => {
+            if (!s) return s;
+            return {
+              ...s,
+              // Numbered from the rule's own count rather than a counter
+              // shared with rules and regulations, so the first zone drawn
+              // on an empty rule is Zone 1 and not Zone 7.
+              drafts: [
+                ...s.drafts,
+                {
+                  id,
+                  name: `Zone ${rule.zoneIds.length + s.drafts.length + 1}`,
+                  tags: ["drawn"],
+                  ring,
+                  createdAt: new Date().toISOString(),
+                },
+              ],
+              focusId: id,
+            };
+          });
+          // Raised once, on the first shape, so the auto-focused name field is
+          // reachable without overruling anyone who then drags the tray back
+          // down to see the map.
+          if (!session?.drafts.length) setTraySnap("half");
         }}
+        tray={
+          // Two mounts of one list, exactly one of them visible: above lg this
+          // wrapper is hidden and the column holds it, below lg the column is.
+          // The hidden one is display:none, so it is out of the accessibility
+          // tree and cannot take the focus the name field asks for.
+          <div className="contents lg:hidden">
+            <BottomTray
+              open={session !== null}
+              onOpenChange={(open) => {
+                if (!open) stopPicking();
+              }}
+              snap={traySnap}
+              onSnapChange={setTraySnap}
+              label="Drawn zones"
+              // Clear of MapLibre's attribution, which paints over anything
+              // docked to the bottom edge.
+              className="inset-x-2 bottom-10"
+            >
+              {session && rule ? (
+                <ZoneDraftPanel
+                  tool={session.tool as ZoneDrawTool | null}
+                  drafts={session.drafts}
+                  focusId={session.focusId}
+                  // The panel this stands in for is hidden, not thrown away,
+                  // so anything ticked there before a tool was armed is still
+                  // staged -- and Add here commits it too.
+                  alsoAdding={candidates.length}
+                  onToolChange={setSessionTool}
+                  onRename={renameDraft}
+                  onRemove={removeDraft}
+                  onPreviewChange={setPreview}
+                  onCancel={stopPicking}
+                  onAdd={() => addStaged([...candidates, ...session.drafts])}
+                />
+              ) : null}
+            </BottomTray>
+          </div>
+        }
       />
-
-      {rule ? (
-        <ZonePicker
-          open={pickerOpen}
-          onOpenChange={setPickerOpen}
-          zones={zones}
-          excludeIds={rule.zoneIds}
-          onAdd={(picked) => {
-            // Pasted GeoJSON arrives as zones the library has never seen.
-            const fresh = picked.filter((z) => !zoneIndex.has(z.id));
-            if (fresh.length) onZonesCreated(fresh);
-            addZones(picked, rule.id);
-          }}
-          side="left"
-        />
-      ) : null}
 
       <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
         <AlertDialogContent>
@@ -1698,6 +2004,20 @@ function NumberField({
   value?: number;
   onChange: (next: number | undefined) => void;
 }) {
+  /**
+   * Stepping from whatever is there now. An empty field starts at `min` when
+   * there is one, so the first click lands on a legal value rather than on 0
+   * for a field whose floor is 5.
+   */
+  const nudge = (by: number) => {
+    const from = value ?? min ?? 0;
+    const next = round(from + by * step);
+    onChange(clamp(next, min, max));
+  };
+
+  const atMin = value !== undefined && min !== undefined && value <= min;
+  const atMax = value !== undefined && max !== undefined && value >= max;
+
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
@@ -1716,10 +2036,47 @@ function NumberField({
         />
         <InputGroupAddon align="inline-end">
           <InputGroupText>{unit}</InputGroupText>
+          {/* The browser's own arrows are suppressed in Input: they render at
+              about 10px, well under the target size everything else here
+              meets. These are the 24px replacements. */}
+          <InputGroupButton
+            size="icon-xs"
+            aria-label={`Decrease ${label.toLowerCase()}`}
+            disabled={atMin}
+            onClick={() => nudge(-1)}
+          >
+            <Minus />
+          </InputGroupButton>
+          <InputGroupButton
+            size="icon-xs"
+            aria-label={`Increase ${label.toLowerCase()}`}
+            disabled={atMax}
+            onClick={() => nudge(1)}
+          >
+            <Plus />
+          </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
     </Field>
   );
+}
+
+/**
+ * Keeps a stepped value inside the spec's bounds, either of which may be
+ * absent -- a fleet cap has a floor and no ceiling.
+ */
+function clamp(n: number, min?: number, max?: number) {
+  if (min !== undefined && n < min) return min;
+  if (max !== undefined && n > max) return max;
+  return n;
+}
+
+/**
+ * Binary floating point, rounded off. A subsidy steps by 0.05, and 0.1 + 0.05
+ * is 0.15000000000000002 -- which a currency field must never show.
+ */
+function round(n: number) {
+  return Math.round(n * 1e6) / 1e6;
 }
 
 /**
@@ -1779,45 +2136,6 @@ function AllOrSome({
 }
 
 const ZONE_PAGE = 8;
-
-/**
- * A zone's name, renamed in place.
- *
- * A real bordered input, not text that becomes one on click: production
- * renames from this list, and a borderless field reads as a label nobody
- * thinks to type into -- which was the report this answers.
- *
- * The draft is local so each keystroke is cheap. The rename is published on
- * blur or Enter, and Escape puts the old name back.
- */
-function ZoneNameField({ name, onRename }: { name: string; onRename: (name: string) => void }) {
-  const [draft, setDraft] = React.useState<string | null>(null);
-
-  const commit = () => {
-    if (draft === null) return;
-    const next = draft.trim();
-    setDraft(null);
-    // An emptied field is a slip, not a request for a nameless zone.
-    if (next && next !== name) onRename(next);
-  };
-
-  return (
-    <Input
-      aria-label={`Rename ${name}`}
-      className="h-8"
-      value={draft ?? name}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          commit();
-        }
-        if (e.key === "Escape") setDraft(null);
-      }}
-    />
-  );
-}
 
 function ZoneList({
   ids,
@@ -1977,6 +2295,13 @@ function ZoneList({
 
 type Bounds = [[number, number], [number, number]];
 
+/**
+ * The look of a zone that is chosen but not yet added. Module scope, because
+ * useCategoryShapeLayer asks for a styles object that does not change
+ * identity between renders.
+ */
+const CANDIDATE_STYLES = { candidate: { color: CATEGORY_PALETTE[1] } };
+
 function boundsOf(rings: [number, number][][]): Bounds | null {
   let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
   for (const ring of rings)
@@ -1989,13 +2314,238 @@ function boundsOf(rings: [number, number][][]): Bounds | null {
   return Number.isFinite(w) ? [[w, s], [e, n]] : null;
 }
 
+/** One place the map can be sent to. */
+export type GeocodeResult = {
+  /** The headline, e.g. "Alfama". */
+  name: string;
+  /** The line beneath it, e.g. "Santa Maria Maior, Lisboa, Portugal". */
+  context?: string;
+  /** [lon, lat]. */
+  center: [number, number];
+  /** [west, south, east, north], flown to in preference to the centre. */
+  bbox?: [number, number, number, number];
+};
+
+/**
+ * Looks places up by name. Held as a prop because a deployment has its own
+ * places -- depots, operator areas, the zones already in the library -- and a
+ * public geocoder knows none of them. Omit it and the map carries no search
+ * field at all, so a block that does not want one is unchanged.
+ *
+ * The `signal` is aborted when another keystroke overtakes this lookup, so a
+ * slow first answer cannot land after a later one and overwrite it.
+ *
+ * `near` is what the map is looking at, and a lookup that ignores it is worse
+ * than useless here: searching "Belem" over Lisbon lands on Belém in Brazil,
+ * 7,000km away, because that is the bigger place. Bias by it rather than
+ * restrict to it -- somebody searching a second city still has to find it.
+ */
+export type Geocode = (
+  query: string,
+  signal: AbortSignal,
+  near?: {
+    center: [number, number];
+    /** [west, south, east, north] of the current view. */
+    bbox: [number, number, number, number];
+  },
+) => Promise<GeocodeResult[]>;
+
+/**
+ * Search over the map, top centre.
+ *
+ * A combobox rather than a field with a list under it: the results are
+ * reached with the arrow keys from the input, which is how a reader who never
+ * touches the mouse gets to the second result, and `aria-activedescendant`
+ * is what names it to a screen reader while focus stays in the field.
+ */
+function MapSearch({
+  geocode,
+  onPick,
+  className,
+}: {
+  geocode: Geocode;
+  onPick: (place: GeocodeResult) => void;
+  className?: string;
+}) {
+  const id = React.useId();
+  const [query, setQuery] = React.useState("");
+  const [results, setResults] = React.useState<GeocodeResult[]>([]);
+  const [state, setState] = React.useState<"idle" | "busy" | "done" | "failed">(
+    "idle",
+  );
+  const [open, setOpen] = React.useState(false);
+  const [active, setActive] = React.useState(0);
+  const abortRef = React.useRef<AbortController | null>(null);
+
+  // Debounced, because Nominatim -- the default the docs site runs on -- asks
+  // for about one request a second, and a lookup per keystroke is four.
+  React.useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setResults([]);
+      setState("idle");
+      setOpen(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      abortRef.current?.abort();
+      const ac = new AbortController();
+      abortRef.current = ac;
+      setState("busy");
+      setOpen(true);
+      geocode(q, ac.signal).then(
+        (found) => {
+          if (ac.signal.aborted) return;
+          // `geocode` is somebody else's function. A promise that resolves to
+          // undefined, or to a single object, is a crash in the render below
+          // rather than an empty result, and the stack would name this
+          // component rather than the lookup that actually returned it.
+          setResults(Array.isArray(found) ? found : []);
+          setActive(0);
+          setState("done");
+        },
+        () => {
+          if (ac.signal.aborted) return;
+          setResults([]);
+          setState("failed");
+        },
+      );
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [query, geocode]);
+
+  React.useEffect(() => () => abortRef.current?.abort(), []);
+
+  const choose = (place: GeocodeResult | undefined) => {
+    if (!place) return;
+    onPick(place);
+    setQuery(place.name);
+    setOpen(false);
+  };
+
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Escape") {
+      setOpen(false);
+      return;
+    }
+    if (!open || results.length === 0) {
+      if (event.key === "Enter") event.preventDefault();
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      setActive((i) => (i + step + results.length) % results.length);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      choose(results[active]);
+    }
+  };
+
+  const listId = `${id}-places`;
+  const optionId = (i: number) => `${id}-place-${i}`;
+
+  return (
+    <div data-slot="map-search" className={className}>
+      <InputGroup className="bg-card/95 shadow-lg backdrop-blur">
+        <InputGroupAddon>
+          <Search />
+        </InputGroupAddon>
+        <InputGroupInput
+          role="combobox"
+          aria-label="Search the map"
+          aria-expanded={open}
+          aria-controls={open ? listId : undefined}
+          aria-activedescendant={
+            open && results.length ? optionId(active) : undefined
+          }
+          aria-autocomplete="list"
+          placeholder="Search for a place"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={onKeyDown}
+          onFocus={() => results.length > 0 && setOpen(true)}
+        />
+        {query ? (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              aria-label="Clear search"
+              size="icon-xs"
+              onClick={() => {
+                setQuery("");
+                setOpen(false);
+              }}
+            >
+              <X />
+            </InputGroupButton>
+          </InputGroupAddon>
+        ) : null}
+      </InputGroup>
+
+      {open ? (
+        <div className="bg-card/95 mt-1.5 overflow-hidden rounded-lg border shadow-lg backdrop-blur">
+          {state === "busy" ? (
+            <p className="text-muted-foreground p-3 text-sm">Searching…</p>
+          ) : state === "failed" ? (
+            <p role="alert" className="p-3 text-sm">
+              That search could not be run. Many hosts refuse requests from
+              other sites — try again, or draw the zone instead.
+            </p>
+          ) : results.length === 0 ? (
+            <p className="text-muted-foreground p-3 text-sm">
+              Nothing found for “{query.trim()}”.
+            </p>
+          ) : (
+            <ul role="listbox" id={listId} aria-label="Places" className="py-1">
+              {results.map((place, i) => (
+                <li
+                  key={`${place.name}-${place.center.join()}`}
+                  id={optionId(i)}
+                  role="option"
+                  aria-selected={i === active}
+                  className={cn(
+                    "flex cursor-pointer items-start gap-2 px-3 py-1.5 text-sm",
+                    i === active && "bg-muted",
+                  )}
+                  onPointerEnter={() => setActive(i)}
+                  onClick={() => choose(place)}
+                >
+                  <MapPin className="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">
+                      {place.name}
+                    </span>
+                    {place.context ? (
+                      <span className="text-muted-foreground block truncate text-xs">
+                        {place.context}
+                      </span>
+                    ) : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function RegulationMap({
   regulation,
   selectedRule,
   zoneIndex,
   focusZone,
   canDraw,
+  drawMode,
+  drawing,
+  geocode,
+  onDrawModeChange,
+  candidates,
+  drafts,
+  preview,
   onDrawn,
+  tray,
   className,
 }: {
   regulation: Regulation;
@@ -2003,7 +2553,26 @@ function RegulationMap({
   zoneIndex: Map<string, PickerZone>;
   focusZone: { id: string; at: number } | null;
   canDraw: boolean;
+  /** Zones chosen in the Add zones panel but not yet added to the rule. */
+  candidates: PickerZone[];
+  /** Shapes finished in this drawing session, not yet added to the rule. */
+  drafts: PickerZone[];
+  /** The one being read in that panel, drawn over the rest. */
+  preview: PickerZone | null;
+  /** Owned above, because the Add zones screen arms it too. */
+  drawMode: DrawMode | null;
+  /**
+   * A drawing session is open, armed or not. The search field stands down for
+   * it: both want the top centre, and while a session is running the banner
+   * there is the thing that has to be read.
+   */
+  drawing: boolean;
+  /** Omitted, no search field is drawn. */
+  geocode?: Geocode;
+  onDrawModeChange: (mode: DrawMode | null) => void;
   onDrawn: (ring: [number, number][]) => void;
+  /** The draft list as a tray, for the widths with no room for a column. */
+  tray?: React.ReactNode;
   className?: string;
 }) {
   const [map, setMap] = React.useState<MapLibreMap | null>(null);
@@ -2028,7 +2597,10 @@ function RegulationMap({
     return () => ro.disconnect();
   }, [map]);
   const [basemapId, setBasemapId] = React.useState<BasemapId>(DEFAULT_BASEMAP_ID);
-  const [drawMode, setDrawMode] = React.useState<DrawMode | null>(null);
+  // Kept across drawings rather than reset with the tool: someone marking up
+  // a street network sets the corridor once and then draws a dozen streets at
+  // that width.
+  const [lineWidth, setLineWidth] = React.useState(DEFAULT_LINE_WIDTH_M);
 
   // The selected rule draws on top and the others sit underneath, so in a
   // multi-rule regulation you can see where a parking bay falls inside a
@@ -2057,15 +2629,111 @@ function RegulationMap({
   useCategoryShapeLayer({ map, enabled: others.length > 0, shapes: others, styles, id: "regulation-others" });
   useCategoryShapeLayer({ map, enabled: focused.length > 0, shapes: focused, styles, id: "regulation-focused" });
 
+  /*
+   * What Add zones is about to add, over the top of what the rule already has.
+   *
+   * Blue, and not the rule's own colour, because these are not in the rule
+   * yet: beside purple caps, green parking, amber, red and teal, blue is the
+   * one slot the rule types leave free, so a candidate can never be mistaken
+   * for something already saved. It is the design system's own categorical
+   * blue rather than a colour invented here.
+   */
+  const candidateShapes = React.useMemo(
+    () => candidates.map((z) => ({ ring: z.ring, category: "candidate" })),
+    [candidates],
+  );
+  /*
+   * What has just been drawn, in the same blue as a candidate: both are
+   * shapes on their way into the rule, and the only difference is where they
+   * came from.
+   *
+   * Deliberately NOT routed through `candidates`: the fit-to-selection effect
+   * below is keyed on how many there are, so a finished shape would fly the
+   * camera -- the map arguing with someone mid-draw. Drafts never move it.
+   */
+  const draftShapes = React.useMemo(
+    () => drafts.map((z) => ({ ring: z.ring, category: "candidate" })),
+    [drafts],
+  );
+  const previewShapes = React.useMemo(
+    () => (preview ? [{ ring: preview.ring, category: "candidate" }] : []),
+    [preview],
+  );
+  useCategoryShapeLayer({
+    map,
+    enabled: candidateShapes.length > 0,
+    shapes: candidateShapes,
+    styles: CANDIDATE_STYLES,
+    width: 2,
+    id: "regulation-candidates",
+  });
+  useCategoryShapeLayer({
+    map,
+    enabled: draftShapes.length > 0,
+    shapes: draftShapes,
+    styles: CANDIDATE_STYLES,
+    width: 2,
+    id: "regulation-drafts",
+  });
+  // The row being read, drawn again on top with a heavier outline. A second
+  // layer rather than a second colour: the zone is the same zone, and what
+  // the reader needs is to find it, not to be told it is a different kind.
+  useCategoryShapeLayer({
+    map,
+    enabled: previewShapes.length > 0,
+    shapes: previewShapes,
+    styles: CANDIDATE_STYLES,
+    width: 4,
+    id: "regulation-preview",
+  });
+
   const draw = useMapDraw({
     map,
     mode: drawMode,
-    onComplete: (ring) => {
-      onDrawn(ring);
-      setDrawMode(null);
-    },
-    onCancel: () => setDrawMode(null),
+    lineWidthMeters: lineWidth,
+    /*
+     * The tool stays armed, so a run of zones is a run of drags rather than a
+     * trip back through the picker for each one. `useMapDraw`'s effect is
+     * keyed on the mode, so leaving it alone means no teardown: the pointer
+     * handlers, the held `dragPan` and the banner's corridor width all stay
+     * live. Escape or Select is how you stop.
+     */
+    onComplete: (ring) => onDrawn(ring),
+    onCancel: () => onDrawModeChange(null),
   });
+
+  /*
+   * p / c / f / l arm a tool and s stops, which used to come with the toolbar
+   * that stood on the map. The toolbar has gone to the panel; the shortcuts
+   * belong to the map either way, so they are held here now. The hook ignores
+   * keys typed into a field, which is what keeps naming a draft "Circle" from
+   * arming one.
+   */
+  useMapDrawShortcuts({
+    mode: drawMode,
+    onModeChange: onDrawModeChange,
+    enabled: canDraw,
+  });
+
+  /*
+   * The lookup is handed what the map is looking at, so a search reads as a
+   * search of this city rather than of the whole world. Read at call time
+   * from the map itself, not from state: panning does not re-render this, and
+   * a bias taken from where the map was two pans ago is the bug it fixes.
+   */
+  const geocodeNear = React.useCallback<Geocode>(
+    (query, signal) => {
+      if (!geocode) return Promise.resolve([]);
+      if (!map) return geocode(query, signal);
+      const c = map.getCenter();
+      const b = map.getBounds();
+      return geocode(query, signal, {
+        center: [c.lng, c.lat],
+        bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+      });
+    },
+    [geocode, map],
+  );
 
   // Frame the regulation once its zones are known, and again when a different
   // regulation opens -- not on every edit, which would yank the map away from
@@ -2089,8 +2757,26 @@ function RegulationMap({
     if (b) map.fitBounds(b, { padding: 80, maxZoom: 17 });
   }, [map, visible, focusZone, zoneIndex]);
 
+  /*
+   * Frame what is being picked, as it is picked.
+   *
+   * Keyed on how many are chosen rather than on the zones themselves, so the
+   * camera moves when the selection grows or shrinks and stays put while
+   * someone scrolls the list or hovers a row -- which the preview layer
+   * answers instead. Clearing the selection leaves the camera where it is:
+   * flying back on an untick would be the map arguing with the reader.
+   */
+  const candidateCount = candidates.length;
   React.useEffect(() => {
-    if (!canDraw) setDrawMode(null);
+    if (!map || !visible || candidateCount === 0) return;
+    const b = boundsOf(candidates.map((z) => z.ring));
+    if (b) map.fitBounds(b, { padding: 64, maxZoom: 16 });
+    // candidates is read for its rings but deliberately not depended on; see above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, visible, candidateCount]);
+
+  React.useEffect(() => {
+    if (!canDraw) onDrawModeChange(null);
   }, [canDraw]);
 
   return (
@@ -2117,18 +2803,39 @@ function RegulationMap({
         }
       />
 
-      <MapDrawControl
-        className="absolute top-3 right-3"
-        mode={drawMode}
-        onModeChange={setDrawMode}
-        disabled={!canDraw}
-      />
+      {/* Top centre, and only when nothing is being drawn: the banner below
+          takes the same place during a session, and a field that shuffles out
+          of its way mid-draw moves under the cursor that is using it. The
+          tools are not here at all any more -- they are in the panel, which
+          is the one place that stays on screen for the whole session. */}
+      {geocode && !drawing ? (
+        <MapSearch
+          className="absolute top-3 left-1/2 z-10 w-[min(22rem,calc(100%-6rem))] -translate-x-1/2"
+          geocode={geocodeNear}
+          onPick={(place) => {
+            if (!map) return;
+            if (place.bbox) {
+              map.fitBounds(
+                [
+                  [place.bbox[0], place.bbox[1]],
+                  [place.bbox[2], place.bbox[3]],
+                ],
+                { padding: 48, duration: 900 },
+              );
+            } else {
+              map.flyTo({ center: place.center, zoom: 14, duration: 900 });
+            }
+          }}
+        />
+      ) : null}
 
       {drawMode ? (
         <MapDrawBanner
-          className="absolute top-3 left-1/2 w-[min(22rem,calc(100%-6rem))] -translate-x-1/2"
+          className="absolute top-3 left-1/2 w-[min(30rem,calc(100%-6rem))] -translate-x-1/2"
           mode={drawMode}
           points={draw.points}
+          lineWidthMeters={lineWidth}
+          onLineWidthChange={setLineWidth}
           onDone={draw.finish}
           onCancel={draw.cancel}
         />
@@ -2145,6 +2852,8 @@ function RegulationMap({
           />
         </div>
       ) : null}
+
+      {tray}
 
       <MapControls
         className="absolute right-3 bottom-10"

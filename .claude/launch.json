@@ -24,10 +24,17 @@
     },
     {
       "name": "vianova-ds-docs-isolated",
-      "runtimeExecutable": "bash",
+      "runtimeExecutable": "/usr/bin/env",
       "runtimeArgs": [
-        "-c",
-        "cd apps/www && NEXT_DIST_DIR=.next exec pnpm exec next dev -p 3005"
+        "NEXT_DIST_DIR=node_modules/.next-claude",
+        "pnpm",
+        "--filter",
+        "@vianova/www",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3005"
       ],
       "port": 3005
     },

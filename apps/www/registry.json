@@ -363,6 +363,36 @@
       ]
     },
     {
+      "name": "shapefile",
+      "type": "registry:lib",
+      "title": "Shapefile",
+      "description": "Shapefile helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/shapefile.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "registryDependencies": [
+        "@vianova/zone-geometry"
+      ]
+    },
+    {
+      "name": "size-expression",
+      "type": "registry:lib",
+      "title": "Size Expression",
+      "description": "Size Expression helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/size-expression.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "dependencies": [
+        "maplibre-gl"
+      ]
+    },
+    {
       "name": "trip-report",
       "type": "registry:lib",
       "title": "Trip Report",
@@ -388,6 +418,18 @@
       "dependencies": [
         "clsx",
         "tailwind-merge"
+      ]
+    },
+    {
+      "name": "zone-geometry",
+      "type": "registry:lib",
+      "title": "Zone Geometry",
+      "description": "Zone Geometry helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/zone-geometry.ts",
+          "type": "registry:lib"
+        }
       ]
     },
     {
@@ -487,6 +529,7 @@
         "@vianova/alert",
         "@vianova/button",
         "@vianova/card",
+        "@vianova/category-badge",
         "@vianova/category-style",
         "@vianova/choice-card",
         "@vianova/copy-button",
@@ -499,6 +542,7 @@
         "@vianova/native-select",
         "@vianova/phone-frame",
         "@vianova/sample-citizen",
+        "@vianova/sample-datasets",
         "@vianova/segmented-control",
         "@vianova/skeleton",
         "@vianova/spinner",
@@ -511,6 +555,60 @@
       "files": [
         {
           "path": "registry/vianova/blocks/citizen-workspace.tsx",
+          "type": "registry:block"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "dashboard-workspace",
+      "type": "registry:block",
+      "title": "Dashboard workspace",
+      "description": "Dashboard workspace layout, composed from Vianova components.",
+      "dependencies": [
+        "lucide-react",
+        "react-grid-layout",
+        "recharts"
+      ],
+      "registryDependencies": [
+        "@vianova/activity-heatmap",
+        "@vianova/alert",
+        "@vianova/avatar",
+        "@vianova/badge",
+        "@vianova/button",
+        "@vianova/category-style",
+        "@vianova/chart",
+        "@vianova/command",
+        "@vianova/confirm-dialog",
+        "@vianova/csv",
+        "@vianova/dialog",
+        "@vianova/drawer",
+        "@vianova/dropdown-menu",
+        "@vianova/empty",
+        "@vianova/export-menu",
+        "@vianova/field",
+        "@vianova/infringement-report",
+        "@vianova/inline-edit",
+        "@vianova/input",
+        "@vianova/input-group",
+        "@vianova/markdown-editor",
+        "@vianova/popover",
+        "@vianova/report-grid",
+        "@vianova/sample-datasets",
+        "@vianova/skeleton",
+        "@vianova/table",
+        "@vianova/textarea",
+        "@vianova/toggle-group",
+        "@vianova/tooltip",
+        "@vianova/trip-report",
+        "@vianova/use-mobile",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/blocks/dashboard-workspace.tsx",
           "type": "registry:block"
         }
       ],
@@ -660,6 +758,8 @@
         "@vianova/sample-datasets",
         "@vianova/sample-map-layer",
         "@vianova/select",
+        "@vianova/size-expression",
+        "@vianova/size-panel",
         "@vianova/skeleton",
         "@vianova/tabs",
         "@vianova/use-color-scheme",
@@ -692,7 +792,9 @@
         "@vianova/badge",
         "@vianova/basemap-switcher",
         "@vianova/basemaps",
+        "@vianova/bottom-tray",
         "@vianova/button",
+        "@vianova/category-style",
         "@vianova/checkbox",
         "@vianova/choice-card",
         "@vianova/dialog",
@@ -738,41 +840,21 @@
       "title": "Reports workspace",
       "description": "Reports workspace layout, composed from Vianova components.",
       "dependencies": [
-        "lucide-react",
-        "react-grid-layout",
-        "recharts"
+        "lucide-react"
       ],
       "registryDependencies": [
-        "@vianova/activity-heatmap",
         "@vianova/alert",
-        "@vianova/avatar",
         "@vianova/badge",
         "@vianova/button",
-        "@vianova/category-style",
-        "@vianova/chart",
-        "@vianova/command",
-        "@vianova/confirm-dialog",
-        "@vianova/csv",
+        "@vianova/checkbox",
         "@vianova/dialog",
-        "@vianova/drawer",
-        "@vianova/dropdown-menu",
         "@vianova/empty",
-        "@vianova/export-menu",
-        "@vianova/field",
-        "@vianova/infringement-report",
-        "@vianova/inline-edit",
-        "@vianova/input",
         "@vianova/input-group",
-        "@vianova/markdown-editor",
-        "@vianova/popover",
-        "@vianova/report-grid",
-        "@vianova/sample-datasets",
+        "@vianova/select",
         "@vianova/skeleton",
         "@vianova/table",
-        "@vianova/textarea",
-        "@vianova/toggle-group",
-        "@vianova/trip-report",
-        "@vianova/use-mobile",
+        "@vianova/toggle",
+        "@vianova/tooltip",
         "@vianova/utils"
       ],
       "files": [
@@ -2981,8 +3063,11 @@
         "@vianova/css-color",
         "@vianova/draw-zone-icon",
         "@vianova/dropdown-menu",
+        "@vianova/input-group",
         "@vianova/kbd",
-        "@vianova/utils"
+        "@vianova/toggle-group",
+        "@vianova/utils",
+        "@vianova/zone-geometry"
       ],
       "files": [
         {
@@ -3226,6 +3311,8 @@
         "@vianova/popover",
         "@vianova/preset-picker",
         "@vianova/sample-datasets",
+        "@vianova/size-expression",
+        "@vianova/size-panel",
         "@vianova/skeleton",
         "@vianova/use-category-point-layer",
         "@vianova/use-category-shape-layer",
@@ -3318,6 +3405,38 @@
       }
     },
     {
+      "name": "size-panel",
+      "type": "registry:ui",
+      "title": "Size Panel",
+      "description": "Size Panel — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/button",
+        "@vianova/colorize-panel",
+        "@vianova/input",
+        "@vianova/label",
+        "@vianova/segmented-control",
+        "@vianova/select",
+        "@vianova/separator",
+        "@vianova/slider",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/size-panel.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "visualization-icons",
       "type": "registry:ui",
       "title": "Visualization Icons",
@@ -3376,14 +3495,21 @@
         "@vianova/badge",
         "@vianova/button",
         "@vianova/checkbox",
-        "@vianova/choice-card",
+        "@vianova/draw-zone-icon",
         "@vianova/field",
+        "@vianova/file-dropzone",
+        "@vianova/floating-panel",
+        "@vianova/input",
+        "@vianova/shapefile",
         "@vianova/sheet",
         "@vianova/slider-field",
+        "@vianova/spinner",
+        "@vianova/tabs",
         "@vianova/tag-input",
         "@vianova/textarea",
         "@vianova/toggle-group",
-        "@vianova/utils"
+        "@vianova/utils",
+        "@vianova/zone-geometry"
       ],
       "files": [
         {
