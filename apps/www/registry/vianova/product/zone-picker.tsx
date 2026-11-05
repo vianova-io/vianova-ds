@@ -626,7 +626,9 @@ export function ZonePickerPanel({
   return (
     <div
       data-slot="zone-picker-panel"
-      className={cn("flex min-h-0 flex-1 flex-col", className)}
+      // Paints its own surface rather than borrowing whatever is behind it,
+      // so the sticky search bar inside has a known colour to repaint.
+      className={cn("bg-background flex min-h-0 flex-1 flex-col", className)}
     >
       <ZonePickerBody
         chrome="panel"
@@ -757,7 +759,7 @@ function ZonePickerBody({
             scrolls away stops being a switcher, and a 3px focus ring drawn
             4px below the top edge of an `overflow-y-auto` ancestor is clipped
             -- which is the defect the focus-ring suite exists to catch. */}
-        <TabsList aria-label="Zone source" className="mx-4 mb-3 w-auto">
+        <TabsList aria-label="Zone source" className="mx-4 my-3 w-auto">
           {SOURCES.map((s) =>
             // Drawing is only offered when there is a map to draw on.
             s.value === "draw" && !onDraw ? null : (
@@ -773,16 +775,26 @@ function ZonePickerBody({
             source: the bodies are genuinely swapped, so the library's rows
             are not mounted while someone is importing. What has to survive
             the swap is held above this. The scroll region's padding is inside
-            it, so a focus ring at the edge is never cut by the overflow. */}
+            it, so a focus ring at the edge is never cut by the overflow.
+
+            No padding at the top, though. `sticky top-0` pins to a scroll
+            container's CONTENT box, not its padding box, so a `pt-*` here is
+            a strip the sticky search bar can never cover -- the list scrolls
+            through it in full view, above the bar that is supposed to be the
+            top of the list. The breathing room is the tab row's `my-3`
+            instead, and each body brings its own. */}
         <TabsContent
           value={source}
-          className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pt-1 pb-4"
+          className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pt-0 pb-4"
         >
           {source === "zones" ? (
             <ZoneList
               zones={zones}
               excludeIds={excludeIds}
               selected={selected}
+              surfaceClassName={
+                chrome === "sheet" ? "bg-popover" : "bg-background"
+              }
               onSelectedChange={setSelected}
               onPreviewChange={onPreviewChange}
             />
@@ -832,12 +844,22 @@ function ZoneList({
   zones,
   excludeIds,
   selected,
+  surfaceClassName,
   onSelectedChange,
   onPreviewChange,
 }: {
   zones: PickerZone[];
   excludeIds?: string[];
   selected: ReadonlySet<string>;
+  /**
+   * The background the sticky search bar has to repaint, which is whatever
+   * surface the picker was dropped onto -- `bg-background` in a column,
+   * `bg-popover` in a sheet. It cannot be one fixed token: the two differ in
+   * dark (`#09090b` against `#18181b`) and the wrong one shows as a lighter
+   * slab lying across the panel. They are both `#ffffff` in light, which is
+   * how a mismatch here stays invisible until someone opens it in dark.
+   */
+  surfaceClassName: string;
   onSelectedChange: React.Dispatch<React.SetStateAction<ReadonlySet<string>>>;
   onPreviewChange?: (zone: PickerZone | null) => void;
 }) {
@@ -911,8 +933,15 @@ function ZoneList({
   return (
     <div data-slot="zone-picker-list" className="flex flex-col gap-3">
       {/* Sticky, so the chips -- what is selected -- stay in view while the
-          list scrolls under them. -mx/px keep its background edge to edge. */}
-      <div className="bg-popover sticky top-0 z-10 -mx-4 flex items-center gap-2 px-4 py-2">
+          list scrolls under them. -mx/px keep its background edge to edge,
+          and the rule beneath marks where the list begins once rows are
+          passing underneath. */}
+      <div
+        className={cn(
+          "sticky top-0 z-10 -mx-4 flex items-center gap-2 border-b px-4 py-2",
+          surfaceClassName,
+        )}
+      >
         {/*
           The search and the selection in one field, as a mail client's To:
           line is: chips for the zones picked, then the text that filters the
@@ -1187,28 +1216,59 @@ function DrawSource({
        * keeps "Line" findable and keeps axe quiet about a name that does not
        * contain its own label.
        */}
-      {/* Two by two rather than one welded row: four tools at their natural
-          width overrun a 390px phone, and a grid that always holds its shape
-          beats a row that reflows into something else below a breakpoint. */}
-      <div
-        role="group"
-        aria-label="Drawing tool"
-        className="grid grid-cols-2 gap-2"
-      >
-        {DRAW_TOOLS.map((t) => (
-          <Button
-            key={t.value}
-            variant="outline"
-            size="sm"
-            title={t.description}
-            className="justify-start"
-            onClick={() => onDraw(t.value)}
-          >
-            <t.Icon data-icon="inline-start" />
-            {t.title}
-          </Button>
-        ))}
-      </div>
+      <DrawToolGrid onPick={(tool) => tool && onDraw(tool)} />
+    </div>
+  );
+}
+
+/**
+ * The four tools, as four buttons.
+ *
+ * Shared by the Draw tab -- where nothing is armed yet and the grid only
+ * starts a session -- and by the session panel itself, where one of them is
+ * armed and pressing another swaps the tool without leaving. Passing `value`
+ * is what tells the two apart: `undefined` leaves `aria-pressed` off the
+ * buttons entirely, because in the chooser there is no armed state to report.
+ */
+function DrawToolGrid({
+  value,
+  onPick,
+  className,
+}: {
+  /** The armed tool, `null` for a stopped session, `undefined` for none. */
+  value?: ZoneDrawTool | null;
+  /**
+   * `null` when the armed tool is pressed again, which is how drawing stops
+   * without the drafts being thrown away. It is the only stop there is: the
+   * map used to carry a Select button beside the tools and no longer carries
+   * anything, so a pressed button that unpresses has to do that work.
+   */
+  onPick: (tool: ZoneDrawTool | null) => void;
+  className?: string;
+}) {
+  return (
+    /* Two by two rather than one welded row: four tools at their natural
+       width overrun a 390px phone, and a grid that always holds its shape
+       beats a row that reflows into something else below a breakpoint. */
+    <div
+      role="group"
+      aria-label="Drawing tool"
+      className={cn("grid grid-cols-2 gap-2", className)}
+    >
+      {DRAW_TOOLS.map((t) => (
+        <Button
+          key={t.value}
+          variant="outline"
+          size="sm"
+          title={t.description}
+          aria-pressed={value === undefined ? undefined : value === t.value}
+          className="aria-pressed:bg-muted aria-pressed:border-primary min-w-0 justify-start"
+          onClick={() => onPick(value === t.value ? null : t.value)}
+        >
+          <t.Icon data-icon="inline-start" />
+          <span className="truncate">{t.title}</span>
+        </Button>
+      ))}
     </div>
   );
 }
@@ -1839,6 +1899,7 @@ export function ZoneDraftPanel({
   drafts,
   ruleName,
   focusId,
+  onToolChange,
   onRename,
   onRemove,
   onPreviewChange,
@@ -1850,6 +1911,13 @@ export function ZoneDraftPanel({
   chrome: "panel" | "tray";
   /** The armed tool, or null when drawing has stopped but drafts remain. */
   tool: ZoneDrawTool | null;
+  /**
+   * Arms another tool without leaving the session. The tools live here, in
+   * the column, rather than on the map: a floating toolbar put them in the
+   * one place that is also the drawing surface, and left the column showing
+   * drafts with no way to change tool at all.
+   */
+  onToolChange: (tool: ZoneDrawTool | null) => void;
   drafts: PickerZone[];
   /** Named on the way back, as the picker's back row names it. */
   ruleName?: string;
@@ -1897,8 +1965,14 @@ export function ZoneDraftPanel({
     <p className="text-muted-foreground text-sm">
       {tool
         ? `${DRAW_PROMPTS[tool]} Shapes you finish are listed here.`
-        : "Pick a tool on the map to carry on."}
+        : "Pick a tool to carry on."}
     </p>
+  );
+
+  /* Above the drafts, not below: the tools are what the session is for, and
+     the list underneath grows as they are used. */
+  const tools = (
+    <DrawToolGrid value={tool} onPick={onToolChange} className="shrink-0" />
   );
 
   const footer = (
@@ -1931,6 +2005,7 @@ export function ZoneDraftPanel({
           </span>
         </FloatingPanelHeader>
         <FloatingPanelBody className="flex flex-col gap-3">
+          {tools}
           {drafts.length ? rows : empty}
         </FloatingPanelBody>
         {footer}
@@ -1964,6 +2039,7 @@ export function ZoneDraftPanel({
         </div>
       </header>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-3 pb-4">
+        {tools}
         {drafts.length ? rows : empty}
       </div>
       {footer}
