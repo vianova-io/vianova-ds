@@ -34,19 +34,24 @@ const DRAWN: PickerZone[] = [
 }));
 
 /**
- * A drawing session, mid-run.
+ * A drawing session, mid-run, as a phone gets it.
  *
- * The tools sit in the column for as long as the session lasts, above the
- * shapes they have produced. They used to float on the map instead -- the one
- * surface that is also the drawing surface -- which left this column showing
- * drafts and no way to change tool at all.
+ * Above `lg` the session lives inside Add zones: its Draw tab holds the tools
+ * and, underneath, the shapes they have made. Below `lg` the settings and the
+ * map take turns, so there is no column to keep open beside the map -- and a
+ * session with the map off screen is nothing at all. This is the same tools
+ * and the same list again, as a tray docked over the map.
+ *
+ * The tools sit above the shapes they have produced for as long as the session
+ * lasts. They used to float on the map instead -- the one surface that is also
+ * the drawing surface -- which left the list with no way to change tool at all.
  *
  * Pressing the armed tool again stops drawing without discarding anything:
  * the list and its Add button still have work to do, and with the map's
  * Select button gone there is nothing else left to stop with.
  *
- * Opened already running, and with no map beside it, so that the panel is
- * what the visual suite photographs.
+ * Shown without the tray's own geometry around it, and already running, so
+ * that the panel is what the visual suite photographs.
  */
 export default function ZonePickerDrawing() {
   const [tool, setTool] = React.useState<ZoneDrawTool | null>("polygon");
@@ -80,21 +85,34 @@ export default function ZonePickerDrawing() {
   }
 
   return (
-    <div className="flex h-[30rem] w-full max-w-md flex-col overflow-hidden rounded-lg border">
-      <ZoneDraftPanel
-        chrome="panel"
-        tool={tool}
-        onToolChange={setTool}
-        drafts={drafts}
-        ruleName="Parking · Baixa and Chiado"
-        focusId={null}
-        onRename={(id, name) =>
-          setDrafts((prev) => prev.map((z) => (z.id === id ? { ...z, name } : z)))
-        }
-        onRemove={(id) => setDrafts((prev) => prev.filter((z) => z.id !== id))}
-        onCancel={() => setAdded([])}
-        onAdd={() => setAdded(drafts)}
-      />
+    /* The map the tray is docked over, and the slot it takes on it: inset
+       from the sides, as `inset-x-2` insets it in the regulation editor, and
+       docked to the bottom edge -- which is what the panel's square bottom
+       corners are for.
+
+       No `overflow-hidden` on the frame. A `FloatingPanel` carries a drop
+       shadow, and a frame cut to its exact size sliced 14.5px off the bottom
+       of it and 4.5px off each side. A tray floats; the box standing in for
+       the map it floats over should not be the thing that clips it. */
+    <div className="bg-muted/40 flex h-[30rem] w-full max-w-md flex-col justify-end rounded-lg border">
+      <div className="mx-2 flex h-[22rem] flex-col">
+        <ZoneDraftPanel
+          tool={tool}
+          onToolChange={setTool}
+          drafts={drafts}
+          focusId={null}
+          onRename={(id, name) =>
+            setDrafts((prev) =>
+              prev.map((z) => (z.id === id ? { ...z, name } : z)),
+            )
+          }
+          onRemove={(id) =>
+            setDrafts((prev) => prev.filter((z) => z.id !== id))
+          }
+          onCancel={() => setAdded([])}
+          onAdd={() => setAdded(drafts)}
+        />
+      </div>
     </div>
   );
 }

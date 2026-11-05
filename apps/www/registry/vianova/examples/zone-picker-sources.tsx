@@ -4,7 +4,6 @@ import * as React from "react";
 
 import {
   type PickerZone,
-  ZoneDraftPanel,
   type ZoneDrawTool,
   ZonePickerPanel,
 } from "@/registry/vianova/product/zone-picker";
@@ -62,51 +61,42 @@ export default function ZonePickerSources() {
   const [added, setAdded] = React.useState<PickerZone[]>([]);
   const [tool, setTool] = React.useState<ZoneDrawTool | null>(null);
   const [drafts, setDrafts] = React.useState<PickerZone[]>([]);
-  const drawing = tool !== null || drafts.length > 0;
-
-  const stop = () => {
-    setTool(null);
-    setDrafts([]);
-  };
 
   return (
     <div className="flex h-[30rem] w-full max-w-md flex-col overflow-hidden rounded-lg border">
-      {drawing ? (
+      <ZonePickerPanel
+        zones={ZONES}
+        excludeIds={added.map((z) => z.id)}
+        backLabel="Parking · Baixa and Chiado"
+        onBack={() => {
+          setAdded([]);
+          setTool(null);
+          setDrafts([]);
+        }}
+        onAdd={(zones) => setAdded((prev) => [...prev, ...zones])}
         /*
-         * Picking a tool opens a session, exactly as it does in the product.
-         * There is no map here to draw on, so the shapes it would collect
-         * stay empty -- the point of this half is that the tools live in the
-         * column and stay reachable for the whole session.
+         * Picking a tool arms it and stays put, exactly as it does in the
+         * product: the tab row, the search and the import field are all still
+         * there, and the shapes collect under the tools that made them.
+         *
+         * There is no map here to draw on, so the list stays empty and shows
+         * what the armed tool is waiting for. That is the half worth seeing
+         * anyway -- the panel used to be replaced wholesale at this point,
+         * which took the other two sources away with it.
          */
-        <ZoneDraftPanel
-          chrome="panel"
-          tool={tool}
-          onToolChange={setTool}
-          drafts={drafts}
-          ruleName="Parking · Baixa and Chiado"
-          focusId={null}
-          onRename={(id, name) =>
+        onDraw={setTool}
+        session={{
+          tool,
+          drafts,
+          focusId: null,
+          onRename: (id, name) =>
             setDrafts((prev) =>
               prev.map((z) => (z.id === id ? { ...z, name } : z)),
-            )
-          }
-          onRemove={(id) => setDrafts((prev) => prev.filter((z) => z.id !== id))}
-          onCancel={stop}
-          onAdd={() => {
-            setAdded((prev) => [...prev, ...drafts]);
-            stop();
-          }}
-        />
-      ) : (
-        <ZonePickerPanel
-          zones={ZONES}
-          excludeIds={added.map((z) => z.id)}
-          backLabel="Parking · Baixa and Chiado"
-          onBack={() => setAdded([])}
-          onDraw={setTool}
-          onAdd={(zones) => setAdded((prev) => [...prev, ...zones])}
-        />
-      )}
+            ),
+          onRemove: (id) =>
+            setDrafts((prev) => prev.filter((z) => z.id !== id)),
+        }}
+      />
     </div>
   );
 }

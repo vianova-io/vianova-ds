@@ -450,6 +450,29 @@ const SOURCES: {
  */
 export type ZoneDrawTool = "polygon" | "circle" | "freehand" | "line";
 
+/**
+ * A drawing session, held by whoever owns the map.
+ *
+ * Passed in rather than kept here, because the shapes arrive from the map and
+ * the map is the consumer's. What the panel contributes is the place to put
+ * them: the Draw tab shows the tools and, underneath, the list of what they
+ * have produced, so picking a tool grows the panel instead of replacing it.
+ *
+ * Absent (or null) where the consumer has no session to offer -- the sheet,
+ * which covers the map and so has to close to uncover it. Drawing there is
+ * still a handoff, as it always was.
+ */
+export type ZoneDraftSession = {
+  /** The armed tool, or null when drawing has stopped but drafts remain. */
+  tool: ZoneDrawTool | null;
+  /** Shapes finished on the map and not yet added. */
+  drafts: PickerZone[];
+  /** The draft whose name field should take focus, with its text selected. */
+  focusId?: string | null;
+  onRename: (id: string, name: string) => void;
+  onRemove: (id: string) => void;
+};
+
 const DRAW_TOOLS: {
   value: ZoneDrawTool;
   title: string;
@@ -560,6 +583,14 @@ export function ZonePicker({
             ((tool) => {
               // Closed first: the map it hands over to is behind this sheet,
               // and a tool armed under an open overlay would look broken.
+              //
+              // Which is the same reason no session is passed below: the
+              // panel can keep one, because it sits beside the map rather
+              // than over it. A sheet has to leave, so drawing from here is
+              // a handoff and the shapes land wherever the consumer puts
+              // them. `null` cannot reach this -- there is no armed tool to
+              // unpress once the sheet has gone.
+              if (!tool) return;
               onOpenChange(false);
               onDraw(tool);
             })
@@ -586,6 +617,8 @@ export function ZonePickerPanel({
   excludeIds,
   onAdd,
   onDraw,
+  session,
+  initialSource,
   urlSample,
   onBack,
   backLabel = "Back",
@@ -596,8 +629,23 @@ export function ZonePickerPanel({
 }: {
   zones: PickerZone[];
   excludeIds?: string[];
+  /**
+   * Everything staged, from every tab at once: ticked library zones, imported
+   * shapes and anything drawn in the session. One list, three ways to fill it.
+   */
   onAdd: (zones: PickerZone[]) => void;
-  onDraw?: (tool: ZoneDrawTool) => void;
+  /**
+   * Arms a drawing tool, or `null` when the armed one is pressed again.
+   *
+   * The panel does not leave to do it: the tool arms, the map takes the
+   * gestures, and the Draw tab stays where it is with the shapes collecting
+   * underneath the tools that made them.
+   */
+  onDraw?: (tool: ZoneDrawTool | null) => void;
+  /** The drawing session, owned by whoever owns the map. */
+  session?: ZoneDraftSession | null;
+  /** Which tab opens. Read once; the row is the reader's after that. */
+  initialSource?: "zones" | "draw" | "import";
   /**
    * A GeoJSON URL to offer as "Try a sample" in Import.
    *
@@ -639,6 +687,8 @@ export function ZonePickerPanel({
         onCancel={onBack}
         onAdd={onAdd}
         onDraw={onDraw}
+        session={session}
+        initialSource={initialSource}
         urlSample={urlSample}
         onPreviewChange={onPreviewChange}
         onSelectionChange={onSelectionChange}
@@ -656,6 +706,8 @@ function ZonePickerBody({
   onCancel,
   onAdd,
   onDraw,
+  session,
+  initialSource,
   urlSample,
   onPreviewChange,
   onSelectionChange,
@@ -668,13 +720,24 @@ function ZonePickerBody({
   backLabel?: string;
   onCancel: () => void;
   onAdd: (zones: PickerZone[]) => void;
-  onDraw?: (tool: ZoneDrawTool) => void;
+  onDraw?: (tool: ZoneDrawTool | null) => void;
+  session?: ZoneDraftSession | null;
+  initialSource?: Source;
   /** A GeoJSON URL to offer as "Try a sample" in Import. */
   urlSample?: string;
   onPreviewChange?: (zone: PickerZone | null) => void;
   onSelectionChange?: (zones: PickerZone[]) => void;
 }) {
-  const [source, setSource] = React.useState<Source>("zones");
+  /*
+   * Which tab opens.
+   *
+   * Normally the library, which is what most zones come from. A consumer
+   * passes "draw" when a session is already running as this mounts -- the
+   * map's keyboard shortcuts can arm a tool with the panel shut, and the
+   * panel it then opens should be showing the thing that was just armed.
+   * Read once, so switching tab mid-session is the reader's to keep.
+   */
+  const [source, setSource] = React.useState<Source>(initialSource ?? "zones");
   const [selected, setSelected] = React.useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -696,14 +759,31 @@ function ZonePickerBody({
   );
   const importedZones = parsed && "zones" in parsed ? parsed.zones : NO_ZONES;
 
+  /*
+   * Everything ticked and imported, from both tabs at once rather than from
+   * whichever is on screen.
+   *
+   * Switching tab is a way of adding more, not of starting again: a drawing
+   * session stays open while you go and tick a library zone, and nothing is
+   * committed until Add. Source-local, this emptied on every tab change --
+   * which took the map's highlight down with it, and made the length the
+   * fit-to-selection effect watches go 2, 0, 2 on a round trip, flying the
+   * camera each way.
+   *
+   * Drafts are deliberately not in here. This is what the map frames, and a
+   * camera that re-fitted on every finished shape would be arguing with
+   * someone mid-draw; the drafts have a layer of their own that never moves
+   * it. They join only at Add, below.
+   */
   const chosen = React.useMemo(
-    () =>
-      source === "zones"
-        ? zones.filter((z) => selected.has(z.id))
-        : source === "import"
-          ? importedZones
-          : NO_ZONES,
-    [source, zones, selected, importedZones],
+    () => [...zones.filter((z) => selected.has(z.id)), ...importedZones],
+    [zones, selected, importedZones],
+  );
+
+  /** What Add would add: the ticks, the imports and the drawn shapes. */
+  const staged = React.useMemo(
+    () => (session?.drafts.length ? [...chosen, ...session.drafts] : chosen),
+    [chosen, session?.drafts],
   );
 
   // Reported rather than returned, because what the map beside the panel has
@@ -799,7 +879,11 @@ function ZonePickerBody({
               onPreviewChange={onPreviewChange}
             />
           ) : source === "draw" && onDraw ? (
-            <DrawSource onDraw={onDraw} />
+            <DrawSource
+              onDraw={onDraw}
+              session={session}
+              onPreviewChange={onPreviewChange}
+            />
           ) : (
             <ImportSource
               state={imported}
@@ -824,17 +908,17 @@ function ZonePickerBody({
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        {/* Drawing has no Add: picking a tool is the whole action, and it
-            happens on the card. A second button here, named after the source
-            tile that is already selected, read as the step someone had just
-            taken -- so it was never pressed, and the tools looked dead. */}
-        {source === "draw" ? null : (
-          <Button disabled={chosen.length === 0} onClick={() => onAdd(chosen)}>
-            {chosen.length
-              ? `Add ${plural(chosen.length, "zone", "zones")}`
-              : "Add zones"}
-          </Button>
-        )}
+        {/* One Add, for all three tabs, counting everything staged.
+            Drawing used to have none -- the tools arm on press, so a footer
+            button repeating the name of the tool above it read as a step
+            already taken, and nobody pressed it. This one is not that: it
+            commits, which is the one thing the Draw tab could not do from
+            here before, and it says how many it is about to commit. */}
+        <Button disabled={staged.length === 0} onClick={() => onAdd(staged)}>
+          {staged.length
+            ? `Add ${plural(staged.length, "zone", "zones")}`
+            : "Add zones"}
+        </Button>
       </div>
     </>
   );
@@ -1189,15 +1273,30 @@ const ZoneRow = React.memo(function ZoneRow({
  */
 function DrawSource({
   onDraw,
+  session,
+  onPreviewChange,
 }: {
-  /** Arms the tool and hands the map over; nothing is held here. */
-  onDraw: (tool: ZoneDrawTool) => void;
+  /** Arms a tool, or stops drawing when the armed one is pressed again. */
+  onDraw: (tool: ZoneDrawTool | null) => void;
+  /**
+   * The session the shapes land in, where the consumer can hold one.
+   *
+   * Given, this tab is the whole of drawing: the tools, and beneath them the
+   * shapes they have made, named as they arrive. Picking a tool used to
+   * replace this panel with a second one that carried the same four tools --
+   * so the tab row, the search and the import field all went, and the only
+   * way back to them was to abandon the shapes. Nothing is replaced now;
+   * the list appears under the grid and the row above stays switchable.
+   */
+  session?: ZoneDraftSession | null;
+  onPreviewChange?: (zone: PickerZone | null) => void;
 }) {
   return (
     <div data-slot="zone-picker-draw" className="flex flex-col gap-3">
       <p className="text-muted-foreground text-sm">
-        Pick a tool and the map takes over. Shapes you finish are listed there
-        until you add them.
+        {session === undefined
+          ? "Pick a tool and the map takes over. Shapes you finish are listed there until you add them."
+          : "Pick a tool and draw on the map. Each shape you finish is listed here until you add it."}
       </p>
       {/*
        * Buttons, not a radio group. Each one does something the moment it is
@@ -1216,7 +1315,27 @@ function DrawSource({
        * keeps "Line" findable and keeps axe quiet about a name that does not
        * contain its own label.
        */}
-      <DrawToolGrid onPick={(tool) => tool && onDraw(tool)} />
+      {/* `undefined` where there is no session to report, which leaves
+          `aria-pressed` off the buttons entirely: on a sheet, which closes to
+          uncover the map, nothing stays armed to say so. */}
+      <DrawToolGrid
+        value={session === undefined ? undefined : (session?.tool ?? null)}
+        onPick={onDraw}
+      />
+      {/* Only once there is something to say. Before a tool is armed the
+          sentence above has already said to pick one, and a second line
+          saying it again, under a rule, reads as a list that failed to
+          load rather than one that has not been started. */}
+      {session && (session.tool || session.drafts.length) ? (
+        <ZoneDraftList
+          tool={session.tool}
+          drafts={session.drafts}
+          focusId={session.focusId}
+          onRename={session.onRename}
+          onRemove={session.onRemove}
+          onPreviewChange={onPreviewChange}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1224,11 +1343,14 @@ function DrawSource({
 /**
  * The four tools, as four buttons.
  *
- * Shared by the Draw tab -- where nothing is armed yet and the grid only
- * starts a session -- and by the session panel itself, where one of them is
- * armed and pressing another swaps the tool without leaving. Passing `value`
- * is what tells the two apart: `undefined` leaves `aria-pressed` off the
- * buttons entirely, because in the chooser there is no armed state to report.
+ * One grid, in two places that are the same place: the Draw tab of the Add
+ * zones panel, and the tray a phone gets instead of that panel. Either way
+ * the first press arms a tool and opens a session, and a later press swaps
+ * the tool without leaving.
+ *
+ * `value` is what reports the armed one. `undefined` leaves `aria-pressed`
+ * off the buttons entirely, for a consumer with no session to hold -- the
+ * sheet, which closes to uncover the map, so nothing stays armed to say so.
  */
 function DrawToolGrid({
   value,
@@ -1905,7 +2027,102 @@ const DRAW_PROMPTS: Record<ZoneDrawTool, string> = {
 };
 
 /**
- * Drawing, as a place rather than an instant.
+ * The shapes finished so far, as a list you can type into.
+ *
+ * A slot of its own rather than a part of either chrome, because it is shown
+ * in two places that are otherwise nothing alike: inside the Draw tab of the
+ * Add zones panel, directly under the tools that filled it, and in the tray
+ * that stands in for that panel where there is no column to put one in.
+ *
+ * The rule above it is not decoration. With only a gap, a finished zone reads
+ * as a fifth tile in the two-by-two grid above: same rounded box, same
+ * column, directly beneath. And it is `mt-3` here rather than a gap on
+ * whatever contains it, because no one container can give it one in both
+ * places -- the panel's scroll div is a flex column, while the tray's body is
+ * `FloatingPanelBody`, whose `className` lands on an outer wrapper and whose
+ * children sit in a plain `display: block` scroll div, so a gap passed to the
+ * body styles the wrapper and never reaches this. It came out flush against
+ * the buttons once for exactly that reason.
+ */
+function ZoneDraftList({
+  tool,
+  drafts,
+  focusId,
+  heading = true,
+  onRename,
+  onRemove,
+  onPreviewChange,
+}: {
+  /** The armed tool, which is what the empty state is waiting on. */
+  tool: ZoneDrawTool | null;
+  drafts: PickerZone[];
+  focusId?: string | null;
+  /** Off where the chrome around it already says "Drawn zones". */
+  heading?: boolean;
+  onRename: (id: string, name: string) => void;
+  onRemove: (id: string) => void;
+  onPreviewChange?: (zone: PickerZone | null) => void;
+}) {
+  return (
+    <div
+      data-slot="zone-draft-list"
+      className="mt-3 flex flex-col gap-2 border-t pt-3"
+    >
+      {heading ? (
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="text-sm font-medium">Drawn zones</h3>
+          <span className="text-muted-foreground text-sm tabular-nums">
+            {drafts.length}
+          </span>
+        </div>
+      ) : null}
+      {drafts.length ? (
+        <ul role="list" className="flex flex-col gap-2">
+          {drafts.map((zone) => (
+            <li
+              key={zone.id}
+              className="bg-card flex items-center gap-2 rounded-lg border p-2"
+              onPointerEnter={() => onPreviewChange?.(zone)}
+              onPointerLeave={() => onPreviewChange?.(null)}
+              onFocus={() => onPreviewChange?.(zone)}
+              onBlur={() => onPreviewChange?.(null)}
+            >
+              <ZoneThumbnail ring={zone.ring} size={24} />
+              <ZoneNameField
+                name={zone.name}
+                autoFocus={zone.id === focusId}
+                onRename={(next) => onRename(zone.id, next)}
+                className="min-w-0 flex-1"
+              />
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Remove ${zone.name}`}
+                onClick={() => onRemove(zone.id)}
+              >
+                <X />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground text-sm">
+          {tool ? DRAW_PROMPTS[tool] : "Pick a tool to carry on."}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Drawing, as a place rather than an instant, where there is no column.
+ *
+ * Above `lg` the session lives in the Add zones panel itself: the Draw tab
+ * holds the tools and, under them, `ZoneDraftList`. Below `lg` the settings
+ * and the map take turns, so there is no column to keep open beside the map
+ * -- and a session with the map off screen is nothing at all. This is that
+ * panel again, docked over the map as a tray, carrying the same tools and the
+ * same list so a phone is not a different feature.
  *
  * Drawing used to end the moment a shape closed: it was named from a counter,
  * committed to the rule and to everyone's zone library in the same tick, and
@@ -1919,11 +2136,10 @@ const DRAW_PROMPTS: Record<ZoneDrawTool, string> = {
  * offer at all.
  */
 export function ZoneDraftPanel({
-  chrome,
   tool,
   drafts,
-  ruleName,
   focusId,
+  alsoAdding = 0,
   onToolChange,
   onRename,
   onRemove,
@@ -1932,22 +2148,27 @@ export function ZoneDraftPanel({
   onAdd,
   className,
 }: {
-  /** A column beside the map, or a tray docked over it on a phone. */
-  chrome: "panel" | "tray";
   /** The armed tool, or null when drawing has stopped but drafts remain. */
   tool: ZoneDrawTool | null;
   /**
-   * Arms another tool without leaving the session. The tools live here, in
-   * the column, rather than on the map: a floating toolbar put them in the
-   * one place that is also the drawing surface, and left the column showing
-   * drafts with no way to change tool at all.
+   * Arms another tool without leaving the session. The tools live in here,
+   * with the list, rather than on the map: a floating toolbar put them in the
+   * one place that is also the drawing surface, and left the list of drafts
+   * with no way to change tool at all.
    */
   onToolChange: (tool: ZoneDrawTool | null) => void;
   drafts: PickerZone[];
-  /** Named on the way back, as the picker's back row names it. */
-  ruleName?: string;
   /** The draft whose name field should take focus, with its text selected. */
   focusId?: string | null;
+  /**
+   * Zones staged in the panel this tray stands in for -- library ticks and
+   * imports -- counted by Add but not listed here.
+   *
+   * The panel is mounted and hidden rather than thrown away while the tray is
+   * up, so its ticks are still staged and Add still commits them. Left out of
+   * the count, the footer would offer to add one zone and quietly add three.
+   */
+  alsoAdding?: number;
   onRename: (id: string, name: string) => void;
   onRemove: (id: string) => void;
   onPreviewChange?: (zone: PickerZone | null) => void;
@@ -1955,146 +2176,47 @@ export function ZoneDraftPanel({
   onAdd: () => void;
   className?: string;
 }) {
-  const rows = (
-    <ul role="list" className="flex flex-col gap-2">
-      {drafts.map((zone) => (
-        <li
-          key={zone.id}
-          className="bg-card flex items-center gap-2 rounded-lg border p-2"
-          onPointerEnter={() => onPreviewChange?.(zone)}
-          onPointerLeave={() => onPreviewChange?.(null)}
-          onFocus={() => onPreviewChange?.(zone)}
-          onBlur={() => onPreviewChange?.(null)}
-        >
-          <ZoneThumbnail ring={zone.ring} size={24} />
-          <ZoneNameField
-            name={zone.name}
-            autoFocus={zone.id === focusId}
-            onRename={(next) => onRename(zone.id, next)}
-            className="min-w-0 flex-1"
-          />
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Remove ${zone.name}`}
-            onClick={() => onRemove(zone.id)}
-          >
-            <X />
-          </Button>
-        </li>
-      ))}
-    </ul>
-  );
-
-  const empty = (
-    <p className="text-muted-foreground text-sm">
-      {tool ? DRAW_PROMPTS[tool] : "Pick a tool to carry on."}
-    </p>
-  );
-
-  /* Above the drafts, not below: the tools are what the session is for, and
-     the list underneath grows as they are used. */
-  const tools = (
-    <DrawToolGrid value={tool} onPick={onToolChange} className="shrink-0" />
-  );
-
-  /* The tools are one thing; what they have produced is another. With only
-     a gap between them a finished zone reads as a fifth tile in the grid --
-     same rounded box, same row, directly underneath -- so the list gets a
-     rule and a name of its own. The tray's own header already says both, and
-     repeating them one line below would be the louder mistake. */
-  /*
-   * `mt-3` rather than a gap on the container, because there is no container
-   * that can give it one in both chromes. The column's scroll div is a flex
-   * column, but the tray's body is `FloatingPanelBody`, whose `className`
-   * lands on its outer wrapper -- the children go inside an inner scroll div
-   * that is plain `display: block`. So a `gap-3` passed to the body styles
-   * the wrapper and never reaches these two, and the rule came out flush
-   * against the bottom edge of the tool grid: an underline on the last row
-   * of buttons rather than a divider, 0px above it and 13px below.
-   */
-  const list = (
-    <div className="mt-3 flex flex-col gap-2 border-t pt-3">
-      {chrome === "panel" ? (
-        <div className="flex items-baseline justify-between gap-2">
-          <h3 className="text-sm font-medium">Drawn zones</h3>
-          <span className="text-muted-foreground text-sm tabular-nums">
-            {drafts.length}
-          </span>
-        </div>
-      ) : null}
-      {drafts.length ? rows : empty}
-    </div>
-  );
-
-  const footer = (
-    <div className="mt-auto flex flex-row justify-end gap-2 border-t p-4">
-      <Button variant="outline" onClick={onCancel}>
-        Cancel
-      </Button>
-      <Button disabled={drafts.length === 0} onClick={onAdd}>
-        {drafts.length
-          ? `Add ${plural(drafts.length, "zone", "zones")}`
-          : "Add zones"}
-      </Button>
-    </div>
-  );
-
-  if (chrome === "tray") {
-    return (
-      <FloatingPanel
-        data-slot="zone-draft-panel"
-        data-chrome="tray"
-        // The tray owns the geometry and this fills it. pt-2 clears the
-        // grabber laid over the top edge; the bottom corners go because the
-        // tray is docked to one.
-        className={cn("h-full w-full rounded-b-none pt-2", className)}
-      >
-        <FloatingPanelHeader>
-          <FloatingPanelTitle>Drawn zones</FloatingPanelTitle>
-          <span className="text-muted-foreground ml-auto text-sm">
-            {drafts.length}
-          </span>
-        </FloatingPanelHeader>
-        <FloatingPanelBody>
-          {tools}
-          {list}
-        </FloatingPanelBody>
-        {footer}
-      </FloatingPanel>
-    );
-  }
+  const total = drafts.length + alsoAdding;
 
   return (
-    <div
+    <FloatingPanel
       data-slot="zone-draft-panel"
-      data-chrome="panel"
-      className={cn("flex min-h-0 flex-1 flex-col", className)}
+      // The tray owns the geometry and this fills it. pt-2 clears the grabber
+      // laid over the top edge; the bottom corners go because the tray is
+      // docked to one.
+      className={cn("h-full w-full rounded-b-none pt-2", className)}
     >
-      {/* The same back row the picker uses: the arrow names where it returns
-          to, the heading names where you are. */}
-      <header className="space-y-2 border-b px-4 pt-3 pb-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="-ml-2 max-w-full"
-          onClick={onCancel}
-        >
-          <ArrowLeft data-icon="inline-start" />
-          <span className="truncate">{ruleName ?? "Back"}</span>
+      <FloatingPanelHeader>
+        <FloatingPanelTitle>Drawn zones</FloatingPanelTitle>
+        <span className="text-muted-foreground ml-auto text-sm">
+          {drafts.length}
+        </span>
+      </FloatingPanelHeader>
+      <FloatingPanelBody>
+        {/* Above the drafts, not below: the tools are what the session is
+            for, and the list underneath grows as they are used. */}
+        <DrawToolGrid value={tool} onPick={onToolChange} className="shrink-0" />
+        {/* No heading: the tray's own header already says "Drawn zones" and
+            counts them, and saying it again one line below would be the
+            louder mistake. */}
+        <ZoneDraftList
+          heading={false}
+          tool={tool}
+          drafts={drafts}
+          focusId={focusId}
+          onRename={onRename}
+          onRemove={onRemove}
+          onPreviewChange={onPreviewChange}
+        />
+      </FloatingPanelBody>
+      <div className="mt-auto flex flex-row justify-end gap-2 border-t p-4">
+        <Button variant="outline" onClick={onCancel}>
+          Cancel
         </Button>
-        <div className="space-y-0.5">
-          <h2 className="text-xl font-semibold tracking-tight">Draw zones</h2>
-          <p className="text-muted-foreground text-sm">
-            Each shape you finish is listed here. Rename it, or keep drawing.
-          </p>
-        </div>
-      </header>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-3 pb-4">
-        {tools}
-        {list}
+        <Button disabled={total === 0} onClick={onAdd}>
+          {total ? `Add ${plural(total, "zone", "zones")}` : "Add zones"}
+        </Button>
       </div>
-      {footer}
-    </div>
+    </FloatingPanel>
   );
 }
