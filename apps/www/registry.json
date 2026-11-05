@@ -561,6 +561,60 @@
       }
     },
     {
+      "name": "dashboard-workspace",
+      "type": "registry:block",
+      "title": "Dashboard workspace",
+      "description": "Dashboard workspace layout, composed from Vianova components.",
+      "dependencies": [
+        "lucide-react",
+        "react-grid-layout",
+        "recharts"
+      ],
+      "registryDependencies": [
+        "@vianova/activity-heatmap",
+        "@vianova/alert",
+        "@vianova/avatar",
+        "@vianova/badge",
+        "@vianova/button",
+        "@vianova/category-style",
+        "@vianova/chart",
+        "@vianova/command",
+        "@vianova/confirm-dialog",
+        "@vianova/csv",
+        "@vianova/dialog",
+        "@vianova/drawer",
+        "@vianova/dropdown-menu",
+        "@vianova/empty",
+        "@vianova/export-menu",
+        "@vianova/field",
+        "@vianova/infringement-report",
+        "@vianova/inline-edit",
+        "@vianova/input",
+        "@vianova/input-group",
+        "@vianova/markdown-editor",
+        "@vianova/popover",
+        "@vianova/report-grid",
+        "@vianova/sample-datasets",
+        "@vianova/skeleton",
+        "@vianova/table",
+        "@vianova/textarea",
+        "@vianova/toggle-group",
+        "@vianova/tooltip",
+        "@vianova/trip-report",
+        "@vianova/use-mobile",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/blocks/dashboard-workspace.tsx",
+          "type": "registry:block"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "datahub-workspace",
       "type": "registry:block",
       "title": "Data Hub workspace",
@@ -779,7 +833,7 @@
       }
     },
     {
-      "name": "report-library-workspace",
+      "name": "reports-workspace",
       "type": "registry:block",
       "title": "Reports workspace",
       "description": "Reports workspace layout, composed from Vianova components.",
@@ -799,60 +853,6 @@
         "@vianova/table",
         "@vianova/toggle",
         "@vianova/tooltip",
-        "@vianova/utils"
-      ],
-      "files": [
-        {
-          "path": "registry/vianova/blocks/report-library-workspace.tsx",
-          "type": "registry:block"
-        }
-      ],
-      "meta": {
-        "status": "stable"
-      }
-    },
-    {
-      "name": "reports-workspace",
-      "type": "registry:block",
-      "title": "Dashboard workspace",
-      "description": "Dashboard workspace layout, composed from Vianova components.",
-      "dependencies": [
-        "lucide-react",
-        "react-grid-layout",
-        "recharts"
-      ],
-      "registryDependencies": [
-        "@vianova/activity-heatmap",
-        "@vianova/alert",
-        "@vianova/avatar",
-        "@vianova/badge",
-        "@vianova/button",
-        "@vianova/category-style",
-        "@vianova/chart",
-        "@vianova/command",
-        "@vianova/confirm-dialog",
-        "@vianova/csv",
-        "@vianova/dialog",
-        "@vianova/drawer",
-        "@vianova/dropdown-menu",
-        "@vianova/empty",
-        "@vianova/export-menu",
-        "@vianova/field",
-        "@vianova/infringement-report",
-        "@vianova/inline-edit",
-        "@vianova/input",
-        "@vianova/input-group",
-        "@vianova/markdown-editor",
-        "@vianova/popover",
-        "@vianova/report-grid",
-        "@vianova/sample-datasets",
-        "@vianova/skeleton",
-        "@vianova/table",
-        "@vianova/textarea",
-        "@vianova/toggle-group",
-        "@vianova/tooltip",
-        "@vianova/trip-report",
-        "@vianova/use-mobile",
         "@vianova/utils"
       ],
       "files": [

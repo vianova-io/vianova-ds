@@ -3,13 +3,13 @@
 import * as React from "react";
 
 import {
-  ReportsWorkspace,
+  DashboardWorkspace,
   type FilterDisplay,
-} from "@/registry/vianova/blocks/reports-workspace";
+} from "@/registry/vianova/blocks/dashboard-workspace";
 import { cn } from "@/registry/vianova/lib/utils";
 
 /**
- * The reports workspace with the way its charts show their filters
+ * The dashboard workspace with the way its charts show their filters
  * switchable, on the docs page, as the map workspace's size control is.
  *
  * Not remounted per variant, unlike the map's: an open report and the filters
@@ -31,7 +31,7 @@ const VARIANTS: Array<{ id: FilterDisplay; label: string; note: string }> = [
   },
 ];
 
-export function ReportsWorkspaceVariants() {
+export function DashboardWorkspaceVariants() {
   const [variant, setVariant] = React.useState<FilterDisplay>("count");
   const active = VARIANTS.find((v) => v.id === variant)!;
 
@@ -72,7 +72,7 @@ export function ReportsWorkspaceVariants() {
         {active.note}
       </p>
 
-      <ReportsWorkspace filterDisplay={variant} />
+      <DashboardWorkspace filterDisplay={variant} />
     </div>
   );
 }

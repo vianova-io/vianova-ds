@@ -16,8 +16,8 @@ import type { Blocks } from "@/__registry__";
 export const WORKSPACE_ORDER = [
   "map-workspace",
   "datahub-workspace",
+  "dashboard-workspace",
   "reports-workspace",
-  "report-library-workspace",
   "regulations-workspace",
   "feeds-workspace",
 ];

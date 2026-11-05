@@ -5,7 +5,7 @@ import * as React from "react";
 import { CodeBlock } from "@/components/code-block";
 import { MapWorkspaceVariants } from "@/components/map-workspace-variants";
 import { RegulationsWorkspaceDemo } from "@/components/regulations-workspace-demo";
-import { ReportsWorkspaceVariants } from "@/components/reports-workspace-variants";
+import { DashboardWorkspaceVariants } from "@/components/dashboard-workspace-variants";
 import { InstallTabs } from "@/components/install-tabs";
 import { readRegistryFile, rewriteAliases } from "@/lib/source";
 import { Blocks } from "@/__registry__";
@@ -56,8 +56,8 @@ export default async function BlockPage({
             block renders the registry component as published. */}
         {slug === "map-workspace" ? (
           <MapWorkspaceVariants />
-        ) : slug === "reports-workspace" ? (
-          <ReportsWorkspaceVariants />
+        ) : slug === "dashboard-workspace" ? (
+          <DashboardWorkspaceVariants />
         ) : slug === "regulations-workspace" ? (
           /* The map's search field needs a lookup to call, and the block
              deliberately ships none. Here it gets OpenStreetMap's. */
