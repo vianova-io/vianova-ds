@@ -339,6 +339,25 @@ test("on a phone, a drawing session is a tray over the map", async ({ page }) =>
   // the map keeps it there.
   await expect(tray).toHaveAttribute("data-snap", "half");
   await expect(tray.getByRole("listitem")).toHaveCount(1);
+
+  /*
+   * The rule dividing the tools from the list stands clear of both.
+   *
+   * It did not, here, while the column was fine: the spacing came from the
+   * column's own `gap-3`, and the tray's body is `FloatingPanelBody`, whose
+   * className lands on an outer wrapper while the children sit in an inner
+   * scroll div with no gap at all. So the rule drew hard against the bottom
+   * of the tool grid -- an underline on the last row of buttons rather than
+   * a divider -- and nothing in this file could see it. The list owns its
+   * own top margin now, which is the same number in both chromes.
+   */
+  const gridBottom = (await tray
+    .getByRole("group", { name: "Drawing tool" })
+    .boundingBox())!;
+  const rule = tray.locator("[data-slot=zone-draft-panel] ul[role=list]").locator("..");
+  const ruleBox = (await rule.boundingBox())!;
+  expect(ruleBox.y - (gridBottom.y + gridBottom.height)).toBeGreaterThan(4);
+
   await expectNoBlockingViolations(page);
 
   // Arrow keys reach every height: "drag it up to rename" has to work without

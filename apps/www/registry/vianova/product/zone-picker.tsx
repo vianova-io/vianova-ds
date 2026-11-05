@@ -2003,8 +2003,18 @@ export function ZoneDraftPanel({
      same rounded box, same row, directly underneath -- so the list gets a
      rule and a name of its own. The tray's own header already says both, and
      repeating them one line below would be the louder mistake. */
+  /*
+   * `mt-3` rather than a gap on the container, because there is no container
+   * that can give it one in both chromes. The column's scroll div is a flex
+   * column, but the tray's body is `FloatingPanelBody`, whose `className`
+   * lands on its outer wrapper -- the children go inside an inner scroll div
+   * that is plain `display: block`. So a `gap-3` passed to the body styles
+   * the wrapper and never reaches these two, and the rule came out flush
+   * against the bottom edge of the tool grid: an underline on the last row
+   * of buttons rather than a divider, 0px above it and 13px below.
+   */
   const list = (
-    <div className="flex flex-col gap-2 border-t pt-3">
+    <div className="mt-3 flex flex-col gap-2 border-t pt-3">
       {chrome === "panel" ? (
         <div className="flex items-baseline justify-between gap-2">
           <h3 className="text-sm font-medium">Drawn zones</h3>
@@ -2046,7 +2056,7 @@ export function ZoneDraftPanel({
             {drafts.length}
           </span>
         </FloatingPanelHeader>
-        <FloatingPanelBody className="flex flex-col gap-3">
+        <FloatingPanelBody>
           {tools}
           {list}
         </FloatingPanelBody>
@@ -2080,7 +2090,7 @@ export function ZoneDraftPanel({
           </p>
         </div>
       </header>
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-3 pb-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-3 pb-4">
         {tools}
         {list}
       </div>
