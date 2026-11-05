@@ -1974,7 +1974,7 @@ export function MapWorkspace({
           variant is built to be wrapped in one -- it "takes its type from the
           parent" -- and Tailwind's preflight strips the browser's own h2 type,
           so this is semantics at no visual cost. Level 2, one under the page
-          title, matching how reports-workspace labels its report name.
+          title, matching how dashboard-workspace labels its report name.
 
           min-w-0 on both: the h2 is now the flex item that has to be allowed
           to shrink, and InlineEdit still needs it for its own `truncate` span.

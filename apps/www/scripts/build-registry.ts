@@ -73,14 +73,11 @@ const CATEGORY: Record<string, string> = {
 const BLOCK_TITLES: Record<string, string> = {
   "map-workspace": "Map workspace",
   "datahub-workspace": "Data Hub workspace",
-  "reports-workspace": "Dashboard workspace",
+  "dashboard-workspace": "Dashboard workspace",
+  "reports-workspace": "Reports workspace",
   "regulations-workspace": "Regulations workspace",
   "feeds-workspace": "Feeds workspace",
   "citizen-workspace": "Citizen Platform workspace",
-  // The page is called Reports. The word was taken in VIP by the section now
-  // renamed Dashboard, and that rename freed it; the file keeps the working
-  // name it was designed under. See the block's own header.
-  "report-library-workspace": "Reports workspace",
 };
 
 const titleCase = (name: string) =>

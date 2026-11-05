@@ -23,9 +23,9 @@ function hintTooltip(page: Page) {
 
 async function openEditor(page: Page) {
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto("/blocks/reports-workspace");
+  await page.goto("/blocks/dashboard-workspace");
   await settle(page);
-  const root = page.locator("[data-slot=reports-workspace]");
+  const root = page.locator("[data-slot=dashboard-workspace]");
   await expect(root.getByRole("heading", { name: "Dashboards" })).toBeVisible();
 
   // Into the first dashboard, where the canvas is.

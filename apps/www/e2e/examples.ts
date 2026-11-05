@@ -49,7 +49,7 @@ export const BLOCKS: string[] = Object.values(Blocks).map((b) => b.name);
  */
 export const NON_MAP_BLOCKS: string[] = [
   "datahub-workspace",
-  "reports-workspace",
+  "dashboard-workspace",
   // Has a map, but only inside a regulation; it opens on a list, and its
   // editor is a panel beside a map rather than the two floating panels the
   // map suites measure.
@@ -66,7 +66,7 @@ export const NON_MAP_BLOCKS: string[] = [
   // LIST_DETAIL_BLOCKS: clicking a report name opens the download choice, not
   // a detail view, because the product decision is download-only. The
   // "dataset" step would wait for a detail link that is deliberately absent.
-  "report-library-workspace",
+  "reports-workspace",
 ];
 
 /**
@@ -74,7 +74,7 @@ export const NON_MAP_BLOCKS: string[] = [
  * The responsive suite measures both views; a block that has only the one is
  * measured once rather than waiting forever for a row that never arrives.
  */
-const NO_DETAIL_VIEW = ["citizen-workspace", "report-library-workspace"];
+const NO_DETAIL_VIEW = ["citizen-workspace", "reports-workspace"];
 
 export const LIST_DETAIL_BLOCKS: string[] = NON_MAP_BLOCKS.filter(
   (b) => !NO_DETAIL_VIEW.includes(b),
