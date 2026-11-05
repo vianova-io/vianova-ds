@@ -2378,7 +2378,11 @@ function MapSearch({
       geocode(q, ac.signal).then(
         (found) => {
           if (ac.signal.aborted) return;
-          setResults(found);
+          // `geocode` is somebody else's function. A promise that resolves to
+          // undefined, or to a single object, is a crash in the render below
+          // rather than an empty result, and the stack would name this
+          // component rather than the lookup that actually returned it.
+          setResults(Array.isArray(found) ? found : []);
           setActive(0);
           setState("done");
         },
