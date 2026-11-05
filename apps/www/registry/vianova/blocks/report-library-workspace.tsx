@@ -520,7 +520,24 @@ function IconAction({
             size="icon-sm"
             aria-label={label}
             onClick={onClick}
-            className={className}
+            // scroll-m-1 is not decoration. The ring paints 3px OUTSIDE the
+            // border box, and Tab scrolls a control flush against the
+            // scrollport edge, where there is nothing left for it to paint
+            // on. The row checkbox already carries the vertical half of this;
+            // these three did not, and CI caught all three -- pin, download
+            // and delete -- clipped at the bottom by 0.9, 1.6 and 2.3px. The
+            // three measurements are three different rows: the audit dedupes
+            // on the amount as well as the control, and `describe()` renders
+            // every IconAction identically.
+            //
+            // Both axes, like the name button two cells over, rather than the
+            // checkbox's `scroll-my-1`: these sit in the LAST cell, and the
+            // table scrolls sideways on a phone, so the right edge is the one
+            // place a ring here is most likely to be cut next.
+            //
+            // Linux only. The same page passes on macOS, where the sub-pixel
+            // row heights fall differently, so no local run can see it.
+            className={cn("scroll-m-1", className)}
           >
             {children}
           </Button>
