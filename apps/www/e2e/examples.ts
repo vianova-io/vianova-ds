@@ -62,6 +62,11 @@ export const NON_MAP_BLOCKS: string[] = [
   // the responsive suite's "dataset" step to drill into. Its own flows -- the
   // map, the QR scan, the search -- are driven by citizen-workspace.spec.ts.
   "citizen-workspace",
+  // A list and a download dialog; no map anywhere. Also kept out of
+  // LIST_DETAIL_BLOCKS: clicking a report name opens the download choice, not
+  // a detail view, because the product decision is download-only. The
+  // "dataset" step would wait for a detail link that is deliberately absent.
+  "report-library-workspace",
 ];
 
 /**
@@ -69,7 +74,9 @@ export const NON_MAP_BLOCKS: string[] = [
  * The responsive suite measures both views; a block that has only the one is
  * measured once rather than waiting forever for a row that never arrives.
  */
+const NO_DETAIL_VIEW = ["citizen-workspace", "report-library-workspace"];
+
 export const LIST_DETAIL_BLOCKS: string[] = NON_MAP_BLOCKS.filter(
-  (b) => b !== "citizen-workspace",
+  (b) => !NO_DETAIL_VIEW.includes(b),
 );
 export const MAP_BLOCKS: string[] = BLOCKS.filter((b) => !NON_MAP_BLOCKS.includes(b));

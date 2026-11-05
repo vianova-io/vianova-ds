@@ -779,6 +779,39 @@
       }
     },
     {
+      "name": "report-library-workspace",
+      "type": "registry:block",
+      "title": "Reports workspace",
+      "description": "Reports workspace layout, composed from Vianova components.",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/alert",
+        "@vianova/badge",
+        "@vianova/button",
+        "@vianova/checkbox",
+        "@vianova/dialog",
+        "@vianova/empty",
+        "@vianova/input-group",
+        "@vianova/select",
+        "@vianova/skeleton",
+        "@vianova/table",
+        "@vianova/toggle",
+        "@vianova/tooltip",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/blocks/report-library-workspace.tsx",
+          "type": "registry:block"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "reports-workspace",
       "type": "registry:block",
       "title": "Dashboard workspace",

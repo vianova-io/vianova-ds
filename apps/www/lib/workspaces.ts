@@ -17,6 +17,7 @@ export const WORKSPACE_ORDER = [
   "map-workspace",
   "datahub-workspace",
   "reports-workspace",
+  "report-library-workspace",
   "regulations-workspace",
   "feeds-workspace",
 ];

@@ -77,6 +77,10 @@ const BLOCK_TITLES: Record<string, string> = {
   "regulations-workspace": "Regulations workspace",
   "feeds-workspace": "Feeds workspace",
   "citizen-workspace": "Citizen Platform workspace",
+  // The page is called Reports. The word was taken in VIP by the section now
+  // renamed Dashboard, and that rename freed it; the file keeps the working
+  // name it was designed under. See the block's own header.
+  "report-library-workspace": "Reports workspace",
 };
 
 const titleCase = (name: string) =>
