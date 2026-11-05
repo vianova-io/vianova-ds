@@ -121,10 +121,38 @@ async function drawSession(page: Page, tool: string) {
   await panel.getByRole("button", { name: new RegExp(`^${tool}`) }).click();
   await expect(drafts).toBeVisible();
   const tools = drafts.getByRole("group", { name: "Drawing tool" });
-  await expect(tools.getByRole("button", { name: tool })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  const armed = tools.getByRole("button", { name: tool });
+  await expect(armed).toHaveAttribute("aria-pressed", "true");
+
+  /*
+   * And it has to *look* armed, which the attribute above cannot tell you.
+   * It was wrong for exactly that reason once: `aria-pressed` read "true"
+   * while the button was the same grey as the other three, because
+   * `Button`'s outline variant paints dark with `dark:border-input` and beat
+   * a bare `aria-pressed:border-primary` on source order. The session's only
+   * state, invisible, with every assertion still green.
+   *
+   * So compare it against a tool that is not armed rather than against a
+   * fixed colour: the point is that the two differ, in whichever theme and
+   * whatever `primary` resolves to.
+   */
+  const border = (name: string) =>
+    tools
+      .getByRole("button", { name })
+      .evaluate((el) => getComputedStyle(el).borderTopColor);
+  const other = tool === "Circle" ? "Line" : "Circle";
+  expect(await border(tool)).not.toBe(await border(other));
+
+  // The tools are one thing and what they have produced is another, so the
+  // list carries a rule and a name of its own. With only a gap between them
+  // a finished zone reads as a fifth tile in the grid: same rounded box,
+  // same column, directly beneath. The tray says both in its own header.
+  if ((await drafts.getAttribute("data-chrome")) === "panel") {
+    await expect(
+      drafts.getByRole("heading", { name: "Drawn zones" }),
+    ).toBeVisible();
+  }
+
   return { root, map, drafts, tools };
 }
 

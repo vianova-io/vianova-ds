@@ -1262,7 +1262,32 @@ function DrawToolGrid({
           size="sm"
           title={t.description}
           aria-pressed={value === undefined ? undefined : value === t.value}
-          className="aria-pressed:bg-muted aria-pressed:border-primary min-w-0 justify-start"
+          /* The armed tool is the one piece of state a session has, and it
+             has to survive being read at a glance beside three buttons that
+             are otherwise identical. `bg-muted` alone did not: against a
+             `bg-background` panel it is one step of grey in light and barely
+             that in dark. Colour is what carries it -- border, fill and
+             label all go to `primary` -- so the armed tool is the only
+             coloured thing in the column.
+
+             The `dark:` half is not a different look, it is the same one
+             said twice. `Button`'s outline variant paints its dark surface
+             with `dark:border-input dark:bg-input/30`, and a bare
+             `aria-pressed:` utility matches that at equal specificity and
+             loses on source order -- so in dark the armed tool came out the
+             same grey as the other three, with only its label teal.
+             Re-stating each pair under `dark:` outranks it. Hover is spelled
+             out for the same reason: `hover:bg-muted` would otherwise wipe
+             the armed fill off the one button you are pointing at.
+
+             The four opacities are measured, not chosen. `primary` is
+             `#0f766e` in light, which is 4.90:1 on white before any tint is
+             laid underneath it, so the fill has very little room: 10% leaves
+             4.77:1 and 15% would drop the hover state to 4.43:1, under AA.
+             Hence 10 and 12 in light. Dark starts from `#2dd4bf` on near
+             black at 8.4:1 and can afford 15 and 25, which it needs -- the
+             same 10% that reads clearly on white is invisible on `#09090b`. */
+          className="aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:bg-primary/12 dark:aria-pressed:border-primary dark:aria-pressed:bg-primary/15 dark:aria-pressed:hover:bg-primary/25 min-w-0 justify-start"
           onClick={() => onPick(value === t.value ? null : t.value)}
         >
           <t.Icon data-icon="inline-start" />
@@ -1963,9 +1988,7 @@ export function ZoneDraftPanel({
 
   const empty = (
     <p className="text-muted-foreground text-sm">
-      {tool
-        ? `${DRAW_PROMPTS[tool]} Shapes you finish are listed here.`
-        : "Pick a tool to carry on."}
+      {tool ? DRAW_PROMPTS[tool] : "Pick a tool to carry on."}
     </p>
   );
 
@@ -1973,6 +1996,25 @@ export function ZoneDraftPanel({
      the list underneath grows as they are used. */
   const tools = (
     <DrawToolGrid value={tool} onPick={onToolChange} className="shrink-0" />
+  );
+
+  /* The tools are one thing; what they have produced is another. With only
+     a gap between them a finished zone reads as a fifth tile in the grid --
+     same rounded box, same row, directly underneath -- so the list gets a
+     rule and a name of its own. The tray's own header already says both, and
+     repeating them one line below would be the louder mistake. */
+  const list = (
+    <div className="flex flex-col gap-2 border-t pt-3">
+      {chrome === "panel" ? (
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="text-sm font-medium">Drawn zones</h3>
+          <span className="text-muted-foreground text-sm tabular-nums">
+            {drafts.length}
+          </span>
+        </div>
+      ) : null}
+      {drafts.length ? rows : empty}
+    </div>
   );
 
   const footer = (
@@ -2006,7 +2048,7 @@ export function ZoneDraftPanel({
         </FloatingPanelHeader>
         <FloatingPanelBody className="flex flex-col gap-3">
           {tools}
-          {drafts.length ? rows : empty}
+          {list}
         </FloatingPanelBody>
         {footer}
       </FloatingPanel>
@@ -2040,7 +2082,7 @@ export function ZoneDraftPanel({
       </header>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-3 pb-4">
         {tools}
-        {drafts.length ? rows : empty}
+        {list}
       </div>
       {footer}
     </div>
