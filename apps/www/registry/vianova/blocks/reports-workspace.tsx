@@ -1057,24 +1057,38 @@ export function ReportsWorkspace({
                                 >
                                   {report.name}
                                 </button>
-                                <p className="text-muted-foreground mt-0.5 text-xs">
-                                  {report.summary}
-                                </p>
+                                {/* The badge belongs beside the summary, not
+                                    out in the Created by column. "Monthly" is
+                                    a fact about the report, not about who made
+                                    it -- every monthly one is made by Vianova,
+                                    so sitting next to that name it said the
+                                    same thing twice and left the kind reading
+                                    as a property of the author.
+
+                                    Tinted with --info, the same trio the
+                                    regulations row gives Public
+                                    (`border-info/30 bg-info/10 text-info`):
+                                    reused rather than re-chosen, because that
+                                    combination is already known to pass AA as
+                                    text in both themes. */}
+                                <div className="mt-0.5 flex items-center gap-1.5">
+                                  {report.kind === "monthly" ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="border-info/30 bg-info/10 text-info shrink-0 text-[11px] font-normal"
+                                    >
+                                      Monthly
+                                    </Badge>
+                                  ) : null}
+                                  <p className="text-muted-foreground min-w-0 text-xs">
+                                    {report.summary}
+                                  </p>
+                                </div>
                               </div>
                             </div>
                           </TableCell>
                           <TableCell className="w-36 align-top text-sm">
-                            <span className="flex items-center gap-1.5">
-                              {report.createdBy}
-                              {report.kind === "monthly" ? (
-                                <Badge
-                                  variant="outline"
-                                  className="text-[11px] font-normal"
-                                >
-                                  Monthly
-                                </Badge>
-                              ) : null}
-                            </span>
+                            {report.createdBy}
                           </TableCell>
                           <TableCell className="text-muted-foreground w-28 align-top text-sm">
                             {formatCreated(report.createdAt)}
