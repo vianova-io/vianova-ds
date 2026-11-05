@@ -174,6 +174,7 @@ export default function ZonePickerDefault() {
             <ZoneDraftPanel
               chrome="panel"
               tool={tool}
+              onToolChange={setTool}
               drafts={drafts}
               ruleName="Fleet cap · Parking"
               focusId={focusId}

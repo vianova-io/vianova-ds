@@ -13,6 +13,7 @@ import {
   Info,
   Lock,
   LocateFixed,
+  MapPin,
   Map as MapIcon,
   Minus,
   MoreHorizontal,
@@ -131,8 +132,8 @@ import { MapControls } from "@/registry/vianova/product/map-controls";
 import {
   DEFAULT_LINE_WIDTH_M,
   MapDrawBanner,
-  MapDrawToolbar,
   useMapDraw,
+  useMapDrawShortcuts,
   type DrawMode,
 } from "@/registry/vianova/product/map-draw-control";
 import {
@@ -371,12 +372,15 @@ export function RegulationsWorkspace({
   className,
   regulations: initial = SAMPLE_REGULATIONS,
   status = "ready",
+  geocode,
   onRetry,
   onSave,
 }: {
   className?: string;
   regulations?: Regulation[];
   status?: "ready" | "loading" | "error";
+  /** Looks up places for the map's search field. Omitted, there is none. */
+  geocode?: Geocode;
   onRetry?: () => void;
   /** Called with the saved regulation, after the workspace has kept it. */
   onSave?: (regulation: Regulation) => void;
@@ -449,6 +453,7 @@ export function RegulationsWorkspace({
           zones={zones}
           zoneIndex={zoneIndex}
           zonesLoading={zonesLoading}
+          geocode={geocode}
           onZonesCreated={(made) => setZones((all) => [...made, ...all])}
           onZoneRename={(id, name) =>
             setZones((all) => all.map((z) => (z.id === id ? { ...z, name } : z)))
@@ -1026,6 +1031,7 @@ function RegulationEditor({
   zones,
   zoneIndex,
   zonesLoading,
+  geocode,
   onZonesCreated,
   onZoneRename,
   onSave,
@@ -1038,6 +1044,7 @@ function RegulationEditor({
   zones: PickerZone[];
   zoneIndex: Map<string, PickerZone>;
   zonesLoading: boolean;
+  geocode?: Geocode;
   onZonesCreated: (zones: PickerZone[]) => void;
   onZoneRename: (id: string, name: string) => void;
   onSave: (reg: Regulation) => void;
@@ -1173,10 +1180,10 @@ function RegulationEditor({
   /**
    * Arms a tool, opening a session if one is not already running.
    *
-   * The single entry point, so the map's toolbar and the Draw tab cannot
-   * disagree about what drawing is. Disarming with nothing drawn closes the
-   * session; with drafts in hand it only stops drawing, because the list and
-   * its Add button still have work to do.
+   * The single entry point, so the Draw tab and the map's keyboard shortcuts
+   * cannot disagree about what drawing is. Disarming with nothing drawn
+   * closes the session; with drafts in hand it only stops drawing, because
+   * the list and its Add button still have work to do.
    */
   const armTool = (tool: DrawMode | null) => {
     if (!rule) return;
@@ -1189,6 +1196,24 @@ function RegulationEditor({
         ? { ...s, tool }
         : { tool, drafts: [], focusId: null, ruleId };
     });
+  };
+
+  /**
+   * The same, for the tool row inside the session panel.
+   *
+   * It differs in one case, and only because the tools moved off the map: an
+   * Escape with nothing drawn closes the session, which was free when the
+   * toolbar stayed on screen behind it. Now the session IS the panel, so
+   * closing it takes the tools away too -- press Polygon twice before drawing
+   * anything and you would be back in settings, having asked for neither.
+   * Stopping from in here keeps the panel open with nothing armed.
+   */
+  const setSessionTool = (tool: DrawMode | null) => {
+    if (tool !== null) {
+      armTool(tool);
+      return;
+    }
+    setSession((s) => (s ? { ...s, tool: null } : s));
   };
 
   /** Leaves the session, taking every unadded shape with it. */
@@ -1253,6 +1278,7 @@ function RegulationEditor({
         tool={session.tool as ZoneDrawTool | null}
         drafts={session.drafts}
         focusId={session.focusId}
+        onToolChange={setSessionTool}
         ruleName={multi ? `${draft.name} · ${rule.name}` : draft.name}
         onRename={renameDraft}
         onRemove={removeDraft}
@@ -1474,6 +1500,8 @@ function RegulationEditor({
         focusZone={focusZone}
         canDraw={Boolean(rule)}
         drawMode={drawMode}
+        drawing={session !== null}
+        geocode={geocode}
         onDrawModeChange={armTool}
         candidates={candidates}
         drafts={session?.drafts ?? NO_DRAFTS}
@@ -1530,6 +1558,7 @@ function RegulationEditor({
                   tool={session.tool as ZoneDrawTool | null}
                   drafts={session.drafts}
                   focusId={session.focusId}
+                  onToolChange={setSessionTool}
                   onRename={renameDraft}
                   onRemove={removeDraft}
                   onPreviewChange={setPreview}
@@ -2267,6 +2296,219 @@ function boundsOf(rings: [number, number][][]): Bounds | null {
   return Number.isFinite(w) ? [[w, s], [e, n]] : null;
 }
 
+/** One place the map can be sent to. */
+export type GeocodeResult = {
+  /** The headline, e.g. "Alfama". */
+  name: string;
+  /** The line beneath it, e.g. "Santa Maria Maior, Lisboa, Portugal". */
+  context?: string;
+  /** [lon, lat]. */
+  center: [number, number];
+  /** [west, south, east, north], flown to in preference to the centre. */
+  bbox?: [number, number, number, number];
+};
+
+/**
+ * Looks places up by name. Held as a prop because a deployment has its own
+ * places -- depots, operator areas, the zones already in the library -- and a
+ * public geocoder knows none of them. Omit it and the map carries no search
+ * field at all, so a block that does not want one is unchanged.
+ *
+ * The `signal` is aborted when another keystroke overtakes this lookup, so a
+ * slow first answer cannot land after a later one and overwrite it.
+ *
+ * `near` is what the map is looking at, and a lookup that ignores it is worse
+ * than useless here: searching "Belem" over Lisbon lands on Belém in Brazil,
+ * 7,000km away, because that is the bigger place. Bias by it rather than
+ * restrict to it -- somebody searching a second city still has to find it.
+ */
+export type Geocode = (
+  query: string,
+  signal: AbortSignal,
+  near?: {
+    center: [number, number];
+    /** [west, south, east, north] of the current view. */
+    bbox: [number, number, number, number];
+  },
+) => Promise<GeocodeResult[]>;
+
+/**
+ * Search over the map, top centre.
+ *
+ * A combobox rather than a field with a list under it: the results are
+ * reached with the arrow keys from the input, which is how a reader who never
+ * touches the mouse gets to the second result, and `aria-activedescendant`
+ * is what names it to a screen reader while focus stays in the field.
+ */
+function MapSearch({
+  geocode,
+  onPick,
+  className,
+}: {
+  geocode: Geocode;
+  onPick: (place: GeocodeResult) => void;
+  className?: string;
+}) {
+  const id = React.useId();
+  const [query, setQuery] = React.useState("");
+  const [results, setResults] = React.useState<GeocodeResult[]>([]);
+  const [state, setState] = React.useState<"idle" | "busy" | "done" | "failed">(
+    "idle",
+  );
+  const [open, setOpen] = React.useState(false);
+  const [active, setActive] = React.useState(0);
+  const abortRef = React.useRef<AbortController | null>(null);
+
+  // Debounced, because Nominatim -- the default the docs site runs on -- asks
+  // for about one request a second, and a lookup per keystroke is four.
+  React.useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setResults([]);
+      setState("idle");
+      setOpen(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      abortRef.current?.abort();
+      const ac = new AbortController();
+      abortRef.current = ac;
+      setState("busy");
+      setOpen(true);
+      geocode(q, ac.signal).then(
+        (found) => {
+          if (ac.signal.aborted) return;
+          setResults(found);
+          setActive(0);
+          setState("done");
+        },
+        () => {
+          if (ac.signal.aborted) return;
+          setResults([]);
+          setState("failed");
+        },
+      );
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [query, geocode]);
+
+  React.useEffect(() => () => abortRef.current?.abort(), []);
+
+  const choose = (place: GeocodeResult | undefined) => {
+    if (!place) return;
+    onPick(place);
+    setQuery(place.name);
+    setOpen(false);
+  };
+
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Escape") {
+      setOpen(false);
+      return;
+    }
+    if (!open || results.length === 0) {
+      if (event.key === "Enter") event.preventDefault();
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      setActive((i) => (i + step + results.length) % results.length);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      choose(results[active]);
+    }
+  };
+
+  const listId = `${id}-places`;
+  const optionId = (i: number) => `${id}-place-${i}`;
+
+  return (
+    <div data-slot="map-search" className={className}>
+      <InputGroup className="bg-card/95 shadow-lg backdrop-blur">
+        <InputGroupAddon>
+          <Search />
+        </InputGroupAddon>
+        <InputGroupInput
+          role="combobox"
+          aria-label="Search the map"
+          aria-expanded={open}
+          aria-controls={open ? listId : undefined}
+          aria-activedescendant={
+            open && results.length ? optionId(active) : undefined
+          }
+          aria-autocomplete="list"
+          placeholder="Search for a place"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={onKeyDown}
+          onFocus={() => results.length > 0 && setOpen(true)}
+        />
+        {query ? (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              aria-label="Clear search"
+              size="icon-xs"
+              onClick={() => {
+                setQuery("");
+                setOpen(false);
+              }}
+            >
+              <X />
+            </InputGroupButton>
+          </InputGroupAddon>
+        ) : null}
+      </InputGroup>
+
+      {open ? (
+        <div className="bg-card/95 mt-1.5 overflow-hidden rounded-lg border shadow-lg backdrop-blur">
+          {state === "busy" ? (
+            <p className="text-muted-foreground p-3 text-sm">Searching…</p>
+          ) : state === "failed" ? (
+            <p role="alert" className="p-3 text-sm">
+              That search could not be run. Many hosts refuse requests from
+              other sites — try again, or draw the zone instead.
+            </p>
+          ) : results.length === 0 ? (
+            <p className="text-muted-foreground p-3 text-sm">
+              Nothing found for “{query.trim()}”.
+            </p>
+          ) : (
+            <ul role="listbox" id={listId} aria-label="Places" className="py-1">
+              {results.map((place, i) => (
+                <li
+                  key={`${place.name}-${place.center.join()}`}
+                  id={optionId(i)}
+                  role="option"
+                  aria-selected={i === active}
+                  className={cn(
+                    "flex cursor-pointer items-start gap-2 px-3 py-1.5 text-sm",
+                    i === active && "bg-muted",
+                  )}
+                  onPointerEnter={() => setActive(i)}
+                  onClick={() => choose(place)}
+                >
+                  <MapPin className="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">
+                      {place.name}
+                    </span>
+                    {place.context ? (
+                      <span className="text-muted-foreground block truncate text-xs">
+                        {place.context}
+                      </span>
+                    ) : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function RegulationMap({
   regulation,
   selectedRule,
@@ -2274,6 +2516,8 @@ function RegulationMap({
   focusZone,
   canDraw,
   drawMode,
+  drawing,
+  geocode,
   onDrawModeChange,
   candidates,
   drafts,
@@ -2295,6 +2539,14 @@ function RegulationMap({
   preview: PickerZone | null;
   /** Owned above, because the Add zones screen arms it too. */
   drawMode: DrawMode | null;
+  /**
+   * A drawing session is open, armed or not. The search field stands down for
+   * it: both want the top centre, and while a session is running the banner
+   * there is the thing that has to be read.
+   */
+  drawing: boolean;
+  /** Omitted, no search field is drawn. */
+  geocode?: Geocode;
   onDrawModeChange: (mode: DrawMode | null) => void;
   onDrawn: (ring: [number, number][]) => void;
   /** The draft list as a tray, for the widths with no room for a column. */
@@ -2428,6 +2680,39 @@ function RegulationMap({
     onCancel: () => onDrawModeChange(null),
   });
 
+  /*
+   * p / c / f / l arm a tool and s stops, which used to come with the toolbar
+   * that stood on the map. The toolbar has gone to the panel; the shortcuts
+   * belong to the map either way, so they are held here now. The hook ignores
+   * keys typed into a field, which is what keeps naming a draft "Circle" from
+   * arming one.
+   */
+  useMapDrawShortcuts({
+    mode: drawMode,
+    onModeChange: onDrawModeChange,
+    enabled: canDraw,
+  });
+
+  /*
+   * The lookup is handed what the map is looking at, so a search reads as a
+   * search of this city rather than of the whole world. Read at call time
+   * from the map itself, not from state: panning does not re-render this, and
+   * a bias taken from where the map was two pans ago is the bug it fixes.
+   */
+  const geocodeNear = React.useCallback<Geocode>(
+    (query, signal) => {
+      if (!geocode) return Promise.resolve([]);
+      if (!map) return geocode(query, signal);
+      const c = map.getCenter();
+      const b = map.getBounds();
+      return geocode(query, signal, {
+        center: [c.lng, c.lat],
+        bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+      });
+    },
+    [geocode, map],
+  );
+
   // Frame the regulation once its zones are known, and again when a different
   // regulation opens -- not on every edit, which would yank the map away from
   // wherever someone had panned to check a zone.
@@ -2496,15 +2781,31 @@ function RegulationMap({
         }
       />
 
-      {/* The whole row, open on the map: during a session the tool is changed
-          here as often as it is chosen in the panel, and a split button hides
-          four of the five behind a press. */}
-      <MapDrawToolbar
-        className="absolute top-3 right-3"
-        mode={drawMode}
-        onModeChange={onDrawModeChange}
-        disabled={!canDraw}
-      />
+      {/* Top centre, and only when nothing is being drawn: the banner below
+          takes the same place during a session, and a field that shuffles out
+          of its way mid-draw moves under the cursor that is using it. The
+          tools are not here at all any more -- they are in the panel, which
+          is the one place that stays on screen for the whole session. */}
+      {geocode && !drawing ? (
+        <MapSearch
+          className="absolute top-3 left-1/2 z-10 w-[min(22rem,calc(100%-6rem))] -translate-x-1/2"
+          geocode={geocodeNear}
+          onPick={(place) => {
+            if (!map) return;
+            if (place.bbox) {
+              map.fitBounds(
+                [
+                  [place.bbox[0], place.bbox[1]],
+                  [place.bbox[2], place.bbox[3]],
+                ],
+                { padding: 48, duration: 900 },
+              );
+            } else {
+              map.flyTo({ center: place.center, zoom: 14, duration: 900 });
+            }
+          }}
+        />
+      ) : null}
 
       {drawMode ? (
         <MapDrawBanner

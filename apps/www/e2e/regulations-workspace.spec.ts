@@ -103,6 +103,32 @@ async function fleetCap(page: Page) {
 }
 
 /**
+ * Fleet cap, with a drawing session open and `tool` armed.
+ *
+ * There is one way in now. The map used to carry the whole tool row, so a
+ * test could arm one without opening anything; the tools have moved into the
+ * column, where they stay for the rest of the session, and the map carries
+ * only the banner. So: Add zones, the Draw tab, one press.
+ *
+ * `tools` is the grid inside the session's own column -- named, because the
+ * phone tray mounts a second copy that is display:none at this width.
+ */
+async function drawSession(page: Page, tool: string) {
+  const { root, map, drafts } = await fleetCap(page);
+  await root.getByRole("button", { name: "Add zones" }).click();
+  const panel = root.locator("[data-slot=zone-picker-panel]");
+  await panel.getByRole("tab", { name: "Draw" }).click();
+  await panel.getByRole("button", { name: new RegExp(`^${tool}`) }).click();
+  await expect(drafts).toBeVisible();
+  const tools = drafts.getByRole("group", { name: "Drawing tool" });
+  await expect(tools.getByRole("button", { name: tool })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  return { root, map, drafts, tools };
+}
+
+/**
  * A square, drawn with the polygon tool wherever the map is free.
  *
  * `dx` shifts it, so a second one can be drawn without landing on the first.
@@ -310,16 +336,14 @@ test("on a phone, a drawing session is a tray over the map", async ({ page }) =>
   await expect(tray).toBeHidden();
 });
 
-test("a polygon drawn from the map's toolbar is collected, and the tool stays armed", async ({ page }) => {
-  const { root, map, drafts } = await fleetCap(page);
+test("a polygon drawn in a session is collected, and the tool stays armed", async ({ page }) => {
+  const { root, map, drafts, tools } = await drawSession(page, "Polygon");
 
-  // The whole tool row is open on the map, where a split button used to show
-  // one tool and hide the other four behind a chevron. During a session the
-  // tool is changed about as often as it is first chosen, so hiding them was
-  // the wrong trade.
-  const polygon = map.getByRole("button", { name: "Polygon" });
-  await polygon.click();
-  await expect(polygon).toHaveAttribute("aria-pressed", "true");
+  // The tool row lives in the column for the whole session, where the list it
+  // fills is. It used to float on the map -- the one surface that is also the
+  // drawing surface -- while the column showed drafts and no way to change
+  // tool at all.
+  const polygon = tools.getByRole("button", { name: "Polygon" });
 
   await square(map);
 
@@ -364,11 +388,10 @@ test("Public is tinted where Private stays quiet, in the list and the editor", a
   await expectNoBlockingViolations(page);
 });
 
-test("a line drawn from the map's toolbar becomes a corridor zone, at the width the banner sets", async ({ page }) => {
-  const { root, map, drafts } = await fleetCap(page);
+test("a line drawn in a session becomes a corridor zone, at the width the banner sets", async ({ page }) => {
+  const { root, map, drafts, tools } = await drawSession(page, "Line");
 
-  const line = map.getByRole("button", { name: "Line" });
-  await line.click();
+  const line = tools.getByRole("button", { name: "Line" });
 
   // The width is the line tool's own control, and it is in the banner rather
   // than a panel because it is only judgeable against the street underneath.
@@ -424,11 +447,16 @@ test("Add zones offers drawing, and one press on a tool starts a drawing session
 
   // The picker gives way to the drawing session: the map it just handed over
   // to is unobstructed, the list of shapes takes the column, and the tool it
-  // chose is the one armed -- not the toolbar's own default.
+  // chose is the one armed -- not a toolbar's own default.
   await expect(panel).toHaveCount(0);
-  await expect(root.locator("[data-slot=zone-draft-panel][data-chrome=panel]")).toBeVisible();
+  const drafts = root.locator("[data-slot=zone-draft-panel][data-chrome=panel]");
+  await expect(drafts).toBeVisible();
   const map = root.getByRole("region", { name: "Map of the regulation's zones" });
-  await expect(map.getByRole("button", { name: "Line" })).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    drafts.getByRole("group", { name: "Drawing tool" }).getByRole("button", { name: "Line" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  // And the map carries no tool row of its own: one place to pick a tool.
+  await expect(map.getByRole("group", { name: "Drawing tool" })).toHaveCount(0);
   await expect(map.getByRole("spinbutton", { name: "Corridor width in metres" })).toBeVisible();
   // Nothing named "Start drawing" or "Draw the zone" anywhere: if a confirm
   // step comes back in any shape, this fails rather than being clicked past.
@@ -486,8 +514,7 @@ test("a shapefile in a projection the reader cannot convert is refused by name",
 });
 
 test("a drawn shape arrives named, focused and ready to be typed over", async ({ page }) => {
-  const { root, map, drafts } = await fleetCap(page);
-  await map.getByRole("button", { name: "Polygon" }).click();
+  const { root, map, drafts } = await drawSession(page, "Polygon");
   await square(map);
 
   // Numbered from the rule's own zones -- Fleet cap has two -- rather than
@@ -500,7 +527,7 @@ test("a drawn shape arrives named, focused and ready to be typed over", async ({
   expect(
     await field.evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd]),
   ).toEqual([0, 6]);
-  // The toolbar, the rows and the focus, judged by the same rules as the rest.
+  // The tool row, the rows and the focus, judged by the same rules as the rest.
   await expectNoBlockingViolations(page);
 
   await page.keyboard.type("Praça do Comércio");
@@ -515,9 +542,8 @@ test("a drawn shape arrives named, focused and ready to be typed over", async ({
 });
 
 test("the name field does not arm the drawing tools", async ({ page }) => {
-  const { map, drafts } = await fleetCap(page);
-  const polygon = map.getByRole("button", { name: "Polygon" });
-  await polygon.click();
+  const { map, drafts, tools } = await drawSession(page, "Polygon");
+  const polygon = tools.getByRole("button", { name: "Polygon" });
   await square(map);
 
   const field = drafts.getByRole("textbox", { name: "Rename Zone 3" });
@@ -537,15 +563,19 @@ test("the name field does not arm the drawing tools", async ({ page }) => {
   await expect(drafts.getByRole("textbox", { name: "Rename pcsl" })).toBeVisible();
 });
 
-test("Select stops drawing without discarding, and Cancel leaves no trace", async ({ page }) => {
-  const { root, map, drafts } = await fleetCap(page);
-  const polygon = map.getByRole("button", { name: "Polygon" });
-  await polygon.click();
+test("pressing the armed tool stops drawing without discarding, and Cancel leaves no trace", async ({ page }) => {
+  const { root, map, drafts, tools } = await drawSession(page, "Polygon");
+  const polygon = tools.getByRole("button", { name: "Polygon" });
   await square(map);
 
   // Stopping drawing is not throwing the work away: the list and its Add
   // button still have something to do, so the session outlives the tool.
-  await map.getByRole("button", { name: "Select" }).click();
+  //
+  // Pressing the armed tool again is the stop. It used to be a Select button
+  // standing beside the tools on the map, and the map carries nothing now --
+  // so the pressed button has to unpress, or a session could be left armed
+  // with Cancel, which discards, as the only way out.
+  await polygon.click();
   await expect(polygon).toHaveAttribute("aria-pressed", "false");
   await expect(drafts.getByRole("listitem")).toHaveCount(1);
 
@@ -708,4 +738,66 @@ test("Try a sample fetches the GeoJSON served beside the page", async ({ page })
 
   await panel.getByRole("button", { name: "Add 6 zones" }).click();
   await expect(root.getByText("8 zones").first()).toBeVisible();
+});
+
+test("the map's search finds a place, and prefers the one near the map", async ({ page }) => {
+  // The block ships no geocoder -- a deployment searches its own places -- so
+  // the docs site wires OpenStreetMap's and this stands in for it. Two places
+  // of the same name, the far one ranked first by the geocoder, exactly as
+  // Nominatim really answers "Belem" over Lisbon.
+  await page.route("**/nominatim.openstreetmap.org/**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          name: "Belém",
+          display_name: "Belém, Pará, Região Norte, Brasil",
+          lat: "-1.4557",
+          lon: "-48.5044",
+        },
+        {
+          name: "Belém",
+          display_name: "Belém, Lisboa, Portugal",
+          lat: "38.6979",
+          lon: "-9.2065",
+          boundingbox: ["38.69", "38.71", "-9.22", "-9.19"],
+        },
+      ]),
+    });
+  });
+
+  const root = await open(page);
+  await root.locator("[data-slot=regulation-link]", { hasText: "Fleet cap" }).click();
+  const map = root.getByRole("region", { name: "Map of the regulation's zones" });
+
+  const search = map.locator("[data-slot=map-search]");
+  await expect(search).toBeVisible();
+  const field = search.getByRole("combobox", { name: "Search the map" });
+  await field.fill("Belem");
+
+  // Nearest first. The geocoder ranks by size, so the Brazilian city comes
+  // back first; which of two identically named places was meant is the map's
+  // question, not the geocoder's, and the map is over Lisbon.
+  const options = search.getByRole("option");
+  await expect(options).toHaveCount(2);
+  await expect(options.first()).toContainText("Lisboa");
+
+  await options.first().click();
+  await expect(options).toHaveCount(0);
+  await expect(field).toHaveValue("Belém");
+
+  // It stands down for a drawing session: both want the top centre, and the
+  // banner is what has to be read there while a tool is armed.
+  await root.getByRole("button", { name: "Add zones" }).click();
+  const picker = root.locator("[data-slot=zone-picker-panel]");
+  await picker.getByRole("tab", { name: "Draw" }).click();
+  await picker.getByRole("button", { name: /^Polygon/ }).click();
+  await expect(search).toHaveCount(0);
+
+  // And comes back when the session ends.
+  await root
+    .locator("[data-slot=zone-draft-panel][data-chrome=panel]")
+    .getByRole("button", { name: "Cancel" })
+    .click();
+  await expect(search).toBeVisible();
 });
