@@ -209,4 +209,36 @@ test.describe("pages shape", () => {
       expect(body.name, `/r/${item}.json has no name`).toBeTruthy();
     }
   });
+
+  /**
+   * The Reports page's old URL still works.
+   *
+   * #44 vacated `reports-workspace` (the Dashboard had been squatting on it)
+   * and gave the name to Reports, which until then was
+   * `report-library-workspace`. That left the old path a 404, and it had been
+   * live long enough to be in bookmarks.
+   *
+   * A static export has no server to answer with a 301, so the redirect is a
+   * hand-written `public/blocks/report-library-workspace/index.html` -- which
+   * only exists in the EXPORT. In dev the `[slug]` route matches first and
+   * calls `notFound()`, so this is the one suite that can see it at all.
+   *
+   * The `href` is relative on purpose: `basePath` leaves raw hrefs alone, and
+   * this file is outside the bundle so `asset()` cannot reach it. Asserting
+   * the landing URL rather than the markup is what proves the relative path
+   * resolved under /vianova-ds instead of off the domain root.
+   */
+  test("the Reports page's pre-rename URL redirects instead of 404ing", async ({
+    page,
+  }) => {
+    const res = await page.goto(`${BASE}/blocks/report-library-workspace/`);
+    expect(res?.status(), "the old path is not served at all").toBe(200);
+
+    await page.waitForURL(`${BASE}/blocks/reports-workspace/`, {
+      timeout: 10_000,
+    });
+    await expect(
+      page.getByRole("heading", { name: "Reports workspace" }).first(),
+    ).toBeVisible();
+  });
 });

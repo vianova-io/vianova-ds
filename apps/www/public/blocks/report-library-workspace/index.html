@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      The Reports page used to live here.
+
+      #44 vacated `reports-workspace` (the Dashboard had been squatting on it)
+      and gave the name to Reports, which until then was `report-library-workspace`
+      because the name it wanted was taken. That left this path dead, and #44 is
+      old enough that it is in bookmarks and in Slack.
+
+      A static export has no server to answer with a 301, so the redirect is this
+      file. `public/` is copied into `out/` verbatim and `trailingSlash: true`
+      makes GitHub Pages serve it for the directory URL.
+
+      The target is RELATIVE on purpose. `basePath` prefixes `next/link` and
+      CSS-imported assets; it does nothing to a raw href, which is the gap
+      `lib/asset.ts` exists to cover -- and this file is outside the bundle, so
+      `asset()` cannot reach it. `../reports-workspace/` is correct whether the
+      site is served from a domain root or from /vianova-ds.
+
+      The other half of #44 cannot be redirected: `reports-workspace` is a live
+      URL that now shows a different block. An old link to it lands on Reports
+      rather than the Dashboard, with no error -- which is what the BREAKING
+      CHANGE note was warning about.
+    -->
+    <meta http-equiv="refresh" content="0; url=../reports-workspace/" />
+    <link rel="canonical" href="../reports-workspace/" />
+    <meta name="robots" content="noindex" />
+    <title>Reports workspace moved</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-content: center;
+        gap: 0.75rem;
+        padding: 2rem max(16px, env(safe-area-inset-left, 0px));
+        text-align: center;
+        font: 400 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: #ffffff;
+        color: #0d1716;
+      }
+      a { color: #0f766e; }
+      @media (prefers-color-scheme: dark) {
+        body { background: #09090b; color: #e8f0ef; }
+        a { color: #2dd4bf; }
+      }
+    </style>
+  </head>
+  <body>
+    <p>This block is now called <strong>Reports workspace</strong>.</p>
+    <p><a href="../reports-workspace/">Continue to /blocks/reports-workspace/</a></p>
+  </body>
+</html>
