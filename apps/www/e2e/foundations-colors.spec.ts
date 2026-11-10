@@ -25,12 +25,21 @@ import { settle } from "./examples";
 test.describe.configure({ timeout: 90_000 });
 
 /** The colour sections, and nothing else on the page. */
-const SECTIONS = ["#brand-colours", "#primitive-ramps", "#semantic-tokens", "#map-ramps"];
+const SECTIONS = [
+  "#brand-colours",
+  "#artefact-palette",
+  "#primitive-ramps",
+  "#semantic-tokens",
+  "#map-ramps",
+];
 
 /** A colour of each tier, since the tiers carry genuinely different codes. */
 const SAMPLES = [
   { tier: "brand swatch", code: "--brand-teal" },
   { tier: "brand hex chip", code: "#00DC96" },
+  // The artefact tier has no token names to copy -- it is literals on
+  // purpose -- so its hex chip is the whole contract.
+  { tier: "artefact hex chip", code: "#112E57" },
   { tier: "primitive step", code: "zinc-500" },
   { tier: "semantic row", code: "--primary" },
   { tier: "map stop", code: "--map-ramp-50" },
