@@ -1,5 +1,8 @@
 # Vianova DS
 
+<img width="2000" height="1000" alt="image" src="https://github.com/user-attachments/assets/a4a866b9-9ce6-49e6-b1a3-9d4f8201924d" />
+
+
 A shadcn-based design system for Vianova's spatial intelligence platform: brand
 foundations as tokens, an installable component registry, and a live gallery.
 
