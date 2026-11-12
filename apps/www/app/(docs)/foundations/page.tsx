@@ -155,6 +155,82 @@ const BRAND = Object.keys(T)
   .filter((k) => k.startsWith("brand."))
   .map((k) => k.replace("brand.", ""));
 
+/**
+ * The artefact palette, from the Vianova Brandbook's own `Artefact / *`
+ * collections.
+ *
+ * Literals, deliberately. These are NOT tokens and there is no `--artefact-*`:
+ * the brandbook is the authority for artefact roles, not this repo's semantic
+ * tier, and emitting them from `packages/tokens` would quietly make the product
+ * DS their upstream. They are documented here so there is one place to look,
+ * and copied here by hand when the brandbook changes.
+ *
+ * Every ratio on this page is computed from these hexes rather than quoted, so
+ * the numbers cannot drift from the colours they describe.
+ */
+const ARTEFACT_INK = "#111827";
+const ARTEFACT_PAPER = "#ffffff";
+
+type ArtefactHue = {
+  name: string;
+  role: string;
+  hex: string;
+  tint: string;
+  note: string;
+  /** Clears 3:1 for large text and nothing else. Only the tertiary is. */
+  displayOnly?: boolean;
+};
+
+const ARTEFACT_HUES: ArtefactHue[] = [
+  {
+    name: "Navy",
+    role: "Primary",
+    hex: "#112e57",
+    tint: "#eef7ff",
+    note: "Structure and authority. Numbering, rules, the badge, headline accents.",
+  },
+  {
+    name: "Teal",
+    role: "Secondary",
+    hex: "#1b787a",
+    tint: "#e7fafa",
+    note: "The affirmative signal. Highlights, callouts, and what already exists.",
+  },
+  {
+    name: "Magenta",
+    role: "Tertiary",
+    hex: "#fc0061",
+    tint: "#fff1f2",
+    note: "Emphasis at size. A hero numeral, a cover rule, the one thing seen first.",
+    displayOnly: true,
+  },
+  {
+    name: "Amber",
+    role: "Caveat",
+    hex: "#b45309",
+    tint: "#fff2ea",
+    note: "Conditional. Client-specific, configured, or carrying a qualification.",
+  },
+];
+
+const ARTEFACT_GRADIENTS = [
+  {
+    name: "brand",
+    stops: ["#fc0061", "#ba00c7", "#6000f3", "#004bd9", "#00dc96"],
+    note: "Top bar and cover. The only one that may appear on every page.",
+  },
+  {
+    name: "cool",
+    stops: ["#004bd9", "#00dc96"],
+    note: "The brand gradient's last two values. A band, a divider, a chart fill.",
+  },
+  {
+    name: "hot",
+    stops: ["#fc0061", "#1804e4"],
+    note: "Starts on the tertiary. A cover field or section opener, once per document.",
+  },
+] as const;
+
 /** WCAG relative luminance, for picking a legible label on each swatch. */
 function luminance(hex: string) {
   const channel = (v: number) => {
@@ -325,6 +401,7 @@ function CopyChip({ value }: { value: string }) {
 const SECTIONS = [
   { id: "logo", label: "Logo" },
   { id: "brand-colours", label: "Brand colours" },
+  { id: "artefact-palette", label: "Artefact palette" },
   { id: "typography", label: "Typography" },
   { id: "primitive-ramps", label: "Primitive ramps" },
   { id: "semantic-tokens", label: "Semantic tokens" },
@@ -610,6 +687,131 @@ export default function FoundationsPage() {
               })}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <section id="artefact-palette" className="scroll-mt-20 space-y-4">
+        <div className="space-y-1">
+          <h2 className="text-sm font-medium">Artefact palette</h2>
+          <p className="text-sm text-muted-foreground">
+            What A4 papers and one-pagers are built from. Four hues, each with
+            one tint, and three gradients. Its authority is the Vianova
+            Brandbook&rsquo;s own <code className="text-foreground">Artefact</code>{" "}
+            collections — not the semantic tokens below, which is why nothing
+            here is a token and no{" "}
+            <code className="text-foreground">--artefact-*</code> exists. Listed
+            so there is one place to look.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            The role names belong to that system, not to this one. The{" "}
+            <em>product</em> primary is still{" "}
+            <code className="text-foreground">#0f766e</code>; navy is the
+            primary of a paper. A hue and its tint are a pair — a tint is only
+            ever a ground, never used alone.
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {ARTEFACT_HUES.map((hue) => {
+            const label = labelOn(hue.hex);
+            const onPaper = contrast(luminance(hue.hex), luminance(ARTEFACT_PAPER));
+            const onTint = contrast(luminance(hue.hex), luminance(hue.tint));
+            const inkOnTint = contrast(luminance(ARTEFACT_INK), luminance(hue.tint));
+            return (
+              <div key={hue.name} className="space-y-1.5">
+                {/* Tint above solid, the pairing the brandbook draws, so the
+                    ground and the mark that sits on it are read together. */}
+                <div className="overflow-hidden rounded-lg">
+                  <div
+                    className="px-3 py-2"
+                    style={{ background: hue.tint, color: ARTEFACT_INK }}
+                  >
+                    <span className="text-[11px] font-medium">tint</span>
+                    <span className="ml-1.5 font-mono text-[11px]">
+                      {hue.tint.toUpperCase()}
+                    </span>
+                  </div>
+                  <div
+                    className="flex flex-col gap-3 px-3 py-2.5"
+                    style={{ background: hue.hex, color: label.color }}
+                  >
+                    {/* No opacity on either line. `labelOn` picks the ink
+                        that clears 4.5:1 against the solid, and fading it
+                        composites a THIRD colour that does not: white at 80%
+                        on the teal is #d1e4e4, which measures 3.96:1 and
+                        fails at this size. */}
+                    <span className="text-[11px] font-medium tracking-wider uppercase">
+                      {hue.role}
+                    </span>
+                    <span>
+                      <span className="block text-sm font-medium">{hue.name}</span>
+                      <span className="block font-mono text-[11px]">
+                        {hue.hex.toUpperCase()}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground">{hue.note}</p>
+
+                <div className="flex flex-wrap gap-1">
+                  <CopyChip value={hue.hex.toUpperCase()} />
+                  <CopyChip value={hue.tint.toUpperCase()} />
+                </div>
+
+                <dl className="space-y-0.5 text-[11px] text-muted-foreground">
+                  <div className="flex justify-between gap-2">
+                    <dt>On paper</dt>
+                    <dd className="tabular-nums">{onPaper.toFixed(2)}:1</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt>On its tint</dt>
+                    <dd className="tabular-nums">{onTint.toFixed(2)}:1</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt>Ink on tint</dt>
+                    <dd className="tabular-nums">{inkOnTint.toFixed(2)}:1</dd>
+                  </div>
+                </dl>
+
+                {hue.displayOnly ? (
+                  <p className="text-xs text-muted-foreground">
+                    <strong className="text-foreground">Display only.</strong>{" "}
+                    {onPaper.toFixed(2)}:1 on paper clears 3:1 for large text and
+                    nothing else. 18pt up, or a fill — never body, caption or a
+                    pill label.
+                  </p>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Three gradients, each used whole. No stop is ever pulled out as a
+            flat colour — <code className="text-foreground">brand</code> is the
+            same five values as the brand tokens above.
+          </p>
+          <div className="space-y-2.5">
+            {ARTEFACT_GRADIENTS.map((g) => (
+              <div key={g.name} className="space-y-1">
+                <div
+                  className="h-8 rounded-lg"
+                  style={{
+                    backgroundImage: `linear-gradient(90deg, ${g.stops.join(", ")})`,
+                  }}
+                />
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <code className="text-xs">gradient/{g.name}</code>
+                  {g.stops.map((stop) => (
+                    <CopyChip key={stop} value={stop.toUpperCase()} />
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">{g.note}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
