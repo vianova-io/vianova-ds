@@ -171,12 +171,26 @@ const BRAND = Object.keys(T)
 const ARTEFACT_INK = "#111827";
 const ARTEFACT_PAPER = "#ffffff";
 
+/**
+ * The tertiary is not a colour of its own.
+ *
+ * It is `--brand-red-pink`, at the same value -- so it is READ FROM THE TOKEN
+ * rather than written out again beside it. Two literals for one colour is how
+ * a page ends up showing #FC0061 in one section and something a shade off in
+ * the next, and this page would be the last place to notice. Precedence agrees
+ * on the direction: where a value exists in both, this repo is upstream and
+ * the brandbook re-syncs to it.
+ */
+const BRAND_RED_PINK = T["brand.red-pink"]?.value ?? "#fc0061";
+
 type ArtefactHue = {
   name: string;
   role: string;
   hex: string;
   tint: string;
   note: string;
+  /** The token this hue IS, where it is one. Shown so the identity is visible. */
+  sameAs?: string;
   /** Clears 3:1 for large text and nothing else. Only the tertiary is. */
   displayOnly?: boolean;
 };
@@ -197,11 +211,14 @@ const ARTEFACT_HUES: ArtefactHue[] = [
     note: "The affirmative signal. Highlights, callouts, and what already exists.",
   },
   {
-    name: "Magenta",
+    // Red-pink, not magenta: `--brand-magenta` is #BA00C7, a different colour
+    // a few rows up the same page.
+    name: "Red-pink",
     role: "Tertiary",
-    hex: "#fc0061",
+    hex: BRAND_RED_PINK,
     tint: "#fff1f2",
     note: "Emphasis at size. A hero numeral, a cover rule, the one thing seen first.",
+    sameAs: "--brand-red-pink",
     displayOnly: true,
   },
   {
@@ -213,7 +230,7 @@ const ARTEFACT_HUES: ArtefactHue[] = [
   },
 ];
 
-const ARTEFACT_GRADIENTS = [
+const GRADIENTS = [
   {
     name: "brand",
     stops: ["#fc0061", "#ba00c7", "#6000f3", "#004bd9", "#00dc96"],
@@ -400,8 +417,7 @@ function CopyChip({ value }: { value: string }) {
 
 const SECTIONS = [
   { id: "logo", label: "Logo" },
-  { id: "brand-colours", label: "Brand colours" },
-  { id: "artefact-palette", label: "Artefact palette" },
+  { id: "brand-colours", label: "Brand and marketing colours" },
   { id: "typography", label: "Typography" },
   { id: "primitive-ramps", label: "Primitive ramps" },
   { id: "semantic-tokens", label: "Semantic tokens" },
@@ -596,208 +612,265 @@ export default function FoundationsPage() {
         </div>
       </section>
 
-      <section id="brand-colours" className="scroll-mt-20 space-y-4">
+      {/*
+       * One section for every colour that is not product UI.
+       *
+       * This was two sections, `brand-colours` and `artefact-palette`, and the
+       * split did not survive being read in order: both are brand expression,
+       * neither is a semantic token, and the brand gradient was drawn twice --
+       * once under the swatches and again as `gradient/brand`, the same five
+       * values. Grouped by the system that owns each instead, because that is
+       * the question a reader arrives with: am I making a product screen, a
+       * paper, or a post?
+       *
+       * The section keeps the id `brand-colours` and the paper group keeps
+       * `artefact-palette`, so every link already pointing at either still
+       * lands -- including the ones in the a11y gate.
+       */}
+      <section id="brand-colours" className="scroll-mt-20 space-y-8">
         <div className="space-y-1">
-          <h2 className="text-sm font-medium">Brand colours</h2>
+          <h2 className="text-sm font-medium">Brand and marketing colours</h2>
           <p className="text-sm text-muted-foreground">
-            The five colours of the logo gradient. Brand expression only — none
-            of them is wired to a semantic role, because{" "}
-            <code className="text-foreground">primary</code> is the product teal
-            and a reachable <code className="text-foreground">brand.red-pink</code>{" "}
-            would sooner or later be used as a destructive colour. Available as{" "}
-            <code className="text-foreground">bg-brand-*</code> for marketing
-            surfaces.
-          </p>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {BRAND.map((name) => {
-            const t = T[`brand.${name}`];
-            if (!t) return null;
-            const label = labelOn(t.value);
-            const cssVar = `--brand-${name}`;
-            return (
-              <div key={name} className="space-y-1.5">
-                <button
-                  type="button"
-                  data-copy={cssVar}
-                  aria-label={`Copy ${cssVar}`}
-                  style={{ background: t.value, color: label.color }}
-                  className={`group relative flex aspect-4/3 w-full cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg p-3 text-center ${FOCUS}`}
-                >
-                  <span className="text-sm font-medium capitalize">
-                    {name.replace("-", " ")}
-                  </span>
-                  <span className="font-mono text-[11px]">{cssVar}</span>
-                  <CopiedMark className="text-3xl" />
-                </button>
-                {/* The hex is the other thing anyone comes here for, so it gets
-                    its own target rather than being the swatch's hidden
-                    payload. */}
-                <CopyChip value={t.value.toUpperCase()} />
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            The gradient, in the order the mark uses it
-          </p>
-          <div
-            className="h-10 rounded-lg"
-            style={{
-              backgroundImage: `linear-gradient(90deg, ${BRAND.map(
-                (n) => T[`brand.${n}`]?.value,
-              ).join(", ")})`,
-            }}
-          />
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <caption className="sr-only">
-              Brand colour contrast against black and white labels
-            </caption>
-            <thead>
-              <tr className="text-muted-foreground text-left text-xs">
-                <th className="py-1.5 pr-4 font-medium">Token</th>
-                <th className="py-1.5 pr-4 font-medium">Hex</th>
-                <th className="py-1.5 pr-4 font-medium">Legible label</th>
-                <th className="py-1.5 font-medium">Ratio</th>
-              </tr>
-            </thead>
-            <tbody>
-              {BRAND.map((name) => {
-                const t = T[`brand.${name}`];
-                if (!t) return null;
-                const label = labelOn(t.value);
-                return (
-                  <tr key={name} className="border-border border-t">
-                    <td className="py-1.5 pr-4">
-                      <code className="text-xs">--brand-{name}</code>
-                    </td>
-                    <td className="py-1.5 pr-4 font-mono text-xs uppercase">{t.value}</td>
-                    <td className="py-1.5 pr-4">
-                      {label.color === "#ffffff" ? "White" : "Black"}
-                    </td>
-                    <td className="py-1.5 tabular-nums">{label.ratio.toFixed(2)}:1</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section id="artefact-palette" className="scroll-mt-20 space-y-4">
-        <div className="space-y-1">
-          <h2 className="text-sm font-medium">Artefact palette</h2>
-          <p className="text-sm text-muted-foreground">
-            What A4 papers and one-pagers are built from. Four hues, each with
-            one tint, and three gradients. Its authority is the Vianova
-            Brandbook&rsquo;s own <code className="text-foreground">Artefact</code>{" "}
-            collections — not the semantic tokens below, which is why nothing
-            here is a token and no{" "}
-            <code className="text-foreground">--artefact-*</code> exists. Listed
-            so there is one place to look.
+            Every colour Vianova uses that is not product UI: the five brand
+            colours, the hues a paper is built from, and what marketing may
+            accent with.
           </p>
           <p className="text-sm text-muted-foreground">
-            The role names belong to that system, not to this one. The{" "}
-            <em>product</em> primary is still{" "}
-            <code className="text-foreground">#0f766e</code>; navy is the
-            primary of a paper. A hue and its tint are a pair — a tint is only
-            ever a ground, never used alone.
+            None of it is a semantic token. Product UI takes its colour from the
+            semantic tier below, where{" "}
+            <code className="text-foreground">primary</code> is the product teal{" "}
+            <code className="text-foreground">#0f766e</code>.
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {ARTEFACT_HUES.map((hue) => {
-            const label = labelOn(hue.hex);
-            const onPaper = contrast(luminance(hue.hex), luminance(ARTEFACT_PAPER));
-            const onTint = contrast(luminance(hue.hex), luminance(hue.tint));
-            const inkOnTint = contrast(luminance(ARTEFACT_INK), luminance(hue.tint));
-            return (
-              <div key={hue.name} className="space-y-1.5">
-                {/* Tint above solid, the pairing the brandbook draws, so the
-                    ground and the mark that sits on it are read together. */}
-                <div className="overflow-hidden rounded-lg">
-                  <div
-                    className="px-3 py-2"
-                    style={{ background: hue.tint, color: ARTEFACT_INK }}
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <h3 className="text-sm font-medium">Brand colours</h3>
+            <p className="text-sm text-muted-foreground">
+              The five brand colours, and the only tokens in this section.
+              Available as <code className="text-foreground">bg-brand-*</code>{" "}
+              for marketing surfaces. None is wired to a semantic role.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {BRAND.map((name) => {
+              const t = T[`brand.${name}`];
+              if (!t) return null;
+              const label = labelOn(t.value);
+              const cssVar = `--brand-${name}`;
+              return (
+                <div key={name} className="space-y-1.5">
+                  <button
+                    type="button"
+                    data-copy={cssVar}
+                    aria-label={`Copy ${cssVar}`}
+                    style={{ background: t.value, color: label.color }}
+                    className={`group relative flex aspect-4/3 w-full cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg p-3 text-center ${FOCUS}`}
                   >
-                    <span className="text-[11px] font-medium">tint</span>
-                    <span className="ml-1.5 font-mono text-[11px]">
-                      {hue.tint.toUpperCase()}
+                    <span className="text-sm font-medium capitalize">
+                      {name.replace("-", " ")}
                     </span>
-                  </div>
-                  <div
-                    className="flex flex-col gap-3 px-3 py-2.5"
-                    style={{ background: hue.hex, color: label.color }}
-                  >
-                    {/* No opacity on either line. `labelOn` picks the ink
-                        that clears 4.5:1 against the solid, and fading it
-                        composites a THIRD colour that does not: white at 80%
-                        on the teal is #d1e4e4, which measures 3.96:1 and
-                        fails at this size. */}
-                    <span className="text-[11px] font-medium tracking-wider uppercase">
-                      {hue.role}
-                    </span>
-                    <span>
-                      <span className="block text-sm font-medium">{hue.name}</span>
-                      <span className="block font-mono text-[11px]">
-                        {hue.hex.toUpperCase()}
+                    <span className="font-mono text-[11px]">{cssVar}</span>
+                    <CopiedMark className="text-3xl" />
+                  </button>
+                  {/* The hex is the other thing anyone comes here for, so it gets
+                      its own target rather than being the swatch's hidden
+                      payload. */}
+                  <CopyChip value={t.value.toUpperCase()} />
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <caption className="sr-only">
+                Brand colour contrast against black and white labels
+              </caption>
+              <thead>
+                <tr className="text-muted-foreground text-left text-xs">
+                  <th className="py-1.5 pr-4 font-medium">Token</th>
+                  <th className="py-1.5 pr-4 font-medium">Hex</th>
+                  <th className="py-1.5 pr-4 font-medium">Legible label</th>
+                  <th className="py-1.5 font-medium">Ratio</th>
+                </tr>
+              </thead>
+              <tbody>
+                {BRAND.map((name) => {
+                  const t = T[`brand.${name}`];
+                  if (!t) return null;
+                  const label = labelOn(t.value);
+                  return (
+                    <tr key={name} className="border-border border-t">
+                      <td className="py-1.5 pr-4">
+                        <code className="text-xs">--brand-{name}</code>
+                      </td>
+                      <td className="py-1.5 pr-4 font-mono text-xs uppercase">{t.value}</td>
+                      <td className="py-1.5 pr-4">
+                        {label.color === "#ffffff" ? "White" : "Black"}
+                      </td>
+                      <td className="py-1.5 tabular-nums">{label.ratio.toFixed(2)}:1</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="artefact-palette" className="scroll-mt-20 space-y-3">
+          <div className="space-y-1">
+            <h3 className="text-sm font-medium">Paper, one-pager and web hues</h3>
+            <p className="text-sm text-muted-foreground">
+              What A4 papers and one-pagers are built from, and usable on the
+              website too. Four hues, each with one tint, from the Vianova
+              Brandbook&rsquo;s <code className="text-foreground">Artefact</code>{" "}
+              collections. Not tokens — there is no{" "}
+              <code className="text-foreground">--artefact-*</code>.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Navy is the primary of a paper; the <em>product</em> primary is{" "}
+              <code className="text-foreground">#0f766e</code>. A hue and its
+              tint are a pair — a tint is a ground, never used alone.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {ARTEFACT_HUES.map((hue) => {
+              const label = labelOn(hue.hex);
+              const onPaper = contrast(luminance(hue.hex), luminance(ARTEFACT_PAPER));
+              const onTint = contrast(luminance(hue.hex), luminance(hue.tint));
+              const inkOnTint = contrast(luminance(ARTEFACT_INK), luminance(hue.tint));
+              return (
+                <div key={hue.name} className="space-y-1.5">
+                  {/* Tint above solid, the pairing the brandbook draws, so the
+                      ground and the mark that sits on it are read together. */}
+                  <div className="overflow-hidden rounded-lg">
+                    <div
+                      className="px-3 py-2"
+                      style={{ background: hue.tint, color: ARTEFACT_INK }}
+                    >
+                      <span className="text-[11px] font-medium">tint</span>
+                      <span className="ml-1.5 font-mono text-[11px]">
+                        {hue.tint.toUpperCase()}
                       </span>
-                    </span>
+                    </div>
+                    <div
+                      className="flex flex-col gap-3 px-3 py-2.5"
+                      style={{ background: hue.hex, color: label.color }}
+                    >
+                      {/* No opacity on either line. `labelOn` picks the ink
+                          that clears 4.5:1 against the solid, and fading it
+                          composites a THIRD colour that does not: white at 80%
+                          on the teal is #d1e4e4, which measures 3.96:1 and
+                          fails at this size. */}
+                      <span className="text-[11px] font-medium tracking-wider uppercase">
+                        {hue.role}
+                      </span>
+                      <span>
+                        <span className="block text-sm font-medium">{hue.name}</span>
+                        <span className="block font-mono text-[11px]">
+                          {hue.hex.toUpperCase()}
+                        </span>
+                      </span>
+                    </div>
                   </div>
+
+                  <p className="text-xs text-muted-foreground">{hue.note}</p>
+
+                  {hue.sameAs ? (
+                    <p className="text-xs text-muted-foreground">
+                      Same colour as{" "}
+                      <code className="text-foreground">{hue.sameAs}</code>.
+                    </p>
+                  ) : null}
+
+                  <div className="flex flex-wrap gap-1">
+                    <CopyChip value={hue.hex.toUpperCase()} />
+                    <CopyChip value={hue.tint.toUpperCase()} />
+                  </div>
+
+                  <dl className="space-y-0.5 text-[11px] text-muted-foreground">
+                    <div className="flex justify-between gap-2">
+                      <dt>On paper</dt>
+                      <dd className="tabular-nums">{onPaper.toFixed(2)}:1</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt>On its tint</dt>
+                      <dd className="tabular-nums">{onTint.toFixed(2)}:1</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt>Ink on tint</dt>
+                      <dd className="tabular-nums">{inkOnTint.toFixed(2)}:1</dd>
+                    </div>
+                  </dl>
+
+                  {hue.displayOnly ? (
+                    <p className="text-xs text-muted-foreground">
+                      <strong className="text-foreground">Display only.</strong>{" "}
+                      {onPaper.toFixed(2)}:1 on paper clears 3:1 for large text and
+                      nothing else. 18pt up, or a fill — never body, caption or a
+                      pill label.
+                    </p>
+                  ) : null}
                 </div>
-
-                <p className="text-xs text-muted-foreground">{hue.note}</p>
-
-                <div className="flex flex-wrap gap-1">
-                  <CopyChip value={hue.hex.toUpperCase()} />
-                  <CopyChip value={hue.tint.toUpperCase()} />
-                </div>
-
-                <dl className="space-y-0.5 text-[11px] text-muted-foreground">
-                  <div className="flex justify-between gap-2">
-                    <dt>On paper</dt>
-                    <dd className="tabular-nums">{onPaper.toFixed(2)}:1</dd>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <dt>On its tint</dt>
-                    <dd className="tabular-nums">{onTint.toFixed(2)}:1</dd>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <dt>Ink on tint</dt>
-                    <dd className="tabular-nums">{inkOnTint.toFixed(2)}:1</dd>
-                  </div>
-                </dl>
-
-                {hue.displayOnly ? (
-                  <p className="text-xs text-muted-foreground">
-                    <strong className="text-foreground">Display only.</strong>{" "}
-                    {onPaper.toFixed(2)}:1 on paper clears 3:1 for large text and
-                    nothing else. 18pt up, or a fill — never body, caption or a
-                    pill label.
-                  </p>
-                ) : null}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            Three gradients, each used whole. No stop is ever pulled out as a
-            flat colour — <code className="text-foreground">brand</code> is the
-            same five values as the brand tokens above.
-          </p>
+        <div id="marketing-accents" className="scroll-mt-20 space-y-3">
+          <div className="space-y-1">
+            <h3 className="text-sm font-medium">Marketing accents</h3>
+            <p className="text-sm text-muted-foreground">
+              Social, ads and campaign pages accent with the five brand colours,
+              and nothing outside them. None of them belongs in product UI.
+            </p>
+          </div>
+
+          {/*
+            Swatches only: the copy targets for these five live in Brand colours
+            above, and a second `data-copy="--brand-*"` for each would give the
+            page two nodes per token -- which reads as a choice to the eye, and
+            fails the colour spec's strict-mode locators.
+          */}
+          <div className="flex flex-wrap gap-2">
+            {BRAND.map((name) => {
+              const t = T[`brand.${name}`];
+              if (!t) return null;
+              return (
+                <div
+                  key={name}
+                  className="flex items-center gap-2 rounded-md border border-border py-1 pr-2.5 pl-1"
+                >
+                  <span
+                    aria-hidden
+                    className="size-6 rounded"
+                    style={{ background: t.value }}
+                  />
+                  <code className="text-xs">--brand-{name}</code>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div id="brand-gradients" className="scroll-mt-20 space-y-3">
+          <div className="space-y-1">
+            <h3 className="text-sm font-medium">Gradients</h3>
+            <p className="text-sm text-muted-foreground">
+              Three, each used whole. No stop is ever pulled out as a flat
+              colour. <code className="text-foreground">brand</code> is the five
+              above.
+            </p>
+          </div>
+
           <div className="space-y-2.5">
-            {ARTEFACT_GRADIENTS.map((g) => (
+            {GRADIENTS.map((g) => (
               <div key={g.name} className="space-y-1">
                 <div
-                  className="h-8 rounded-lg"
+                  className="h-10 rounded-lg"
                   style={{
                     backgroundImage: `linear-gradient(90deg, ${g.stops.join(", ")})`,
                   }}
