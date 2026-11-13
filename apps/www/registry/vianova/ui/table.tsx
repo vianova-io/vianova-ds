@@ -4,15 +4,42 @@ import * as React from "react"
 
 import { cn } from "@/registry/vianova/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+function Table({
+  className,
+  containerClassName,
+  inset,
+  ...props
+}: React.ComponentProps<"table"> & {
+  containerClassName?: string
+  /**
+   * Keep the first and last columns off the edge of whatever encloses the
+   * table -- a card, a section, a sheet. Cells are padded for their
+   * neighbours, which is too tight against a border, and seventeen tables
+   * reached for this in three different ways before it had a name: these
+   * selectors, a `pl-4` written out on every head and every cell, or nothing
+   * at all, which left the text 8px from the edge.
+   *
+   * Only where the table's cells reach that edge themselves. A table inside a
+   * container that already pads -- a dashboard widget's `p-3` body, the Data
+   * Hub's `p-4` panel -- is inset twice by this, and its first column leaves
+   * the heading above it 16px behind.
+   */
+  inset?: boolean
+}) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className={cn("relative w-full overflow-x-auto", containerClassName)}
     >
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
+        data-inset={inset ? "" : undefined}
+        className={cn(
+          "w-full caption-bottom text-sm",
+          inset &&
+            "[&_td:first-child]:pl-4 [&_td:last-child]:pr-4 [&_th:first-child]:pl-4 [&_th:last-child]:pr-4",
+          className
+        )}
         {...props}
       />
     </div>
@@ -23,7 +50,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b", className)}
+      className={cn("[&_tr]:border-b [&_tr]:hover:bg-transparent", className)}
       {...props}
     />
   )

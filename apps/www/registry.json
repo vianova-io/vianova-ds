@@ -4005,6 +4005,31 @@
       }
     },
     {
+      "name": "table-card",
+      "type": "registry:ui",
+      "title": "Table Card",
+      "description": "Table Card — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/table",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/table-card.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "tag-input",
       "type": "registry:ui",
       "title": "Tag Input",
@@ -4043,6 +4068,27 @@
       "files": [
         {
           "path": "registry/vianova/patterns/timeline.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "tool-band",
+      "type": "registry:ui",
+      "title": "Tool Band",
+      "description": "Tool Band — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "registryDependencies": [
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/tool-band.tsx",
           "type": "registry:ui"
         }
       ],
