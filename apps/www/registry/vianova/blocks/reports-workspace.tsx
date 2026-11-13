@@ -52,6 +52,7 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/registry/vianova/ui/alert";
+import { Avatar, AvatarFallback } from "@/registry/vianova/ui/avatar";
 import { Badge } from "@/registry/vianova/ui/badge";
 import { Button } from "@/registry/vianova/ui/button";
 import { Checkbox } from "@/registry/vianova/ui/checkbox";
@@ -194,7 +195,8 @@ export const SAMPLE_REPORTS: Report[] = [
     id: "m-2026-10-freising-district",
     kind: "monthly",
     name: "Monthly report · Freising district · October 2026",
-    summary: "The district and its communes, MyRadl only, Oct 1 to Oct 31, 2026.",
+    summary:
+      "The district and its communes, MyRadl only, Oct 1 to Oct 31, 2026.",
     fleet: "MyRadl",
     territory: "Freising district",
     period: "2026-10",
@@ -334,6 +336,15 @@ const AUTHORS: Record<string, string> = {
   vianova: "Vianova",
   me: "Me",
 };
+
+/** "Anja Reiter" -> "AR", "Vianova" -> "V". */
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 3)
+    .toUpperCase();
 
 function formatCreated(iso: string, now = NOW) {
   const then = Date.parse(iso);
@@ -486,7 +497,10 @@ function RowSkeleton() {
         <Skeleton className="mt-2 h-3 w-80" />
       </TableCell>
       <TableCell>
-        <Skeleton className="h-4 w-20" />
+        <span className="flex items-center gap-2">
+          <Skeleton className="size-5 rounded-full" />
+          <Skeleton className="h-4 w-20" />
+        </span>
       </TableCell>
       <TableCell>
         <Skeleton className="h-4 w-16" />
@@ -495,6 +509,42 @@ function RowSkeleton() {
         <Skeleton className="ml-auto h-8 w-20" />
       </TableCell>
     </TableRow>
+  );
+}
+
+/**
+ * Everyone in a scope sees every export in it, so this column carries a mark
+ * as well as a name: at a glance you want to know whether a row is one of the
+ * platform's monthlies or something a colleague built.
+ *
+ * Two shapes, the same distinction the feeds list draws -- a round disc is a
+ * person, a rounded square is an organisation. Vianova is the platform, and
+ * seven of the eleven rows here are its own, so a round "V" sitting among the
+ * round people would read as one more member of the scope.
+ *
+ * Initials on `muted`, not a photo and not a brand colour: no portraits or
+ * logos ship with the design system, and a tint per author would turn the
+ * column into something about who rather than about what they made.
+ *
+ * size-5 rather than the `sm` size, as in the data hub's Owner fact: 20px is
+ * exactly the line box of the name beside it, and the cell is align-top, so a
+ * 24px disc would push this row's first line below the Name column's.
+ */
+function AuthorMark({ name }: { name: string }) {
+  const organisation = name === "Vianova";
+  return (
+    <Avatar
+      // The name sits right beside it, so the disc is decoration. Hearing
+      // "A R Anja Reiter" is worse than not hearing the disc at all.
+      aria-hidden
+      className={cn("size-5", organisation && "rounded-md after:rounded-md")}
+    >
+      <AvatarFallback
+        className={cn("text-[10px] font-medium", organisation && "rounded-md")}
+      >
+        {initials(name)}
+      </AvatarFallback>
+    </Avatar>
   );
 }
 
@@ -585,9 +635,10 @@ export function ReportsWorkspace({
   const [downloading, setDownloading] = React.useState<Report[] | null>(null);
   const [busy, setBusy] = React.useState<ReportFormat | null>(null);
   const [done, setDone] = React.useState<string | null>(null);
-  const [bin, setBin] = React.useState<{ reports: Report[]; left: number } | null>(
-    null,
-  );
+  const [bin, setBin] = React.useState<{
+    reports: Report[];
+    left: number;
+  } | null>(null);
 
   const canDelete = role === "admin";
 
@@ -853,8 +904,8 @@ export function ReportsWorkspace({
                   : `${bin.reports.length} reports deleted`}
               </AlertTitle>
               <AlertDescription>
-                You can bring {bin.reports.length === 1 ? "it" : "them"} back for{" "}
-                {bin.left} more second{bin.left === 1 ? "" : "s"}.
+                You can bring {bin.reports.length === 1 ? "it" : "them"} back
+                for {bin.left} more second{bin.left === 1 ? "" : "s"}.
               </AlertDescription>
               <AlertAction>
                 <Button variant="outline" size="xs" onClick={restore}>
@@ -907,7 +958,11 @@ export function ReportsWorkspace({
                     Delete
                   </Button>
                 ) : null}
-                <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelected([])}
+                >
                   <X className="size-4" />
                   Clear
                 </Button>
@@ -1088,7 +1143,12 @@ export function ReportsWorkspace({
                             </div>
                           </TableCell>
                           <TableCell className="w-36 align-top text-sm">
-                            {report.createdBy}
+                            <span className="flex min-w-0 items-center gap-2">
+                              <AuthorMark name={report.createdBy} />
+                              <span className="truncate">
+                                {report.createdBy}
+                              </span>
+                            </span>
                           </TableCell>
                           <TableCell className="text-muted-foreground w-28 align-top text-sm">
                             {formatCreated(report.createdAt)}

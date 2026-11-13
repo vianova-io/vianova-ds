@@ -844,6 +844,7 @@
       ],
       "registryDependencies": [
         "@vianova/alert",
+        "@vianova/avatar",
         "@vianova/badge",
         "@vianova/button",
         "@vianova/checkbox",
