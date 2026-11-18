@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Download, Loader2, Monitor, Smartphone, Tablet } from "lucide-react";
+import { Download, Loader2, Monitor, Play, Smartphone, Tablet } from "lucide-react";
 
 import { asset } from "@/lib/asset";
 import { cn } from "@/registry/vianova/lib/utils";
@@ -44,6 +44,24 @@ export function WorkspaceFrame({
   const [scale, setScale] = React.useState(1);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  /**
+   * The frame does not load until asked.
+   *
+   * Measured, not precautionary. Mounting it eagerly put a SECOND full
+   * workspace on every block page -- a second maplibre context with its own
+   * tiles on the map block, a second grid of charts on the dashboard -- and
+   * `focus-ring.spec.ts` went from passing to a 30s timeout on exactly those
+   * two blocks. regulations and reports survived at 21.4s and 17.6s, which
+   * says how little headroom there was.
+   *
+   * `loading="lazy"` was not enough: it saved the phone pass, where the frame
+   * sits below the fold, and did nothing at desktop where it does not. A
+   * reader who came to read the component source should not pay for a
+   * workspace they did not ask to see, so the cost is now opt-in, which fixes
+   * the page and the suite for the same reason.
+   */
+  const [mounted, setMounted] = React.useState(false);
 
   const holderRef = React.useRef<HTMLDivElement>(null);
   const frameRef = React.useRef<HTMLIFrameElement>(null);
@@ -155,7 +173,7 @@ export function WorkspaceFrame({
           <button
             type="button"
             onClick={save}
-            disabled={saving}
+            disabled={saving || !mounted}
             className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs transition-colors hover:bg-accent disabled:opacity-60"
           >
             {saving ? (
@@ -194,31 +212,38 @@ export function WorkspaceFrame({
           the holder and -- with `transformOrigin: top left` -- clipping the
           scaled content. This wrapper is what the centring acts on.
         */}
-        <div
-          className="relative shrink-0"
-          style={{ width: active.w * scale, height: active.h * scale }}
-        >
-          <iframe
-            ref={frameRef}
-            key={`${slug}-${active.id}`}
-            src={asset(`/workspace/${slug}/`)}
-            title={`${title} at ${active.label} width`}
-            width={active.w}
-            height={active.h}
-            /*
-              Three of these pages already mount a live maplibre map above
-              this frame -- the variant comparisons on map, dashboard and
-              regulations. Loading a second one eagerly would put two WebGL
-              contexts on the page before the reader has scrolled to either.
-            */
-            loading="lazy"
-            className="absolute top-0 left-0 block border-0 bg-background"
-            style={{
-              transform: `scale(${scale})`,
-              transformOrigin: "top left",
-            }}
-          />
-        </div>
+        {mounted ? (
+          <div
+            className="relative shrink-0"
+            style={{ width: active.w * scale, height: active.h * scale }}
+          >
+            <iframe
+              ref={frameRef}
+              key={`${slug}-${active.id}`}
+              src={asset(`/workspace/${slug}/`)}
+              title={`${title} at ${active.label} width`}
+              width={active.w}
+              height={active.h}
+              className="absolute top-0 left-0 block border-0 bg-background"
+              style={{
+                transform: `scale(${scale})`,
+                transformOrigin: "top left",
+              }}
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setMounted(true)}
+            className="flex size-full flex-col items-center justify-center gap-1.5 px-6 text-center text-sm text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+          >
+            <Play className="size-5" aria-hidden />
+            <span>Load the {active.label.toLowerCase()} preview</span>
+            <span className="text-xs opacity-80">
+              {title} at {active.w} × {active.h}, in a frame of that width
+            </span>
+          </button>
+        )}
       </div>
     </section>
   );
