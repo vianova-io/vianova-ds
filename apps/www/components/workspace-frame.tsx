@@ -201,7 +201,18 @@ export function WorkspaceFrame({
       */}
       <div
         ref={holderRef}
-        className="flex justify-center overflow-hidden rounded-xl border border-border bg-muted/30"
+        /*
+          Clipped only while the frame is there to clip. `overflow-hidden`
+          exists to contain the iframe, which is laid out at its true pixel
+          width and scaled down -- it overflows by design. The placeholder
+          does not overflow, and leaving the clip on cost it its focus ring:
+          `focus-ring.spec.ts` caught the button being cut on all four sides
+          by about a pixel, on every block page.
+        */
+        className={cn(
+          "flex justify-center rounded-xl border border-border bg-muted/30",
+          mounted && "overflow-hidden",
+        )}
         style={{ height: active.h * scale }}
       >
         {/*
@@ -235,7 +246,7 @@ export function WorkspaceFrame({
           <button
             type="button"
             onClick={() => setMounted(true)}
-            className="flex size-full flex-col items-center justify-center gap-1.5 px-6 text-center text-sm text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+            className="flex size-full flex-col items-center justify-center gap-1.5 rounded-xl px-6 text-center text-sm text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
           >
             <Play className="size-5" aria-hidden />
             <span>Load the {active.label.toLowerCase()} preview</span>
