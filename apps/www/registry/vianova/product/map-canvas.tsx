@@ -45,6 +45,30 @@ export const MAPBOX_STYLES = {
 
 type StyleLike = string | StyleSpecification;
 
+/**
+ * Whether new maps keep their WebGL drawing buffer readable after compositing.
+ *
+ * OFF by default, and that default is the important part. WebGL clears the
+ * drawing buffer once it has been composited, so `canvas.toDataURL()` on a
+ * live map returns a blank image. `preserveDrawingBuffer` stops the clear --
+ * at the cost of an extra full-buffer copy every frame, on every map, for
+ * every consumer who installs this component. Paying that so a docs page can
+ * offer a screenshot button would be the wrong trade for everyone else.
+ *
+ * So it is opt-in, process-wide rather than per-instance: the blocks build
+ * their own `MapCanvas` internally and expose no way to thread a prop down to
+ * it, and adding one to every block to serve a screenshot would be a wider
+ * change than this. The docs' iframe render target turns it on for itself.
+ *
+ * Call it before a map mounts -- the flag is read at construction, and
+ * maplibre cannot change it on a live context.
+ */
+let snapshotMode = false;
+
+export function setMapSnapshotMode(on: boolean) {
+  snapshotMode = on;
+}
+
 export type MapCanvasProps = Omit<React.ComponentProps<"div">, "onLoad"> & {
   /** One style for both schemes, or one per scheme. Defaults follow the theme. */
   mapStyle?: StyleLike | { light: StyleLike; dark: StyleLike };
@@ -258,6 +282,9 @@ export function MapCanvas({
         cooperativeGestures:
           cooperativeGesturesBelow != null &&
           window.innerWidth < cooperativeGesturesBelow,
+        // maplibre-gl 6 moved this under `canvasContextAttributes`; it was a
+        // top-level `preserveDrawingBuffer` in v4 and earlier.
+        canvasContextAttributes: { preserveDrawingBuffer: snapshotMode },
         transformRequest,
       });
     } catch {
