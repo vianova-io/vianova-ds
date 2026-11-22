@@ -255,6 +255,19 @@ type DatasetField = {
    * operators and wrong for anything that runs low to high.
    */
   values?: string[];
+  /**
+   * What colour means across this field's values.
+   *
+   * `identity` (the default) hands each value a hue off the categorical
+   * palette: they are different things, and nothing is between them.
+   * `ordinal` steps along the sequential ramp in `values` order, for a field
+   * whose values are one scale cut into bands. Battery is the case: three
+   * unrelated hues say "teal, blue and orange events", when what the reader
+   * is looking at is low, middling and high.
+   *
+   * It needs `values`, since the order is the scale.
+   */
+  ramp?: "identity" | "ordinal";
   of: (e: AnyEvent) => string;
 };
 
@@ -343,6 +356,7 @@ const BATTERY_FIELD: DatasetField = {
   short: "Battery",
   column: "battery_band",
   values: BATTERY_BANDS,
+  ramp: "ordinal",
   of: (e) => ("batteryBand" in e ? e.batteryBand : ""),
 };
 
@@ -2659,6 +2673,41 @@ const VEHICLE_LABELS: Record<string, string> = {
 const BREAKDOWN_COLORS = CATEGORY_PALETTE;
 
 /**
+ * The sequential ramp, for a field whose values are one scale in bands.
+ *
+ * `--chart-1` to `--chart-5` is the DS's own single-hue ramp, light to dark
+ * in both themes and contrast-pinned at every step -- the thing the
+ * categorical palette was standing in for when `BREAKDOWN_COLORS` was five
+ * of its steps shuffled. Used here for what it is rather than as a source of
+ * hues.
+ */
+const ORDINAL_RAMP = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+] as const;
+
+/**
+ * Band `n` of `count`, along that ramp.
+ *
+ * Spread across the whole ramp rather than taking the first `count` steps:
+ * three bands should run light to dark, not sit together in the pale third
+ * of it. Past five the ramp runs out of pinned steps, so its ends are mixed
+ * instead -- still one hue, still monotone, just not a tested value.
+ */
+function ordinalColor(n: number, count: number) {
+  if (count <= 1) return ORDINAL_RAMP[2];
+  if (count <= ORDINAL_RAMP.length)
+    return ORDINAL_RAMP[
+      Math.round((n * (ORDINAL_RAMP.length - 1)) / (count - 1))
+    ]!;
+  const t = Math.round((n / (count - 1)) * 100);
+  return `color-mix(in oklab, var(--chart-5) ${t}%, var(--chart-1))`;
+}
+
+/**
  * A barlist's or donut's rows: how many of the dataset's rows have each value
  * of a field, in the feed's own order, coloured by operator style when it is
  * operators and by the palette otherwise.
@@ -2668,7 +2717,11 @@ function breakdownRows(data: ReportData, by: Breakdown) {
   // Values the report filters out are not zeros worth a row. Dropped after
   // colouring, so a value keeps its colour whatever else is filtered.
   const kept = data.kept[field.key];
-  return countBy(data.events, field.of, data.values[field.key] ?? [])
+  // Counted over the field's whole vocabulary, so `i` is a value's place on
+  // the scale and not its place among whatever survived the filters -- which
+  // is also what stops a filter repainting the bands that remain.
+  const counted = countBy(data.events, field.of, data.values[field.key] ?? []);
+  return counted
     .map((r, i) => ({
       key: `v${i}`,
       value: r.value,
@@ -2677,7 +2730,9 @@ function breakdownRows(data: ReportData, by: Breakdown) {
       share: r.share,
       color:
         (by === "operator" ? data.styles[r.value]?.color : undefined) ??
-        BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length]!,
+        (field.ramp === "ordinal"
+          ? ordinalColor(i, counted.length)
+          : BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length]!),
     }))
     .filter((r) => !kept?.length || kept.includes(r.value));
 }
