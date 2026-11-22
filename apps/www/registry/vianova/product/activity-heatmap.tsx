@@ -56,6 +56,7 @@ export function ActivityHeatmap({
   formatCount = (n) => n.toLocaleString("en-GB"),
   countUnit,
   ramp = "sequential",
+  fill = false,
   className,
   ...props
 }: React.ComponentProps<"div"> & {
@@ -84,6 +85,17 @@ export function ActivityHeatmap({
    * literally nothing, and the two directions are two hues.
    */
   ramp?: "sequential" | "diverging";
+  /**
+   * Grow the rows to fill the height the grid is given, instead of drawing
+   * them at a fixed 14px.
+   *
+   * A heatmap has no natural height -- seven rows of anything is as valid as
+   * seven rows of 14px -- so in a card whose height the reader sets, the fixed
+   * size leaves whatever is left over empty. Cells keep 14px as a floor, so a
+   * grid squeezed below that overflows its container rather than thinning to
+   * hairlines; give it a scrolling parent.
+   */
+  fill?: boolean;
 }) {
   const stopFor = (v: number) =>
     Math.min(100, Math.max(0, Math.round((v * 100) / 10) * 10));
@@ -154,7 +166,11 @@ export function ActivityHeatmap({
   return (
     <div
       data-slot="activity-heatmap"
-      className={cn("relative space-y-1", className)}
+      className={cn(
+        "relative",
+        fill ? "flex h-full min-h-0 flex-col gap-1" : "space-y-1",
+        className,
+      )}
       ref={gridRef}
       onPointerLeave={() => setHover(null)}
       onPointerMove={(event) => {
@@ -176,11 +192,14 @@ export function ActivityHeatmap({
       {...props}
     >
       {rows.map((row, r) => (
-        <div key={row} className="flex items-center gap-2">
+        <div
+          key={row}
+          className={cn("flex items-center gap-2", fill && "min-h-3.5 flex-1")}
+        >
           <span className="w-14 shrink-0 truncate text-[10px] text-muted-foreground">
             {row}
           </span>
-          <div className="flex flex-1 gap-px">
+          <div className={cn("flex flex-1 gap-px", fill && "h-full")}>
             {(values[r] ?? []).map((v, c) => {
               const cell = describe(r, c);
               return (
@@ -191,7 +210,8 @@ export function ActivityHeatmap({
                     unitFor(cell) ? ` ${unitFor(cell)}` : ""
                   }`}
                   className={cn(
-                    "h-3.5 flex-1 rounded-[1px]",
+                    "flex-1 rounded-[1px]",
+                    fill ? "h-full" : "h-3.5",
                     hover?.rowIndex === r && hover?.columnIndex === c &&
                       "outline outline-1 outline-offset-1 outline-foreground/40",
                   )}

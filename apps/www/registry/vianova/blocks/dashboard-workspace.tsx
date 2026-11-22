@@ -3275,15 +3275,20 @@ function MatrixBody({ data }: { data: ReportData }) {
 
   if (!previous || !grids.diff || !grids.before) {
     return (
-      <div className="space-y-2">
-        <ActivityHeatmap
-          rows={WEEKDAY_LABELS}
-          columns={HOUR_LABELS}
-          values={weekHourGrid(data.events)}
-          counts={grids.now}
-          countUnit={data.dataset.noun}
-        />
-        <HourScale />
+      <div className="flex h-full min-h-0 flex-col gap-2">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <ActivityHeatmap
+            fill
+            rows={WEEKDAY_LABELS}
+            columns={HOUR_LABELS}
+            values={weekHourGrid(data.events)}
+            counts={grids.now}
+            countUnit={data.dataset.noun}
+          />
+        </div>
+        <div className="shrink-0">
+          <HourScale />
+        </div>
       </div>
     );
   }
@@ -3293,11 +3298,14 @@ function MatrixBody({ data }: { data: ReportData }) {
   /*
     The grids scroll; the control, the hour scale and the legend do not.
 
-    Change is one grid and fits the size this widget is handed out at.
-    Levels is two, plus a caption each, and does not -- it is the optional
-    view, so it is the one that gives way. Pinning the scale and the legend
-    matters more than it looks: they are what say which number a shade is,
-    and a reader who has scrolled away from them is reading a picture.
+    Change is one grid, and it grows to fill whatever height the card has:
+    a heatmap has no natural size, so drawing seven 14px rows in a card the
+    reader stretched just leaves the rest of the card empty. Levels is two
+    grids plus a caption each, which will not fit twice over -- it is the
+    optional view, so it is the one that gives way and scrolls. Pinning the
+    scale and the legend matters more than it looks: they are what say which
+    number a shade is, and a reader who has scrolled away from them is
+    reading a picture.
   */
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
@@ -3315,15 +3323,18 @@ function MatrixBody({ data }: { data: ReportData }) {
       </div>
 
       {changing ? (
-        <ActivityHeatmap
-          rows={WEEKDAY_LABELS}
-          columns={HOUR_LABELS}
-          ramp="diverging"
-          values={grids.diff.map((row) => row.map((v) => v / grids.peak))}
-          counts={grids.diff}
-          formatCount={(n) => `${n > 0 ? "+" : ""}${n.toLocaleString("en")}`}
-          countUnit={data.dataset.noun}
-        />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <ActivityHeatmap
+            fill
+            rows={WEEKDAY_LABELS}
+            columns={HOUR_LABELS}
+            ramp="diverging"
+            values={grids.diff.map((row) => row.map((v) => v / grids.peak))}
+            counts={grids.diff}
+            formatCount={(n) => `${n > 0 ? "+" : ""}${n.toLocaleString("en")}`}
+            countUnit={data.dataset.noun}
+          />
+        </div>
       ) : (
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
           {(
