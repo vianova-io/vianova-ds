@@ -107,6 +107,17 @@ export function CompareLegend({ className }: { className?: string }) {
 }
 
 /**
+ * Compact mode: the card is being rendered at a real dashboard widget size.
+ *
+ * The argument-carrying note is dropped and the padding tightens to the
+ * product's, because the question being asked has changed. On the main page
+ * the note is half the deliverable. Inside a 238px box it would be the whole
+ * of it, and the thing under test -- whether the chart survives that width --
+ * would be pushed out of frame by the prose explaining that it does.
+ */
+export const CompactContext = React.createContext(false);
+
+/**
  * The card every treatment sits in.
  *
  * Not `ChartCard` from the registry: that one is sized for a slot inside a
@@ -128,21 +139,34 @@ export function TreatmentCard({
   control?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const compact = React.useContext(CompactContext);
+
   return (
-    <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+    <section
+      className={cn(
+        "flex flex-col rounded-xl border border-border bg-card",
+        compact ? "h-full gap-2 p-3" : "gap-3 p-4",
+      )}
+    >
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div className="space-y-0.5">
           <h2 className="text-sm font-medium">{title}</h2>
-          <p className="font-mono text-[11px] text-muted-foreground">{kind}</p>
+          {compact ? null : (
+            <p className="font-mono text-[11px] text-muted-foreground">
+              {kind}
+            </p>
+          )}
         </div>
         {control}
       </header>
 
       <div className="min-h-0">{children}</div>
 
-      <p className="border-t border-border pt-2 text-xs leading-relaxed text-muted-foreground">
-        {note}
-      </p>
+      {compact ? null : (
+        <p className="border-t border-border pt-2 text-xs leading-relaxed text-muted-foreground">
+          {note}
+        </p>
+      )}
     </section>
   );
 }

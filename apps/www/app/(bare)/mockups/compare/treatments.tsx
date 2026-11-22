@@ -5,8 +5,11 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ComposedChart,
   Line,
+  Pie,
+  PieChart,
   XAxis,
   YAxis,
 } from "recharts";
@@ -65,7 +68,6 @@ export function SeriesLine() {
       kind="series · line"
       note="Ghost line. Both periods on one axis, previous dashed and recessive behind current. This is the case where overlaying is simply correct — the shapes are directly comparable, the crossing in week three is visible at a glance, and nothing is hidden at any moment. No control: there is no second treatment worth offering."
     >
-      <CompareLegend className="mb-2" />
       <ChartContainer config={config} className="aspect-auto h-[200px] w-full">
         <ComposedChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} className="stroke-border" />
@@ -92,6 +94,7 @@ export function SeriesLine() {
           />
         </ComposedChart>
       </ChartContainer>
+      <CompareLegend className="mt-2" />
     </TreatmentCard>
   );
 }
@@ -108,7 +111,6 @@ export function SeriesBar() {
       kind="series · bar"
       note="Paired bars, previous at lower opacity. Reads cleanly up to roughly a dozen categories and then collapses — which is the honest limit of this treatment, and the reason the line version keeps all thirty days while this one shows ten."
     >
-      <CompareLegend className="mb-2" />
       <ChartContainer config={config} className="aspect-auto h-[200px] w-full">
         <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} className="stroke-border" />
@@ -129,6 +131,7 @@ export function SeriesBar() {
           />
         </BarChart>
       </ChartContainer>
+      <CompareLegend className="mt-2" />
     </TreatmentCard>
   );
 }
@@ -217,7 +220,6 @@ export function Barlist() {
       kind="barlist"
       note="One track per row: the solid bar is this period, the dashed tick is where the previous one reached. Rows stay in CURRENT order, so Tier visibly slipped below Dott rather than the whole list reshuffling — a side-by-side barlist would have moved both rows and shown neither change."
     >
-      <CompareLegend className="mb-3" />
       <div className="space-y-2.5">
         {barlist.map((r) => {
           const d = delta(r.current, r.previous);
@@ -251,6 +253,7 @@ export function Barlist() {
           );
         })}
       </div>
+      <CompareLegend className="mt-3" />
     </TreatmentCard>
   );
 }
@@ -265,53 +268,58 @@ const DONUT_COLORS = [
 ];
 
 /**
- * Two 100%-stacked bars, one per period.
+ * A donut, drawn for THIS period only.
  *
- * The donut's actual job is COMPOSITION, and composition is what a donut is
- * worst at comparing: two rings means judging two sets of angles against each
- * other, which no one can do. Two stacked bars put the same shares on a
- * straight line, where a segment that grew is simply longer. The 2px gaps are
- * the house rule for adjacent fills -- without them the boundary between two
- * categorical hues is an illusion of a third colour.
+ * It stays a donut. The composition question -- what the mix is -- is what
+ * the chart is for and what it answers well, so the chart keeps its job and
+ * compare does not get to change it.
+ *
+ * Which leaves one decision: where the previous period goes. Not a second
+ * ring, because two rings means judging two sets of angles against each
+ * other at two different radii, and the inner ring's segments are shorter
+ * for the same share. So the previous period is carried in the legend
+ * underneath, as a figure and a signed change per slice -- numbers being
+ * exactly what angles are bad at and a legend row is good at.
  */
-function ShareBars() {
+const donutConfig = Object.fromEntries(
+  donut.map((r, i) => [
+    r.label,
+    { label: r.label, color: DONUT_COLORS[i % DONUT_COLORS.length] ?? CURRENT },
+  ]),
+) satisfies ChartConfig;
+
+/*
+  118px, not 132. The ring plus a four-row legend has to clear a 2-row card,
+  and at 132 it ran 6px past it at every width -- a chart that does not fit
+  the size the library gives it is not finished.
+*/
+function DonutRing() {
   return (
-    <div className="space-y-3">
-      {(["current", "previous"] as const).map((period) => {
-        const total = donut.reduce((n, r) => n + r[period], 0);
-        return (
-          <div key={period} className="space-y-1">
-            <p className="text-[11px] text-muted-foreground">
-              {PERIODS[period].label}{" "}
-              <span className="opacity-70">{PERIODS[period].range}</span>
-            </p>
-            <div className="flex h-6 gap-0.5">
-              {donut.map((r, i) => {
-                const pct = (r[period] / total) * 100;
-                return (
-                  <div
-                    key={r.label}
-                    title={`${r.label} — ${pct.toFixed(1)}% (${fmt(r[period])})`}
-                    className="flex items-center justify-center overflow-hidden rounded-[3px] text-[10px] tabular-nums"
-                    style={{
-                      width: `${pct}%`,
-                      background: DONUT_COLORS[i % DONUT_COLORS.length],
-                      // The segments are the only thing carrying the share, so
-                      // a number goes INSIDE wherever one fits -- which is the
-                      // direct label the dataviz rules ask for, and the reason
-                      // this view needs no second reading of the legend.
-                      color: "var(--card)",
-                    }}
-                  >
-                    {pct >= 9 ? `${Math.round(pct)}%` : null}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    <ChartContainer config={donutConfig} className="aspect-auto h-[118px] w-full">
+      <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+        <Pie
+          data={donut}
+          dataKey="current"
+          nameKey="label"
+          innerRadius="56%"
+          outerRadius="92%"
+          /*
+            The 2px surface ring is the house rule for adjacent fills: without
+            it the boundary between two categorical hues reads as a third.
+          */
+          stroke="var(--card)"
+          strokeWidth={2}
+          isAnimationActive={false}
+        >
+          {donut.map((r, i) => (
+            <Cell
+              key={r.label}
+              fill={DONUT_COLORS[i % DONUT_COLORS.length] ?? CURRENT}
+            />
+          ))}
+        </Pie>
+      </PieChart>
+    </ChartContainer>
   );
 }
 
@@ -320,30 +328,31 @@ export function Donut() {
     <TreatmentCard
       title="Trips by vehicle type"
       kind="donut"
-      note="The donut is REPLACED while comparing, and comes back when compare is off. It is the one card where the answer was to change the chart rather than to add a second series to it: a donut's job is composition, and composition is exactly what a donut compares worst — two rings means judging two sets of angles against each other, which no one can do. Concentric rings and a single ring with the deltas in the legend were both built and both lost to this; the rings version was the least readable thing on the page. The cost is honest and small: the widget changes shape when a compare date is set."
+      note="The donut stays a donut. The ring draws this period, and the previous one lives in the legend below as a figure and a signed change per slice — the comparison carried by numbers rather than by a second set of angles, which is the one thing a donut genuinely cannot show. Colour keeps meaning vehicle type in both periods, so no hue is spent on the comparison. If the previous composition has to be DRAWN rather than tabulated, the honest option is a second donut beside this one, not a second ring inside it: an inner ring's segments are shorter for the same share, which makes every slice look like it shrank."
     >
-      <div className="space-y-3">
-        <ShareBars />
+      <DonutRing />
 
-        <ul className="space-y-1.5 text-xs">
-          {donut.map((r, i) => (
-            <li key={r.label} className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-1.5">
-                <span
-                  aria-hidden
-                  className="size-2.5 rounded-sm"
-                  style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }}
-                />
-                {r.label}
+      <ul className="mt-3 space-y-1.5 text-xs">
+        {donut.map((r, i) => (
+          <li key={r.label} className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5">
+              <span
+                aria-hidden
+                className="size-2.5 rounded-sm"
+                style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }}
+              />
+              {r.label}
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="font-mono tabular-nums">{fmt(r.current)}</span>
+              <span className="font-mono tabular-nums text-muted-foreground">
+                was {fmt(r.previous)}
               </span>
-              <span className="flex items-center gap-2">
-                <span className="font-mono tabular-nums">{fmt(r.current)}</span>
-                <DeltaChip value={delta(r.current, r.previous)} />
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
+              <DeltaChip value={delta(r.current, r.previous)} />
+            </span>
+          </li>
+        ))}
+      </ul>
     </TreatmentCard>
   );
 }
@@ -486,8 +495,6 @@ export function Matrix() {
       note="Here the colour already means the metric, so there is no faded second series to add — and two ramps would be two rulers. Change is the default: one grid, a diverging ramp, neutral at no-change, and you read the 08:00 block going brown and 17:00 going teal without being told. It is the one view that cannot report a level, so Levels keeps both grids on ONE shared maximum — which is why September is paler there, a fact the old per-period scaling hid. The wipe-reveal that used to sit here is gone: its only real advantage was making a moved peak unmissable, and Change does that without asking anyone to drag anything. It stays on the sankey, and it is the right control for a map, where two of them side by side will not fit."
     >
       <div className="space-y-2">
-        {view === "diff" ? <DiffLegend /> : <ScaleLegend />}
-
         {view === "side" ? (
           <div className="grid gap-3 sm:grid-cols-2">
             {(["previous", "current"] as const).map((p) => (
@@ -507,6 +514,8 @@ export function Matrix() {
             <DiffGrid />
           </div>
         )}
+
+        {view === "diff" ? <DiffLegend /> : <ScaleLegend />}
       </div>
     </TreatmentCard>
   );
@@ -633,8 +642,6 @@ export function Sankey() {
       note="Two views, chosen after building four. CHANGE is the default: October's layout, each ribbon recoloured by its direction of travel — the heatmap's rule applied to ribbons, so Airport reads as pure gain. It needed a new `linkColor` prop on SankeyFlow, which tints by source otherwise. FLOW LIST is the drill-down: every origin-destination pair ranked by what moved, with the figures Change cannot report. The two that were cut: side-by-side diagrams, because Change already makes an appearing ribbon unmistakable and two sankeys at widget width are cramped; and the wipe-reveal, which is simply broken here — adding Airport shifts every node, so the two diagrams' labels land on top of each other rather than one ribbon changing."
     >
       <div className="space-y-2">
-        <FlowChangeLegend />
-
         {view === "change" ? (
           <div className="h-[240px]">
             <FlowChange />
@@ -642,6 +649,8 @@ export function Sankey() {
         ) : (
           <FlowList />
         )}
+
+        {view === "change" ? <FlowChangeLegend /> : null}
       </div>
     </TreatmentCard>
   );

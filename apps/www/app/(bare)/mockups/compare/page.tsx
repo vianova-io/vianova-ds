@@ -49,7 +49,9 @@ export default function CompareMockupPage() {
         <div>
           <h1 className="text-lg font-semibold">Compare date — treatments</h1>
           <p className="text-sm text-muted-foreground">
-            One proposal per chart type. Mockup, not shipped code.
+            One proposal per chart type. Mockup, not shipped code. Every card
+            here is 544px wide; the companion page renders the same eight at
+            the four widths a real dashboard widget can have.
           </p>
         </div>
 
