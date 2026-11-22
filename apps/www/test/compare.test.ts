@@ -3,6 +3,9 @@ import { describe, it } from "node:test";
 
 import {
   compareBlockedReason,
+  datesFromPeriod,
+  dayFromDate,
+  periodFromDates,
   compareCounts,
   divergingColor,
   divergingLegend,
@@ -212,5 +215,27 @@ describe("compareBlockedReason", () => {
   it("allows the two kinds that carry a period", () => {
     assert.equal(compareBlockedReason("events"), null);
     assert.equal(compareBlockedReason("aggregate"), null);
+  });
+});
+
+describe("calendar dates", () => {
+  it("names the day the person picked, not the UTC one", () => {
+    // 16 Sep at local midnight is the 15th in UTC for anyone east of
+    // Greenwich. The picker means the 16th.
+    const picked = new Date(2026, 8, 16);
+    assert.equal(dayFromDate(picked), "2026-09-16");
+  });
+
+  it("round-trips a period through the calendar", () => {
+    const period = { start: "2026-09-16", end: "2026-09-30" };
+    const { from, to } = datesFromPeriod(period);
+    assert.deepEqual(periodFromDates(from, to), period);
+  });
+
+  it("orders a range the user dragged backwards", () => {
+    assert.deepEqual(
+      periodFromDates(new Date(2026, 8, 30), new Date(2026, 8, 16)),
+      { start: "2026-09-16", end: "2026-09-30" },
+    );
   });
 });

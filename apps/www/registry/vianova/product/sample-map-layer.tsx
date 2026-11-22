@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { format } from "date-fns";
 import { ListFilter } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
 
@@ -21,6 +22,14 @@ import { FilterBuilder } from "@/registry/vianova/product/filter-builder";
 import { FilterFacets } from "@/registry/vianova/product/filter-facets";
 import { LegendCategorical } from "@/registry/vianova/product/legend-categorical";
 import { LegendRamp } from "@/registry/vianova/product/legend-ramp";
+import {
+  compareBlockedReason,
+  datesFromPeriod,
+  previousPeriod,
+  withinPeriod,
+  type Period,
+} from "@/registry/vianova/lib/compare";
+import { DateComparePanel } from "@/registry/vianova/product/date-compare-panel";
 import {
   PanelStep,
   PanelStepBody,
@@ -126,6 +135,15 @@ const plain = new Intl.NumberFormat("en");
  * visualisations and silently does nothing for five of them is worse than one
  * that says which two apply and why.
  */
+/**
+ * Why a feed that claims to be an events log still cannot be cut into
+ * periods: nobody said which column holds the time. Distinct from the
+ * snapshot and static reasons, which are about what the rows MEAN -- this one
+ * is a gap in the feed's description, and it is fixable.
+ */
+const NO_DATE_COLUMN =
+  "This layer has no date column declared, so there is no period to read it over.";
+
 const UNAVAILABLE: Record<"point" | "area", readonly VisualizationTypeId[]> = {
   point: ["clusters", "grid", "heatmap", "lines", "zones", "trips"],
   area: ["points", "clusters", "grid", "heatmap", "lines", "trips"],
@@ -184,6 +202,38 @@ export function SampleMapLayer({
    */
   sizeControl?: "shipped" | "panel";
 }) {
+  /**
+   * The period this layer is read over, and what it is read against.
+   *
+   * Per layer rather than per workspace, which is the decision the block
+   * already made for filters, colour and size: a map holds feeds that do not
+   * share a calendar -- an events log beside a static zone set -- and one
+   * date control over all of them would have to be disabled by whichever
+   * layer could not use it.
+   *
+   * `comparePeriod` stays null until someone overrides it, so the derived
+   * "period before, same length" keeps following the main range.
+   */
+  const [period, setPeriod] = React.useState<Period>(() =>
+    feed.dateRange
+      ? { start: feed.dateRange[0], end: feed.dateRange[1] }
+      // Only a feed with no declared range falls through here, and every such
+      // feed is one the panel refuses to put a picker on -- so this is a
+      // placeholder to satisfy the type, not a period anyone is shown. It
+      // matches the sample month so that a feed which later declares a date
+      // column lands somewhere its data exists.
+      : { start: "2026-09-01", end: "2026-09-30" },
+  );
+  const [comparing, setComparing] = React.useState(false);
+  const [comparePeriod, setComparePeriod] = React.useState<Period | null>(null);
+  const against = React.useMemo(
+    () => comparePeriod ?? previousPeriod(period),
+    [comparePeriod, period],
+  );
+  const blockedReason = compareBlockedReason(feed.temporal);
+  /** Only an events feed has rows to cut into periods at all. */
+  const datedBy = feed.temporal === "events" ? feed.dateColumn : undefined;
+
   const [sample, setSample] = React.useState<ParsedSample | null>(null);
   const [failed, setFailed] = React.useState(false);
   const [filter, setFilter] = React.useState<FilterGroup>(() =>
@@ -207,9 +257,12 @@ export function SampleMapLayer({
    * render at the same anchor, one on top of the other. One state makes
    * "never both" structural rather than something every handler remembers.
    */
-  const [chain, setChain] = React.useState<"colorize" | "size" | null>(null);
+  const [chain, setChain] = React.useState<
+    "colorize" | "size" | "date" | null
+  >(null);
   const colorizeOpen = chain === "colorize";
   const sizeOpen = chain === "size";
+  const dateOpen = chain === "date";
   const setColorizeOpen = React.useCallback(
     (open: boolean) => setChain(open ? "colorize" : null),
     [],
@@ -238,6 +291,7 @@ export function SampleMapLayer({
 
   const uid = React.useId();
   const colorizeTriggerId = `${uid}-colorize`;
+  const dateTriggerId = `${uid}-date`;
   const sizeTriggerId = `${uid}-size`;
   const browsePresetsId = `${uid}-preset`;
 
@@ -399,13 +453,40 @@ export function SampleMapLayer({
   );
 
   /** The rows a filter leaves, as records, which is what everything else reads. */
-  const rows = React.useMemo(() => {
+  /** Every row as an object, before any filter. */
+  const allRows = React.useMemo(() => {
     if (!sample) return [];
-    const all = sample.rows.map((row) =>
+    return sample.rows.map((row) =>
       Object.fromEntries(sample.header.map((h, i) => [h, row[i] ?? ""])),
     );
-    return all.filter((row) => predicate(row));
-  }, [predicate, sample]);
+  }, [sample]);
+
+  /**
+   * The date cut, kept separate from the condition filter.
+   *
+   * A layer with no date column is unaffected: a static zone set is not
+   * "outside the period", it simply has no period, and silently emptying it
+   * because it has no timestamps would be the worst possible reading.
+   */
+  const inPeriod = React.useCallback(
+    (row: Record<string, string>, p: Period) =>
+      !datedBy || withinPeriod(row[datedBy] ?? "", p),
+    [datedBy],
+  );
+
+  const rows = React.useMemo(
+    () => allRows.filter((row) => predicate(row) && inPeriod(row, period)),
+    [allRows, predicate, inPeriod, period],
+  );
+
+  /** The same rows read over the comparison period. */
+  const previousRows = React.useMemo(
+    () =>
+      comparing && !blockedReason && datedBy
+        ? allRows.filter((row) => predicate(row) && inPeriod(row, against))
+        : [],
+    [allRows, predicate, inPeriod, against, comparing, blockedReason, datedBy],
+  );
 
   const keep = React.useCallback(
     (row: Record<string, string>) => predicate(row),
@@ -696,10 +777,38 @@ export function SampleMapLayer({
     );
   }, [edges]);
 
+  /** "16–30 Sep", and the period it is read against when comparing. */
+  const periodLabel = React.useMemo(() => {
+    if (!datedBy) return null;
+    // "16–30 Sep" within a month, "28 Aug–3 Sep" across one. The month goes
+    // where English puts it, which is after the day it qualifies.
+    // date-fns, not toLocaleDateString: "en" is en-US and puts the month
+    // first, which gave "1–Sep 30". DateRangePicker formats "d MMM yyyy", so
+    // the line under a card has to read the same way round as the control
+    // that sets it.
+    const span = (p: Period) => {
+      const { from, to } = datesFromPeriod(p);
+      // A single day is a date, not a range: "16 Sep", never "16-16 Sep".
+      if (p.start === p.end) return format(from, "d MMM");
+      return from.getMonth() === to.getMonth() &&
+        from.getFullYear() === to.getFullYear()
+        ? `${format(from, "d")}–${format(to, "d MMM")}`
+        : `${format(from, "d MMM")}–${format(to, "d MMM")}`;
+    };
+    return comparing && !blockedReason
+      ? `${span(period)} vs ${span(against)}`
+      : span(period);
+  }, [datedBy, period, against, comparing, blockedReason]);
+
   const meta = failed
     ? `Data unavailable — ${feed.file} did not load`
     : sample
-      ? `${plain.format(rows.length)} of ${plain.format(sample.rows.length)} · ${feed.rowRepresents}`
+      ? [
+          periodLabel,
+          `${plain.format(rows.length)} of ${plain.format(sample.rows.length)} · ${feed.rowRepresents}`,
+        ]
+          .filter(Boolean)
+          .join(" · ")
       : visible
         ? "Loading…"
         : feed.rowRepresents;
@@ -755,6 +864,16 @@ export function SampleMapLayer({
         }
         colorizeOpen={colorizeOpen}
         colorizeTriggerId={colorizeTriggerId}
+        // Only an events feed can be cut into periods, but the panel still
+        // opens for the others: it is where the reason lives, and a meta line
+        // that does nothing when clicked teaches nothing.
+        onDateRange={
+          sample
+            ? () => setChain((c) => (c === "date" ? null : "date"))
+            : undefined
+        }
+        dateRangeOpen={dateOpen}
+        dateRangeTriggerId={dateTriggerId}
         filters={Boolean(sample)}
         filterCount={conditions || undefined}
         filtersAction={
@@ -921,6 +1040,33 @@ export function SampleMapLayer({
             onRadiusRangeChange={setSizeRadiusRange}
             widthRange={sizeWidthRange}
             onWidthRangeChange={setSizeWidthRange}
+          />
+        </PanelStep>
+      ) : null}
+
+      {/* A third sibling at depth 1, beside Colorize and Size. A period is
+          not a colour setting nor a size one. */}
+      {sample ? (
+        <PanelStep
+          id={`${feed.id}-date`}
+          title={`Date · ${feed.title}`}
+          width={360}
+          open={dateOpen}
+          onOpenChange={(open) => setChain(open ? "date" : null)}
+          triggerId={dateTriggerId}
+        >
+          <DateComparePanel
+            showHeader={false}
+            className="w-auto rounded-none border-0 bg-transparent shadow-none"
+            period={period}
+            onPeriodChange={setPeriod}
+            comparing={comparing}
+            onComparingChange={setComparing}
+            comparePeriod={comparePeriod ?? undefined}
+            onComparePeriodChange={(next) => setComparePeriod(next ?? null)}
+            blockedReason={datedBy ? null : (blockedReason ?? NO_DATE_COLUMN)}
+            compareEmpty={comparing && !blockedReason && previousRows.length === 0}
+            noun={feed.title.toLowerCase()}
           />
         </PanelStep>
       ) : null}

@@ -71,6 +71,9 @@ export function DataLayerCard({
   onColorize,
   colorizeOpen = false,
   colorizeTriggerId,
+  onDateRange,
+  dateRangeOpen = false,
+  dateRangeTriggerId,
   children,
   className,
   ...props
@@ -137,6 +140,20 @@ export function DataLayerCard({
   colorizeOpen?: boolean;
   /** Ids the legend's control, so a docked stepper can return focus to it. */
   colorizeTriggerId?: string;
+  /**
+   * Makes the meta line open this layer's date range and comparison.
+   *
+   * The meta line is where the period is already written, so it is the thing
+   * a reader would reach for to change it -- the same argument that makes the
+   * legend open Colorize, and the same construction: a control laid over the
+   * line rather than wrapped around it, so the text keeps its semantics and
+   * the button carries its own name.
+   */
+  onDateRange?: () => void;
+  /** Whether the panel `onDateRange` opens is showing. */
+  dateRangeOpen?: boolean;
+  /** Ids the meta line's control, so a docked stepper can return focus. */
+  dateRangeTriggerId?: string;
   /** Extra controls for the active visualisation, e.g. its source file. */
   children?: React.ReactNode;
 }) {
@@ -241,10 +258,28 @@ export function DataLayerCard({
       </div>
 
       {meta ? (
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground [&_svg]:size-3.5">
-          {metaIcon}
-          {meta}
-        </p>
+        onDateRange ? (
+          <div className="relative">
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground [&_svg]:size-3.5">
+              {metaIcon}
+              {meta}
+            </p>
+            <button
+              type="button"
+              id={dateRangeTriggerId}
+              aria-label={`Set the date range for ${name}`}
+              aria-haspopup="dialog"
+              aria-expanded={dateRangeOpen}
+              onClick={onDateRange}
+              className="absolute -inset-1 rounded-md transition-colors hover:bg-accent/40 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+            />
+          </div>
+        ) : (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground [&_svg]:size-3.5">
+            {metaIcon}
+            {meta}
+          </p>
+        )
       ) : null}
 
       {legendNode === null ? null : onColorize ? (

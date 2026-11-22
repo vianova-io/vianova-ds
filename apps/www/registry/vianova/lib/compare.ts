@@ -77,6 +77,34 @@ export function withinPeriod(timestamp: string, period: Period): boolean {
   return day >= period.start && day <= period.end;
 }
 
+/**
+ * A `Date` as the day the person looking at it would call it.
+ *
+ * Local components, not `toISOString`: a calendar hands back midnight LOCAL,
+ * and for anyone east of Greenwich that is the previous day in UTC. Picking
+ * "16 September" and filtering from the 15th is the bug this avoids.
+ */
+export function dayFromDate(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** A calendar's two dates as a period. */
+export function periodFromDates(from: Date, to: Date): Period {
+  const a = dayFromDate(from);
+  const b = dayFromDate(to);
+  return a <= b ? { start: a, end: b } : { start: b, end: a };
+}
+
+/** A period as two local dates, for a calendar to show. */
+export function datesFromPeriod(period: Period): { from: Date; to: Date } {
+  const at = (day: string) => {
+    const [y, m, d] = day.split("-").map(Number);
+    return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1);
+  };
+  return { from: at(period.start), to: at(period.end) };
+}
+
 /** One unit -- a zone, a cell, a road segment -- counted in both periods. */
 export type Comparison = {
   key: string;
