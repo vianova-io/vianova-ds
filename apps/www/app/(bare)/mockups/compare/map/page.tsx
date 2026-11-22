@@ -467,7 +467,10 @@ export default function CompareMapPage() {
             onStyleReady={setMap}
           />
 
-          <div className="bg-card/95 border-input absolute bottom-3 left-3 w-60 rounded-md border p-2.5 shadow-sm backdrop-blur">
+          {/* Top-left, not bottom-left: MapCanvas puts its own compass and
+              attribution along the bottom edge, and they draw over a legend
+              parked there. */}
+          <div className="bg-card/95 border-input absolute left-3 top-3 w-60 rounded-md border p-2.5 shadow-sm backdrop-blur">
             {comparing && !blocked ? (
               <>
                 <p className="text-muted-foreground mb-1.5 text-[10px] font-medium uppercase tracking-wide">
@@ -482,8 +485,7 @@ export default function CompareMapPage() {
                   ]}
                 />
                 <p className="text-muted-foreground mt-1.5 text-[10px] leading-snug">
-                  Symmetric around zero, so unchanged districts stay neutral and
-                  let the city show through.
+                  Symmetric around zero — unchanged districts stay neutral.
                   {withheld > 0 ? (
                     <>
                       {" "}
@@ -524,7 +526,9 @@ export default function CompareMapPage() {
             component cannot know whether more infringements is good news. */}
         <aside className="border-input flex min-h-0 flex-col overflow-hidden rounded-lg border">
           <div className="border-input border-b px-3 py-2">
-            <h2 className="text-sm font-medium">Districts by change</h2>
+            <h2 className="text-sm font-medium">
+              {comparing && !blocked ? "Districts by change" : "Districts"}
+            </h2>
             <p className="text-muted-foreground text-[11px]">
               {loading
                 ? "Loading…"
