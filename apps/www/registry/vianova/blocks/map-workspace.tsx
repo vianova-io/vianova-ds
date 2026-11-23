@@ -660,7 +660,16 @@ export function MapWorkspace({
    */
   sizeControl?: "shipped" | "panel";
 }) {
-  const [title, setTitle] = React.useState("Zürich vehicle flows");
+  /**
+   * Named for what the map opens with, not for the flows.
+   *
+   * DEFAULT_LAYERS switches the two Lisbon samples on and leaves the Zürich
+   * flows listed but off, and an effect then flies the camera to Lisbon -- so
+   * "Zürich vehicle flows" named the one layer that is not being drawn, over a
+   * map showing Odivelas and Almada. The reader can rename it; the default
+   * should not start out contradicting the viewport.
+   */
+  const [title, setTitle] = React.useState("Lisbon mobility");
   const [all, setAll] = React.useState<FlowFeature[] | null>(null);
   const [failed, setFailed] = React.useState(false);
   const [filter, setFilter] = React.useState<FilterGroup>(() =>
