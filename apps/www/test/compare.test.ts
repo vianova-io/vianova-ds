@@ -5,6 +5,12 @@ import {
   compareBlockedReason,
   datesFromPeriod,
   dayFromDate,
+  formatPeriod,
+  formatTemporal,
+  withinTemporal,
+  withinHours,
+  weekdayOf,
+  DATE_SHORTCUTS,
   periodFromDates,
   compareCounts,
   divergingColor,
@@ -237,5 +243,165 @@ describe("calendar dates", () => {
       periodFromDates(new Date(2026, 8, 30), new Date(2026, 8, 16)),
       { start: "2026-09-16", end: "2026-09-30" },
     );
+  });
+});
+
+describe("formatPeriod", () => {
+  it("says the month once when the period stays inside one", () => {
+    assert.equal(
+      formatPeriod({ start: "2026-09-16", end: "2026-09-30" }),
+      "16–30 Sep",
+    );
+  });
+
+  it("says a single day as a date, not as a range", () => {
+    // The bug this pins read "16–16 Sep". A day is not a span of itself.
+    assert.equal(
+      formatPeriod({ start: "2026-09-16", end: "2026-09-16" }),
+      "16 Sep",
+    );
+  });
+
+  it("repeats the month when the period crosses one", () => {
+    assert.equal(
+      formatPeriod({ start: "2026-08-28", end: "2026-09-03" }),
+      "28 Aug–3 Sep",
+    );
+  });
+
+  it("carries the year once the two ends disagree about it", () => {
+    // "28 Dec–3 Jan" does not say which December.
+    assert.equal(
+      formatPeriod({ start: "2025-12-28", end: "2026-01-03" }),
+      "28 Dec 2025–3 Jan 2026",
+    );
+  });
+
+  it("puts the day before the month, as the picker does", () => {
+    // toLocaleDateString("en", ...) is en-US and gave "1–Sep 30".
+    const label = formatPeriod({ start: "2026-09-01", end: "2026-09-30" });
+    assert.equal(label, "1–30 Sep");
+    assert.ok(!label.includes("Sep 30"));
+  });
+});
+
+describe("temporal filter", () => {
+  const week = { start: "2024-01-20", end: "2024-01-26" };
+
+  it("numbers weekdays the way ISO does, not the way Date does", () => {
+    // Date.getDay() calls Sunday 0; ISO calls it 7. Getting this wrong puts
+    // Sunday in the work week.
+    assert.equal(weekdayOf(new Date(2024, 0, 21)), 7); // a Sunday
+    assert.equal(weekdayOf(new Date(2024, 0, 22)), 1); // a Monday
+  });
+
+  it("keeps a row the period covers", () => {
+    assert.equal(withinTemporal("2024-01-22T09:00:00", { period: week }), true);
+  });
+
+  it("drops a row outside the period", () => {
+    assert.equal(withinTemporal("2024-01-19T09:00:00", { period: week }), false);
+  });
+
+  it("filters by weekday", () => {
+    const workdays = { period: week, days: [1, 2, 3, 4, 5] } as const;
+    // 2024-01-22 is a Monday, 2024-01-21 a Sunday.
+    assert.equal(withinTemporal("2024-01-22T09:00:00", workdays), true);
+    assert.equal(withinTemporal("2024-01-21T09:00:00", workdays), false);
+  });
+
+  it("filters by hour, end exclusive", () => {
+    const morning = { period: week, hours: { start: 6, end: 12 } };
+    assert.equal(withinTemporal("2024-01-22T06:00:00", morning), true);
+    assert.equal(withinTemporal("2024-01-22T11:59:00", morning), true);
+    assert.equal(withinTemporal("2024-01-22T12:00:00", morning), false);
+    assert.equal(withinTemporal("2024-01-22T05:59:00", morning), false);
+  });
+
+  it("wraps an hour range across midnight", () => {
+    // Night is 18:00-06:00. Treated as a plain start<=end range it would
+    // match nothing at all.
+    const night = { start: 18, end: 6 };
+    assert.equal(withinHours(23, night), true);
+    assert.equal(withinHours(2, night), true);
+    assert.equal(withinHours(12, night), false);
+    assert.equal(withinHours(6, night), false);
+    assert.equal(withinHours(18, night), true);
+  });
+
+  it("drops a date-only row when an hour filter is set", () => {
+    // "2024-01-22" is a whole day; no hour in it can satisfy 06:00-12:00,
+    // and guessing midnight would quietly widen the filter.
+    const morning = { period: week, hours: { start: 6, end: 12 } };
+    assert.equal(withinTemporal("2024-01-22", morning), false);
+  });
+
+  it("summarises a plain period as dates alone", () => {
+    assert.equal(formatTemporal({ period: week }), "20 Jan 2024 \u2013 26 Jan 2024");
+  });
+
+  it("appends the hours, as the field in VIP does", () => {
+    assert.equal(
+      formatTemporal({ period: week, hours: { start: 6, end: 12 } }),
+      "20 Jan 2024 \u2013 26 Jan 2024, 06:00 \u2013 12:00",
+    );
+  });
+
+  it("leaves a full week of days unsaid", () => {
+    assert.equal(
+      formatTemporal({ period: week, days: [1, 2, 3, 4, 5, 6, 7] }),
+      "20 Jan 2024 \u2013 26 Jan 2024",
+    );
+  });
+});
+
+describe("date shortcuts", () => {
+  const today = new Date(2024, 0, 27);
+  const byId = (id: string) => DATE_SHORTCUTS.find((s) => s.id === id)!;
+  const base = { period: { start: "2024-01-20", end: "2024-01-26" } };
+
+  it("offers VIP's eight, in VIP's order", () => {
+    assert.deepEqual(
+      DATE_SHORTCUTS.map((s) => s.label),
+      [
+        "Last week",
+        "Last month",
+        "Last 3 months",
+        "Work days",
+        "Weekend",
+        "Morning",
+        "Afternoon",
+        "Night",
+      ],
+    );
+  });
+
+  it("counts a period back through yesterday, never a part-finished today", () => {
+    assert.deepEqual(byId("last-week").apply(base, today).period, {
+      start: "2024-01-20",
+      end: "2024-01-26",
+    });
+  });
+
+  it("sets Morning to the 06:00-12:00 read off the running app", () => {
+    assert.deepEqual(byId("morning").apply(base, today).hours, {
+      start: 6,
+      end: 12,
+    });
+  });
+
+  it("sets Work days to Monday through Friday", () => {
+    assert.deepEqual(byId("work-days").apply(base, today).days, [1, 2, 3, 4, 5]);
+  });
+
+  it("changes only its own facet", () => {
+    // The menu is flat but the facets are three. Picking Morning must not
+    // move the period, and picking Last week must not drop the hours.
+    const withHours = { ...base, hours: { start: 6, end: 12 } };
+    assert.deepEqual(byId("last-week").apply(withHours, today).hours, {
+      start: 6,
+      end: 12,
+    });
+    assert.deepEqual(byId("morning").apply(base, today).period, base.period);
   });
 });

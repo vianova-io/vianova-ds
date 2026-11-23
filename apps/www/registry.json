@@ -224,6 +224,21 @@
       ]
     },
     {
+      "name": "compare",
+      "type": "registry:lib",
+      "title": "Compare",
+      "description": "Compare helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/compare.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "dependencies": [
+        "date-fns"
+      ]
+    },
+    {
       "name": "css-color",
       "type": "registry:lib",
       "title": "Css Color",
@@ -245,6 +260,21 @@
           "path": "registry/vianova/lib/csv.ts",
           "type": "registry:lib"
         }
+      ]
+    },
+    {
+      "name": "districts",
+      "type": "registry:lib",
+      "title": "Districts",
+      "description": "Districts helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/districts.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "registryDependencies": [
+        "@vianova/trip-report"
       ]
     },
     {
@@ -272,6 +302,21 @@
       ],
       "registryDependencies": [
         "@vianova/filter-ast"
+      ]
+    },
+    {
+      "name": "fleet-report",
+      "type": "registry:lib",
+      "title": "Fleet Report",
+      "description": "Fleet Report helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/fleet-report.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "registryDependencies": [
+        "@vianova/trip-report"
       ]
     },
     {
@@ -584,11 +629,13 @@
         "@vianova/confirm-dialog",
         "@vianova/csv",
         "@vianova/dialog",
+        "@vianova/districts",
         "@vianova/drawer",
         "@vianova/dropdown-menu",
         "@vianova/empty",
         "@vianova/export-menu",
         "@vianova/field",
+        "@vianova/fleet-report",
         "@vianova/infringement-report",
         "@vianova/inline-edit",
         "@vianova/input",
@@ -597,6 +644,8 @@
         "@vianova/popover",
         "@vianova/report-grid",
         "@vianova/sample-datasets",
+        "@vianova/sankey-flow",
+        "@vianova/segmented-control",
         "@vianova/skeleton",
         "@vianova/table",
         "@vianova/textarea",
@@ -2794,6 +2843,44 @@
       }
     },
     {
+      "name": "date-compare-panel",
+      "type": "registry:ui",
+      "title": "Date Compare Panel",
+      "description": "Date Compare Panel — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react",
+        "react-day-picker"
+      ],
+      "registryDependencies": [
+        "@vianova/alert",
+        "@vianova/button",
+        "@vianova/calendar",
+        "@vianova/collapsible",
+        "@vianova/compare",
+        "@vianova/dropdown-menu",
+        "@vianova/field",
+        "@vianova/input-group",
+        "@vianova/label",
+        "@vianova/popover",
+        "@vianova/select",
+        "@vianova/separator",
+        "@vianova/toggle-group",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/date-compare-panel.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "draw-zone-icon",
       "type": "registry:ui",
       "title": "Draw Zone Icon",
@@ -3301,7 +3388,9 @@
         "@vianova/category-style",
         "@vianova/color-ramp",
         "@vianova/colorize-panel",
+        "@vianova/compare",
         "@vianova/data-layer-card",
+        "@vianova/date-compare-panel",
         "@vianova/filter-ast",
         "@vianova/filter-builder",
         "@vianova/filter-eval",
@@ -3312,6 +3401,7 @@
         "@vianova/popover",
         "@vianova/preset-picker",
         "@vianova/sample-datasets",
+        "@vianova/separator",
         "@vianova/size-expression",
         "@vianova/size-panel",
         "@vianova/skeleton",

@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { format } from "date-fns";
 import { ListFilter } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
 
@@ -11,6 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/registry/vianova/ui/popover";
+import { Separator } from "@/registry/vianova/ui/separator";
 import { Skeleton } from "@/registry/vianova/ui/skeleton";
 import {
   ColorizePanel,
@@ -24,10 +24,9 @@ import { LegendCategorical } from "@/registry/vianova/product/legend-categorical
 import { LegendRamp } from "@/registry/vianova/product/legend-ramp";
 import {
   compareBlockedReason,
-  datesFromPeriod,
-  previousPeriod,
-  withinPeriod,
-  type Period,
+  formatTemporal,
+  withinTemporal,
+  type TemporalFilter,
 } from "@/registry/vianova/lib/compare";
 import { DateComparePanel } from "@/registry/vianova/product/date-compare-panel";
 import {
@@ -211,25 +210,23 @@ export function SampleMapLayer({
    * date control over all of them would have to be disabled by whichever
    * layer could not use it.
    *
-   * `comparePeriod` stays null until someone overrides it, so the derived
-   * "period before, same length" keeps following the main range.
+   * The comparison starts EMPTY, as VIP's does. Turning compare on adds a
+   * field reading "Pick a date" rather than a period nobody chose.
    */
-  const [period, setPeriod] = React.useState<Period>(() =>
-    feed.dateRange
+  const [temporal, setTemporal] = React.useState<TemporalFilter>(() => ({
+    period: feed.dateRange
       ? { start: feed.dateRange[0], end: feed.dateRange[1] }
-      // Only a feed with no declared range falls through here, and every such
-      // feed is one the panel refuses to put a picker on -- so this is a
-      // placeholder to satisfy the type, not a period anyone is shown. It
-      // matches the sample month so that a feed which later declares a date
-      // column lands somewhere its data exists.
-      : { start: "2026-09-01", end: "2026-09-30" },
-  );
+      : // Only a feed with no declared range falls through here, and every
+        // such feed is one the panel refuses to put a picker on -- so this is
+        // a placeholder to satisfy the type, not a period anyone is shown. It
+        // matches the sample month so that a feed which later declares a date
+        // column lands somewhere its data exists.
+        { start: "2026-09-01", end: "2026-09-30" },
+  }));
   const [comparing, setComparing] = React.useState(false);
-  const [comparePeriod, setComparePeriod] = React.useState<Period | null>(null);
-  const against = React.useMemo(
-    () => comparePeriod ?? previousPeriod(period),
-    [comparePeriod, period],
-  );
+  const [compareFilter, setCompareFilter] = React.useState<
+    TemporalFilter | undefined
+  >(undefined);
   const blockedReason = compareBlockedReason(feed.temporal);
   /** Only an events feed has rows to cut into periods at all. */
   const datedBy = feed.temporal === "events" ? feed.dateColumn : undefined;
@@ -258,11 +255,10 @@ export function SampleMapLayer({
    * "never both" structural rather than something every handler remembers.
    */
   const [chain, setChain] = React.useState<
-    "colorize" | "size" | "date" | null
+    "colorize" | "size" | null
   >(null);
   const colorizeOpen = chain === "colorize";
   const sizeOpen = chain === "size";
-  const dateOpen = chain === "date";
   const setColorizeOpen = React.useCallback(
     (open: boolean) => setChain(open ? "colorize" : null),
     [],
@@ -291,7 +287,6 @@ export function SampleMapLayer({
 
   const uid = React.useId();
   const colorizeTriggerId = `${uid}-colorize`;
-  const dateTriggerId = `${uid}-date`;
   const sizeTriggerId = `${uid}-size`;
   const browsePresetsId = `${uid}-preset`;
 
@@ -468,24 +463,32 @@ export function SampleMapLayer({
    * "outside the period", it simply has no period, and silently emptying it
    * because it has no timestamps would be the worst possible reading.
    */
-  const inPeriod = React.useCallback(
-    (row: Record<string, string>, p: Period) =>
-      !datedBy || withinPeriod(row[datedBy] ?? "", p),
+  const inWindow = React.useCallback(
+    (row: Record<string, string>, f: TemporalFilter) =>
+      !datedBy || withinTemporal(row[datedBy] ?? "", f),
     [datedBy],
   );
 
   const rows = React.useMemo(
-    () => allRows.filter((row) => predicate(row) && inPeriod(row, period)),
-    [allRows, predicate, inPeriod, period],
+    () => allRows.filter((row) => predicate(row) && inWindow(row, temporal)),
+    [allRows, predicate, inWindow, temporal],
   );
 
-  /** The same rows read over the comparison period. */
+  /** The same rows read over the comparison period, once one is chosen. */
   const previousRows = React.useMemo(
     () =>
-      comparing && !blockedReason && datedBy
-        ? allRows.filter((row) => predicate(row) && inPeriod(row, against))
+      comparing && !blockedReason && datedBy && compareFilter
+        ? allRows.filter((row) => predicate(row) && inWindow(row, compareFilter))
         : [],
-    [allRows, predicate, inPeriod, against, comparing, blockedReason, datedBy],
+    [
+      allRows,
+      predicate,
+      inWindow,
+      compareFilter,
+      comparing,
+      blockedReason,
+      datedBy,
+    ],
   );
 
   const keep = React.useCallback(
@@ -777,28 +780,24 @@ export function SampleMapLayer({
     );
   }, [edges]);
 
-  /** "16–30 Sep", and the period it is read against when comparing. */
+  /**
+   * What the card says about time.
+   *
+   * VIP writes the comparison on a SECOND line, "Compared to ...", rather
+   * than joining the two with "vs". Two periods on one line race the row
+   * count for the same width and the count loses; on two lines each reads at
+   * a glance, and the second line is absent whenever there is nothing to
+   * compare.
+   */
   const periodLabel = React.useMemo(() => {
     if (!datedBy) return null;
-    // "16–30 Sep" within a month, "28 Aug–3 Sep" across one. The month goes
-    // where English puts it, which is after the day it qualifies.
-    // date-fns, not toLocaleDateString: "en" is en-US and puts the month
-    // first, which gave "1–Sep 30". DateRangePicker formats "d MMM yyyy", so
-    // the line under a card has to read the same way round as the control
-    // that sets it.
-    const span = (p: Period) => {
-      const { from, to } = datesFromPeriod(p);
-      // A single day is a date, not a range: "16 Sep", never "16-16 Sep".
-      if (p.start === p.end) return format(from, "d MMM");
-      return from.getMonth() === to.getMonth() &&
-        from.getFullYear() === to.getFullYear()
-        ? `${format(from, "d")}–${format(to, "d MMM")}`
-        : `${format(from, "d MMM")}–${format(to, "d MMM")}`;
-    };
-    return comparing && !blockedReason
-      ? `${span(period)} vs ${span(against)}`
-      : span(period);
-  }, [datedBy, period, against, comparing, blockedReason]);
+    return formatTemporal(temporal);
+  }, [datedBy, temporal]);
+
+  const comparedLabel = React.useMemo(() => {
+    if (!datedBy || blockedReason || !comparing || !compareFilter) return null;
+    return `Compared to ${formatTemporal(compareFilter)}`;
+  }, [datedBy, blockedReason, comparing, compareFilter]);
 
   const meta = failed
     ? `Data unavailable — ${feed.file} did not load`
@@ -845,6 +844,7 @@ export function SampleMapLayer({
         name={feed.title}
         onRemove={onRemove}
         meta={meta}
+        metaCompare={comparedLabel ?? undefined}
         // Expanded follows visibility: a layer that is off is a name and an
         // eye, and turning it on is what asks for its controls. Ten expanded
         // cards would be 2,000px of panel for layers nobody switched on. The
@@ -867,15 +867,10 @@ export function SampleMapLayer({
         // Only an events feed can be cut into periods, but the panel still
         // opens for the others: it is where the reason lives, and a meta line
         // that does nothing when clicked teaches nothing.
-        onDateRange={
-          sample
-            ? () => setChain((c) => (c === "date" ? null : "date"))
-            : undefined
-        }
-        dateRangeOpen={dateOpen}
-        dateRangeTriggerId={dateTriggerId}
         filters={Boolean(sample)}
-        filterCount={conditions || undefined}
+        // VIP counts the date among the layer's filters, so "Filters 5"
+        // means five including it.
+        filterCount={conditions + (datedBy ? 1 : 0) || undefined}
         filtersAction={
           <Popover>
             <PopoverTrigger
@@ -907,12 +902,37 @@ export function SampleMapLayer({
         }
         filtersContent={
           sample ? (
-            <FilterFacets
-              fields={filterFields.filter((f) => f.type === "enum")}
-              value={filter}
-              onValueChange={setFilter}
-              valueIcon={(_field, value) => operatorBadge(value)}
-            />
+            <div className="space-y-3">
+              {/* First inside Filters, which is where VIP puts it. A date is
+                  a filter -- it cuts rows out of the layer exactly as a value
+                  filter does -- and giving it a panel of its own was the one
+                  structural thing the earlier version had wrong. */}
+              <DateComparePanel
+                showHeader={false}
+                className="w-auto rounded-none border-0 bg-transparent p-0 shadow-none"
+                filter={temporal}
+                onFilterChange={setTemporal}
+                comparing={comparing}
+                onComparingChange={setComparing}
+                compareFilter={compareFilter}
+                onCompareFilterChange={setCompareFilter}
+                blockedReason={datedBy ? null : (blockedReason ?? NO_DATE_COLUMN)}
+                compareEmpty={
+                  comparing &&
+                  !blockedReason &&
+                  compareFilter != null &&
+                  previousRows.length === 0
+                }
+                noun={feed.title.toLowerCase()}
+              />
+              <Separator />
+              <FilterFacets
+                fields={filterFields.filter((f) => f.type === "enum")}
+                value={filter}
+                onValueChange={setFilter}
+                valueIcon={(_field, value) => operatorBadge(value)}
+              />
+            </div>
           ) : null
         }
       >
@@ -1044,32 +1064,6 @@ export function SampleMapLayer({
         </PanelStep>
       ) : null}
 
-      {/* A third sibling at depth 1, beside Colorize and Size. A period is
-          not a colour setting nor a size one. */}
-      {sample ? (
-        <PanelStep
-          id={`${feed.id}-date`}
-          title={`Date · ${feed.title}`}
-          width={360}
-          open={dateOpen}
-          onOpenChange={(open) => setChain(open ? "date" : null)}
-          triggerId={dateTriggerId}
-        >
-          <DateComparePanel
-            showHeader={false}
-            className="w-auto rounded-none border-0 bg-transparent shadow-none"
-            period={period}
-            onPeriodChange={setPeriod}
-            comparing={comparing}
-            onComparingChange={setComparing}
-            comparePeriod={comparePeriod ?? undefined}
-            onComparePeriodChange={(next) => setComparePeriod(next ?? null)}
-            blockedReason={datedBy ? null : (blockedReason ?? NO_DATE_COLUMN)}
-            compareEmpty={comparing && !blockedReason && previousRows.length === 0}
-            noun={feed.title.toLowerCase()}
-          />
-        </PanelStep>
-      ) : null}
     </>
   );
 }

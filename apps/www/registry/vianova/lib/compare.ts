@@ -19,6 +19,8 @@
  * and the comparison has to become a quantity of its own.
  */
 
+import { format } from "date-fns";
+
 /** An inclusive range of whole days, each `YYYY-MM-DD`. */
 export type Period = { start: string; end: string };
 
@@ -52,7 +54,7 @@ export function periodLength(period: Period): number {
 /**
  * The period of the same length immediately before this one.
  *
- * The default a reader expects from "compare with previous", and the same
+ * The default a reader expects of "compare with previous", and the same
  * derivation the dashboard uses, so a fortnight compares against the fortnight
  * before rather than against the same fortnight last year. Year-on-year is a
  * legitimate second option but it is a choice, not a default -- seasonality is
@@ -104,6 +106,231 @@ export function datesFromPeriod(period: Period): { from: Date; to: Date } {
   };
   return { from: at(period.start), to: at(period.end) };
 }
+
+/**
+ * A period as a person reads it: "16–30 Sep", "28 Aug–3 Sep", "16 Sep".
+ *
+ * date-fns, and not `toLocaleDateString`, which is the one import this file
+ * takes. `toLocaleDateString("en", { day, month })` is en-US and puts the
+ * month first, which gave "1–Sep 30"; `DateRangePicker` formats
+ * "d MMM yyyy", so a line reporting what that control set has to read the same
+ * way round as the control itself.
+ */
+export function formatPeriod(period: Period): string {
+  const { from, to } = datesFromPeriod(period);
+  // A single day is a date, not a range: "16 Sep", never "16–16 Sep".
+  if (period.start === period.end) return format(from, "d MMM");
+  // Across a year boundary "28 Dec–3 Jan" hides which December, so both
+  // ends carry a year the moment the years disagree.
+  if (from.getFullYear() !== to.getFullYear())
+    return `${format(from, "d MMM yyyy")}–${format(to, "d MMM yyyy")}`;
+  // Otherwise the month goes once, where English puts it: after the day it
+  // qualifies, unless the period crosses one.
+  if (from.getMonth() === to.getMonth())
+    return `${format(from, "d")}–${format(to, "d MMM")}`;
+  return `${format(from, "d MMM")}–${format(to, "d MMM")}`;
+}
+
+/* -------------------------------------------------------------------------
+ * The temporal filter
+ *
+ * A period is not the whole of how a layer is read over time. VIP's own
+ * "Select a period" popover filters on three facets at once, and its shortcut
+ * menu is a flat list over all three: Last week / Last month / Last 3 months
+ * set the period, Work days / Weekend set the weekdays, Morning / Afternoon /
+ * Night set the hours. Modelling only the period would make two thirds of
+ * that menu unbuildable.
+ * ---------------------------------------------------------------------- */
+
+/** Monday = 1 ... Sunday = 7, as ISO-8601 numbers them. */
+export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+/**
+ * Whole hours on a 24-hour clock, `start` inclusive and `end` exclusive.
+ *
+ * `start > end` is a range that WRAPS midnight, which is the only honest way
+ * to say "night". A caller that forgets the wrap gets an empty result rather
+ * than a wrong one, so `withinHours` handles it here, once.
+ */
+export type HourRange = { start: number; end: number };
+
+/** How a layer is read over time: a period, and optionally a slice of it. */
+export type TemporalFilter = {
+  period: Period;
+  /** Omitted or empty means every day of the week. */
+  days?: readonly Weekday[];
+  /** Omitted means the whole day. */
+  hours?: HourRange;
+};
+
+/** ISO weekday for a date: `Date.getDay()` is Sunday-0, which ISO is not. */
+export function weekdayOf(date: Date): Weekday {
+  const js = date.getDay();
+  return (js === 0 ? 7 : js) as Weekday;
+}
+
+export function withinHours(hour: number, range: HourRange): boolean {
+  return range.start <= range.end
+    ? hour >= range.start && hour < range.end
+    : // wraps midnight: 18:00-06:00 is late evening OR early morning
+      hour >= range.start || hour < range.end;
+}
+
+/**
+ * Does a timestamp fall inside the filter?
+ *
+ * Reads the day from the first ten characters, as `withinPeriod` does, and
+ * the hour from characters 11-12 -- both local-as-written, never parsed into
+ * a `Date`, so a feed's own clock is not re-interpreted in the viewer's.
+ */
+export function withinTemporal(
+  timestamp: string,
+  filter: TemporalFilter,
+): boolean {
+  if (!withinPeriod(timestamp, filter.period)) return false;
+  if (filter.days?.length) {
+    const { from } = datesFromPeriod({
+      start: timestamp.slice(0, 10),
+      end: timestamp.slice(0, 10),
+    });
+    if (!filter.days.includes(weekdayOf(from))) return false;
+  }
+  if (filter.hours) {
+    const hour = Number(timestamp.slice(11, 13));
+    // A date with no time in it is a whole day, so an hour filter cannot
+    // include it; saying otherwise would quietly widen the filter.
+    if (!Number.isFinite(hour)) return false;
+    if (!withinHours(hour, filter.hours)) return false;
+  }
+  return true;
+}
+
+/** "06:00", from a whole hour. */
+export function formatHour(hour: number): string {
+  return `${String(hour).padStart(2, "0")}:00`;
+}
+
+/**
+ * The one-line summary a field shows, after VIP's own:
+ * "20 Jan 2024 – 26 Jan 2024, 06:00 – 12:00".
+ *
+ * VIP writes the dates `1/20/2024 - 1/26/2024`. This writes them day-first,
+ * because every other date in this DS is day-first -- `DateRangePicker`
+ * formats "d MMM yyyy" -- and one control disagreeing with the rest is worse
+ * than one control disagreeing with VIP.
+ */
+export function formatTemporal(filter: TemporalFilter): string {
+  const { from, to } = datesFromPeriod(filter.period);
+  const dates = `${format(from, "d MMM yyyy")} – ${format(to, "d MMM yyyy")}`;
+  const parts = [dates];
+  if (filter.days?.length && filter.days.length < 7) {
+    parts.push(filter.days.map((d) => WEEKDAY_LABELS[d]).join(", "));
+  }
+  if (filter.hours) {
+    parts.push(
+      `${formatHour(filter.hours.start)} – ${formatHour(filter.hours.end)}`,
+    );
+  }
+  return parts.join(", ");
+}
+
+export const WEEKDAY_LABELS: Record<Weekday, string> = {
+  1: "Mon",
+  2: "Tue",
+  3: "Wed",
+  4: "Thu",
+  5: "Fri",
+  6: "Sat",
+  7: "Sun",
+};
+
+/** Monday-first, which is how VIP's own day chips are ordered. */
+export const WEEKDAY_ORDER: readonly Weekday[] = [1, 2, 3, 4, 5, 6, 7];
+
+/* -------------------------------------------------------------------------
+ * Shortcuts
+ * ---------------------------------------------------------------------- */
+
+/** Which facet of the filter a shortcut sets. */
+export type ShortcutFacet = "period" | "days" | "hours";
+
+export type DateShortcut = {
+  id: string;
+  label: string;
+  facet: ShortcutFacet;
+  apply: (filter: TemporalFilter, today: Date) => TemporalFilter;
+};
+
+const back = (today: Date, days: number): Period => {
+  const end = new Date(today);
+  end.setDate(end.getDate() - 1); // through yesterday: today is still partial
+  const start = new Date(end);
+  start.setDate(start.getDate() - (days - 1));
+  return { start: dayFromDate(start), end: dayFromDate(end) };
+};
+
+/**
+ * VIP's eight, in VIP's order.
+ *
+ * The three hour ranges: Morning is 06:00-12:00, read off the running app.
+ * Afternoon and Night are not -- they are the obvious continuation, and they
+ * are here as named constants precisely so that a one-line edit corrects them
+ * if VIP draws those boundaries elsewhere.
+ *
+ * The three periods likewise: VIP's "Last week" was not measured against a
+ * known clock, so these count back whole days through yesterday, which is the
+ * reading that never includes a part-finished today.
+ */
+export const DATE_SHORTCUTS: readonly DateShortcut[] = [
+  {
+    id: "last-week",
+    label: "Last week",
+    facet: "period",
+    apply: (f, today) => ({ ...f, period: back(today, 7) }),
+  },
+  {
+    id: "last-month",
+    label: "Last month",
+    facet: "period",
+    apply: (f, today) => ({ ...f, period: back(today, 30) }),
+  },
+  {
+    id: "last-3-months",
+    label: "Last 3 months",
+    facet: "period",
+    apply: (f, today) => ({ ...f, period: back(today, 90) }),
+  },
+  {
+    id: "work-days",
+    label: "Work days",
+    facet: "days",
+    apply: (f) => ({ ...f, days: [1, 2, 3, 4, 5] }),
+  },
+  {
+    id: "weekend",
+    label: "Weekend",
+    facet: "days",
+    apply: (f) => ({ ...f, days: [6, 7] }),
+  },
+  {
+    id: "morning",
+    label: "Morning",
+    facet: "hours",
+    apply: (f) => ({ ...f, hours: { start: 6, end: 12 } }),
+  },
+  {
+    id: "afternoon",
+    label: "Afternoon",
+    facet: "hours",
+    apply: (f) => ({ ...f, hours: { start: 12, end: 18 } }),
+  },
+  {
+    id: "night",
+    label: "Night",
+    facet: "hours",
+    apply: (f) => ({ ...f, hours: { start: 18, end: 6 } }),
+  },
+];
 
 /** One unit -- a zone, a cell, a road segment -- counted in both periods. */
 export type Comparison = {

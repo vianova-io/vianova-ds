@@ -3116,7 +3116,7 @@ function flowsFor(data: ReportData, limit = FLOW_LIMIT): Flow[] {
       /*
         A trip that began and ended beyond the drawn districts is dropped.
         Half the sample starts or ends outside them, so this pair is by far
-        the biggest, and as a ribbon it is a slab from "elsewhere" to
+        the biggest, and as a ribbon it is a slab joining "elsewhere" to
         "elsewhere" that crowds out every flow that names two places. The
         ones with a district at either end stay: a trip arriving into Baixa
         from beyond the map is a real movement into Baixa.
