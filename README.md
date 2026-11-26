@@ -210,6 +210,21 @@ slop "cannot be measured" is not true: `elementFromPoint` resolves a hit on a
 `e2e/touch-target-floor.spec.ts` asserts all three boxes have not grown *and*
 that the slop is still there.
 
+**What these numbers measure, exactly.** The area reachable by aiming *at the
+control* — the element or a descendant — and not a wrapping `<label>`, even
+though clicking one really does activate the control. Verified rather than
+assumed: in `checkbox-default`, `Label` wraps the checkbox and its text into a
+187x16 box, and a click 164px to the right of the 16px checkbox toggles it. So
+a checkbox's *functional* target is the whole label, and the 38x28 above is the
+conservative figure for the control alone.
+
+Both readings matter and neither is wrong: 187x16 is why checkboxes in a form
+are not a practical problem to tap, and 38x28 is why one on its own, outside a
+label, would be. The numbers in this section are the second kind throughout,
+because the first would report a 16px control as a 187px target and hide
+exactly what the audit is for. Anything measuring these controls should say
+which it is counting — the two disagree about whether a checkbox clears 44px.
+
 **Which measure counts, then.** For 2.5.8 the hit area, without argument: the
 criterion is about the region that accepts the pointer action, and slop is part
 of it. For the 44px comfort floor the hit area is what decides whether a tap

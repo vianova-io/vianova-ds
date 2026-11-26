@@ -174,6 +174,13 @@ const MEASURE = /* js */ `((ROOTS, AA) => {
     const hits = (x, y) => {
       if (x < 0 || y < 0 || x > vw || y > vh) return false;
       const h = document.elementFromPoint(x, y);
+      // The element itself or a descendant. Deliberately NOT a wrapping
+      // <label>, even though clicking one really does activate the control:
+      // Label wraps Checkbox and its text, so counting it would report a 16px
+      // checkbox as a 187px target, which is true for activation and useless
+      // for asking whether a thumb can hit the control. So these numbers are
+      // the area reachable by aiming AT the control, and are conservative by
+      // construction for anything inside a label. See README, "Touch targets".
       return !!h && (h === el || el.contains(h));
     };
     // elementFromPoint answers null outside the viewport and resolves to an
