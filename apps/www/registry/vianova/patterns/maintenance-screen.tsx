@@ -150,15 +150,43 @@ export function MaintenanceScreen({
 }
 
 /**
+ * What the gate should conclude. Three states, because the caller has three.
+ *
+ * `window` is the announced plan and the default: the door is shut for exactly
+ * as long as the author said it would be. `closed` and `open` are for a caller
+ * who knows better than the plan -- in VIP, the live Statuspage status, where
+ * `in_progress` is `closed` and `completed` is `open`.
+ *
+ * A union rather than a boolean, because "I have no idea" is a real answer and
+ * deserves a name. With `closed?: boolean` the two halves of a half-wired
+ * caller look identical: `closed={false}` meaning "the API has not answered
+ * yet" would hold the door open straight through a window that really is open,
+ * and nothing in the type would have warned anyone. Here that caller writes
+ * `window` and gets the behaviour it had before it knew anything.
+ */
+export type MaintenanceGateState = "window" | "closed" | "open";
+
+/**
  * Wrap the app once. While a maintenance window is open the gate swaps
  * everything for `MaintenanceScreen`; the rest of the time it is invisible.
  *
  * Only `maintenance` closes the door. An incident degrades VIP rather than
  * closing it, and locking people out of a product that still half works helps
- * nobody -- that case keeps its AnnouncementBar and stays usable.
+ * nobody -- that case keeps its AnnouncementBar and stays usable. `gate` does
+ * not change that: it overrules the window, never the kind, and the screen it
+ * would put up is written about planned work.
+ *
+ * `gate` exists because the window ends on time and interventions do not.
+ * `announcementPhase` goes `done` at `endsAt`, which would let everyone back
+ * into a platform that is still mid-migration -- and `endsAt` cannot simply be
+ * dropped to avoid that, because it is what the screen shows as "Expected back
+ * at". So the plan and the verdict are separated: hold `gate` at `closed` past
+ * the planned end and the screen keeps saying when it was meant to be over,
+ * under the line that already admits some interventions run over.
  */
 export function MaintenanceGate({
   announcement,
+  gate = "window",
   now,
   viewerTimeZone,
   onRetry,
@@ -166,6 +194,11 @@ export function MaintenanceGate({
   children,
 }: {
   announcement?: Announcement;
+  /**
+   * Let the announced window decide (the default, and what this did before
+   * the prop existed), or override it from what the caller knows.
+   */
+  gate?: MaintenanceGateState;
   /** Pin the instant to force a state. Live otherwise. */
   now?: number;
   viewerTimeZone?: string;
@@ -192,7 +225,8 @@ export function MaintenanceGate({
   if (!announcement || announcement.kind !== "maintenance") return <>{children}</>;
 
   const phase = announcementPhase(announcement, now ?? Date.now());
-  if (phase !== "active") return <>{children}</>;
+  const closed = gate === "closed" || (gate === "window" && phase === "active");
+  if (!closed) return <>{children}</>;
 
   return (
     <MaintenanceScreen
