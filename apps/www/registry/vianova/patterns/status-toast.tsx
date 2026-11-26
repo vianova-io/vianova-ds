@@ -62,9 +62,26 @@ const VARIANT_ICON: Record<StatusToastVariant, React.ComponentType<{ className?:
  * to catch someone mid-task before VIP closes under them, and this card is
  * ambient. Planned work is not a warning, and colouring it like one is how a
  * palette stops meaning anything.
+ *
+ * For an incident, `impact` decides. A minor degradation is amber and a major
+ * or critical one is red, whether or not anyone has put a time on the end of
+ * it -- which is the right question, because how bad it is and how long it
+ * will last are two different things.
+ *
+ * Without `impact` the end date still decides, as it always has. That fallback
+ * is not legacy: a known end means somebody has scoped the problem, which is
+ * the best signal available to a caller with no Statuspage behind it, and
+ * every announcement authored by hand is such a caller. VIP sets `impact`
+ * because it polls Statuspage; a config file has nothing to set it from.
+ *
+ * Derived here rather than passed as `variant` on purpose. `announceStatus`
+ * puts this on the queued toast as its `type` and `StatusToastList` reads it
+ * back off the item, so a tone the caller sets by hand reaches the card only
+ * on the direct-render path and never through the queue.
  */
 export function statusToastVariant(a: Announcement): StatusToastVariant {
   if (a.kind === "maintenance") return "maintenance";
+  if (a.impact) return a.impact === "minor" ? "incident" : "outage";
   return a.endsAt ? "incident" : "outage";
 }
 

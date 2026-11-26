@@ -20,7 +20,10 @@ import {
   type Announcement,
 } from "@/registry/vianova/patterns/announcement-bar";
 import { AppShell } from "@/registry/vianova/patterns/app-shell";
-import { MaintenanceGate } from "@/registry/vianova/patterns/maintenance-screen";
+import {
+  MaintenanceGate,
+  type MaintenanceGateState,
+} from "@/registry/vianova/patterns/maintenance-screen";
 import { StatTile } from "@/registry/vianova/patterns/stat-tile";
 
 /**
@@ -46,13 +49,14 @@ const NAV = [
   { title: "Team", icon: Users },
 ];
 
-function Shell({ now }: { now: number }) {
+function Shell({ now, gate }: { now: number; gate?: MaintenanceGateState }) {
   return (
     // See app-shell-default: `contain: paint` gives the fixed-position sidebar
     // a containing block, or it escapes this box and floats over the page.
     <div className="h-[470px] w-full overflow-hidden rounded-lg border [contain:paint]">
       <MaintenanceGate
         announcement={MUNICH}
+        gate={gate}
         now={now}
         viewerTimeZone={VIEWER}
         onRetry={() => {}}
@@ -117,6 +121,15 @@ export default function MaintenanceScreenDefault() {
           Inside the window — the gate closes. No way past it until the intervention is done.
         </p>
         <Shell now={Date.parse("2026-11-07T23:30:00Z")} />
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-muted-foreground text-sm">
+          Half an hour past the planned end, held shut with <code>gate=&quot;closed&quot;</code>{" "}
+          because the migration is still running. The screen still says when it was meant to be
+          over.
+        </p>
+        <Shell now={Date.parse("2026-11-08T01:30:00Z")} gate="closed" />
       </div>
     </div>
   );
