@@ -108,6 +108,175 @@ origin. Provenance answers who chose the value that is *in the build*, and for a
 re-picked token that is us — reporting `preset` for a `ring` we chose ourselves
 would blame upstream for a defect we would have introduced.
 
+## Touch targets
+
+VIP is used on tablets and phones in the field. The registry was built as
+though it were desktop-only, and nothing in here recorded the difference until
+a UI review asked for 44px targets and answering it meant finding out whether
+VIP is ever touched. It is.
+
+**No control in the registry is too small to conform.** Of 466 controls
+measured on a phone, 83 come in under 24x24 — and all but one earn WCAG 2.2
+AA's own spacing exception, which lets an undersized target pass when a
+24px circle centred on it meets no other target. So 2.5.8 is not the problem.
+The problem is that **94–95% of controls sit under 44px**, which is the AAA and
+Apple HIG bar and the one that decides whether a thumb lands on the right
+thing at a junction.
+
+### The one conformance failure, and it is not a sizing bug
+
+`patterns/bottom-tray.tsx` gives its drag handle a full-width 24px grab strip
+(`absolute inset-x-0 top-0 z-10 h-6`) while painting only a 4px pill in the
+middle of it. On a map block the tray's first child is the panel header, so
+that strip is layered over the top 3.5px of the **Data / Zones tabs** in
+`map-workspace`: a 44.8x25 box with a 45x22 tap area. A tab that small needs
+the spacing exception and cannot have it while a 768x24 slider sits on top.
+
+The box is the right size. The pixels are being taken by a sibling, which is
+why reading class strings would never have found it. The fix is to reserve the
+handle's height in the tray's layout — that moves every map panel header down
+24px and rewrites four blocks' visual baselines, so it is deliberately left for
+its own PR and recorded in `KNOWN_UNDER_FLOOR` in
+`e2e/touch-target-floor.spec.ts`. That list exists to be emptied; anything not
+in it fails.
+
+### What the 44px gap actually looks like
+
+Measured by hit area, not by class string: the box after borders, line-height,
+any parent `min-h`, any `after:-inset-*` hit slop, and anything layered on top.
+Probed by walking outward from each control's centre with `elementFromPoint`
+until the hit stops resolving back to the control.
+
+| Viewport | Controls | Under 44px | Under 24px |
+| --- | --- | --- | --- |
+| Phone, 390x844 | 466 | 442 (95%) | 83 |
+| Tablet portrait, 834x1112 | 529 | 500 (95%) | 92 |
+| Tablet landscape, 1366x1024 | 569 | 534 (94%) | 93 |
+
+Tablet landscape matters more than it looks: at 1366px the `lg:` desktop
+arrangements are the ones on screen, so the densest layouts in the system are
+exactly the ones being touched.
+
+Under-44 controls per workspace, and the median tap size on a phone:
+
+| Workspace | Phone | Tablet port. | Tablet land. | Median tap (phone) |
+| --- | --- | --- | --- | --- |
+| `citizen-workspace` | 0/4 | 0/4 | 0/4 | 44px |
+| `dashboard-workspace` | 7/7 | 8/8 | 18/18 | 20px |
+| `datahub-workspace` | 8/9 | 8/12 | 8/12 | 36px |
+| `feeds-workspace` | 5/5 | 6/9 | 5/11 | 32px |
+| `map-workspace` | 10/14 | 15/18 | 30/31 | 28px |
+| `regulations-workspace` | 14/14 | 15/15 | 15/15 | 32px |
+| `reports-workspace` | 14/14 | 38/38 | 51/51 | 30px |
+
+`citizen-workspace` is the phone surface and the only block that clears 44px
+everywhere; it hard-codes `min-h-11` / `size-11` because it is never anything
+but touched. Every other workspace is a VIP surface, and the two with no
+control above the floor at any width — `regulations-workspace` and
+`reports-workspace` — are list-and-detail screens whose row actions and links
+are 20px text buttons.
+
+The recurring shapes, by `data-slot`, across all three viewports:
+
+| Shape | Instances | Tap range | Median |
+| --- | --- | --- | --- |
+| `button` | 478 | 20–40px | 32px |
+| `input` | 143 | 28–40px | 32px |
+| `select-trigger` | 67 | 32–40px | 36px |
+| `tooltip-trigger` | 51 | 32px | 32px |
+| `toggle-group-item` | 48 | 32–36px | 36px |
+| `checkbox` | 44 | 22–30px | 30px |
+| `tabs-trigger` | 39 | 22–26px | 26px |
+| `report-link` / `regulation-link` | 30 | 20px | 20px |
+| `dropdown-menu-trigger` | 21 | 24–36px | 24px |
+
+### The hit slop is already load-bearing
+
+Eight registry files already carry `after:-inset-*` on a `relative` control
+(19 call sites: `checkbox`, `radio-group`, `switch`, `slider`, `toast`,
+`sidebar`, and the dashboard and map workspaces), which grows the hit area
+without moving the box. It is not
+cosmetic — it is what makes three form primitives conform:
+
+| Control | Box | Tap area |
+| --- | --- | --- |
+| `checkbox` | 16x16 | 38x28 |
+| `radio-group-item` | 16x16 | 38x24 |
+| `switch` | 32x18 | 54x31 |
+
+Without it a checkbox is a 16px target and fails 2.5.8 outright. The claim that
+slop "cannot be measured" is not true: `elementFromPoint` resolves a hit on a
+`::after` back to the element that owns it, so it measures exactly, and
+`e2e/touch-target-floor.spec.ts` asserts all three boxes have not grown *and*
+that the slop is still there.
+
+### The convention
+
+Two mechanisms, and the choice between them is about whether the box can move.
+
+**1. `pointer-coarse:` on the control** — established by the status-toast and
+maintenance-screen fixes, and the default for anything that can afford to grow:
+
+```
+pointer-coarse:size-11      icon-only controls
+pointer-coarse:h-11         controls with a label
+```
+
+Tailwind v4 ships the variant; nothing to register. It goes on the element's
+own `className` and **never into a cva size variant**, so the ladder keeps its
+fine-pointer geometry and `control-size.spec.ts` needs no changes.
+
+**2. `after:-inset-*` hit slop** — for controls that cannot grow: anything on a
+fixed-height toolbar row the ladder pins, the 16px form primitives whose box is
+the design, and map chrome where a bigger box would cover the map. Unconditional
+rather than pointer-gated, which is also its advantage: the `pointer` media
+query reports the *primary* pointer, so a tablet with a trackpad or a
+touchscreen laptop can report `fine` while being touched, and geometry that
+never changes cannot get that wrong.
+
+**What this costs, stated plainly.** Because `pointer-coarse:` must stay out of
+the cva variants, it is per-call-site work: **42 distinct `data-slot` kinds**
+sit under 44px, across hundreds of instances. There is no central edit that
+fixes 95% of the registry.
+
+The one change that would is putting `pointer-coarse:` *into* the ladder in
+`ui/button.tsx` and its four siblings — effectively a density mode. It was not
+recommended, for three reasons worth recording rather than rediscovering: the
+ladder's promise is that a toolbar row lines up, so all six control types would
+have to move together or alignment breaks under touch; every tablet and phone
+visual baseline churns at once; and it would grow controls on hybrid devices
+that report `fine`, or fail to grow them on devices that report `fine` while
+being touched. A density mode may still be the right answer for the VIP
+workspaces specifically — it is the only option that scales — but it is a
+product decision about how dense those screens should be on a tablet, not a
+cleanup.
+
+So: fix per surface, worst-first, starting with `regulations-workspace` and
+`reports-workspace`, whose 20px row links are both the smallest real targets
+and the ones a field user taps most.
+
+### The gate
+
+`e2e/touch-target-floor.spec.ts` runs every workspace at phone and tablet under
+`hasTouch: true`, which is what flips `(pointer: coarse)` — verified, not
+assumed. It asserts the 24px conformance floor everywhere it looks, and the
+44px floor only on surfaces that already meet it, so the ratchet turns one way
+and nothing regresses silently. The whole file runs in about eight seconds.
+
+```bash
+pnpm --filter @vianova/www test:touch    # the floor, on a coarse pointer
+```
+
+| Guard | Sees | Misses |
+| --- | --- | --- |
+| `e2e/control-size.spec.ts` | the ladder's heights on a fine pointer | anything about a thumb |
+| `e2e/touch-target.spec.ts` | the two fixed controls, both pointer types | the rest of the registry |
+| `e2e/touch-target-floor.spec.ts` | every workspace control's real tap area | controls behind an interaction, and overlays |
+
+That last gap is real: a control only reachable by opening a menu or a dialog
+is never measured, because the suite measures what the page renders. Opening
+every overlay is the obvious next increment.
+
 ## Figma
 
 **`Vianova DS – Library`**
