@@ -210,6 +210,31 @@ slop "cannot be measured" is not true: `elementFromPoint` resolves a hit on a
 `e2e/touch-target-floor.spec.ts` asserts all three boxes have not grown *and*
 that the slop is still there.
 
+**Which measure counts, then.** For 2.5.8 the hit area, without argument: the
+criterion is about the region that accepts the pointer action, and slop is part
+of it. For the 44px comfort floor the hit area is what decides whether a tap
+registers, but it is not the whole story — a 32px box with 48px of invisible
+slop is still a 32px thing to *aim* at, and slop can be taken: the
+`map-workspace` tabs above are a measured case of a neighbour sitting on top
+and eating it. So slop is a real mechanism and not a free pass. It has to be
+measured as effective area, which is what this suite does, rather than inferred
+from the class string.
+
+`ToastClose` in `ui/toast.tsx` is the test case for that rule: a `Button
+size="icon-sm"` (32px) carrying `after:-inset-2`, so 48px of hit area. By the
+rule above it conforms and clears the comfort floor, and it should be left
+alone — its box is on the ladder, and the slop is doing precisely the job slop
+is for.
+
+That is a reading of its class strings, not a measurement, because **no example
+renders it**. `examples/toast-default.tsx` wraps `AddToastButton` in its own
+`ToastProvider` while `<Toaster />` builds a second, nested provider around the
+module-level manager, so the click adds to one manager and `ToastList` renders
+from the other. The toast never appears — the committed visual baseline is an
+empty frame with one button — which is why `ToastClose` is absent from this
+census, from `touch-target.spec.ts`, from the axe crawl and from the baseline
+alike. Fixing the example is the prerequisite for asserting anything about it.
+
 ### The convention
 
 Two mechanisms, and the choice between them is about whether the box can move.
@@ -370,3 +395,12 @@ serves `out/` instead, and is what the Playwright suites run against.
 - Figma *components* — only variables were pushed; no component library yet.
 - Code Connect (needs an Organization/Enterprise plan; this team is `pro`).
 - Publishing the Figma library, which requires a human clicking Publish.
+- `examples/toast-default.tsx` wires two `ToastProvider`s with different
+  managers, so no toast ever renders and `ToastClose` is untestable. See
+  **Touch targets**.
+- The 44px floor on the VIP workspaces, worst-first — `regulations-workspace`
+  and `reports-workspace` have no control above it at any width.
+- `patterns/bottom-tray.tsx`'s grab strip covering the panel tabs, the one
+  WCAG 2.2 AA failure, recorded in `KNOWN_UNDER_FLOOR`.
+- Measuring controls that only exist after an interaction — a menu, a dialog,
+  a toast. The census measures what the page renders.
