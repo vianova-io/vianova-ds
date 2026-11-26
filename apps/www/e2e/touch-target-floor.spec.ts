@@ -48,6 +48,17 @@ import { BLOCKS, NON_MAP_BLOCKS, settle } from "./examples";
  * `hasTouch: true` is what makes `(pointer: coarse)` match in Chromium --
  * verified, not assumed -- and the rest of the suite runs without it, so
  * nothing here changes what `control-size.spec.ts` measures on a fine pointer.
+ *
+ * Which direction to be wrong in: a tap area reported too LARGE is the
+ * dangerous error, because it signs off a control that does not conform and
+ * produces silence. Too small produces a false alarm, which someone
+ * investigates. So where a reading is uncertain this file prefers the small
+ * answer, and the one place it abstains instead -- controls that are occluded
+ * or that the fold clips, which cannot be probed from their own centre -- is
+ * the one place it chooses silence. That is a real blind spot and it is
+ * counted in README rather than left implicit; most of it is Base UI's
+ * underlying form input sitting beneath the styled control that is the actual
+ * target, but not all of it.
  */
 
 /** WCAG 2.2 AA 2.5.8. */

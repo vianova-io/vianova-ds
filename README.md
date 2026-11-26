@@ -147,11 +147,26 @@ any parent `min-h`, any `after:-inset-*` hit slop, and anything layered on top.
 Probed by walking outward from each control's centre with `elementFromPoint`
 until the hit stops resolving back to the control.
 
-| Viewport | Controls | Under 44px | Under 24px |
-| --- | --- | --- | --- |
-| Phone, 390x844 | 466 | 442 (95%) | 83 |
-| Tablet portrait, 834x1112 | 529 | 500 (95%) | 92 |
-| Tablet landscape, 1366x1024 | 569 | 534 (94%) | 93 |
+| Viewport | Controls | Under 44px | Under 24px | Not judged |
+| --- | --- | --- | --- | --- |
+| Phone, 390x844 | 466 | 442 (95%) | 83 | 65 |
+| Tablet portrait, 834x1112 | 529 | 500 (95%) | 92 | 88 |
+| Tablet landscape, 1366x1024 | 569 | 534 (94%) | 93 | 69 |
+
+**Not judged** is the audit's own blind spot, counted rather than left
+implicit. A control that is occluded, or that the fold clips, cannot be probed
+outward from its own centre, and a reading the suite cannot stand behind must
+not become an assertion. 161 of those across the three viewports are Base UI's
+underlying form `<input>` sitting beneath the styled checkbox, switch or radio
+that is the real target — benign. The remainder are not: `tooltip-trigger`
+(15), `feed-row` (6) and `report-download-link` (4) are real controls this
+audit has nothing to say about.
+
+Which direction to be wrong in, since it decides how to read all of the above:
+a tap area reported too *large* is the dangerous error, because it signs off a
+control that does not conform and produces silence. Too small produces a false
+alarm that someone investigates. These numbers prefer the small answer
+wherever a reading is uncertain.
 
 Tablet landscape matters more than it looks: at 1366px the `lg:` desktop
 arrangements are the ones on screen, so the densest layouts in the system are
@@ -414,7 +429,11 @@ serves `out/` instead, and is what the Playwright suites run against.
   managers, so no toast ever renders and `ToastClose` is untestable. See
   **Touch targets**.
 - The 44px floor on the VIP workspaces, worst-first — `regulations-workspace`
-  and `reports-workspace` have no control above it at any width.
+  and `reports-workspace` have no control above it at any width. Run that sweep
+  with `test:visual:refresh` from the start: a 36px control going to 44px is an
+  8px band in a 900x700 frame, under the 1% `maxDiffPixelRatio`, so a sweep
+  that moves many controls a little passes against stale baselines and plain
+  `--update-snapshots` will not rewrite them.
 - `patterns/bottom-tray.tsx`'s grab strip covering the panel tabs, the one
   WCAG 2.2 AA failure, recorded in `KNOWN_UNDER_FLOOR`.
 - Measuring controls that only exist after an interaction — a menu, a dialog,
