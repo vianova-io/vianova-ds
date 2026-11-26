@@ -21,6 +21,16 @@ import { settle } from "./examples";
  * e2e/control-size.spec.ts honest and VIP's desktop screenshots valid; a fix
  * that quietly grew every control would pass the first half alone.
  *
+ * This is the per-control GATE over two controls, and it measures rendered
+ * rects because these two have no slop -- the card's dismiss is parked
+ * absolutely over a corner and "Check again" is a plain button. A rect is the
+ * wrong instrument for the registry at large: a control can conform entirely on
+ * pseudo-element slop, which a rect cannot see but elementFromPoint can, by
+ * resolving a hit on a `::after` back to the element that owns it. Checkbox is
+ * a 16x16 box with a 53x43 tap area and conforms on slop alone. The
+ * registry-wide census measures tap areas that way and lives in
+ * e2e/touch-target-floor.spec.ts; do not grow this file into it.
+ *
  * `hasTouch: true` is the whole knob. Measured rather than assumed: it flips
  * `(pointer: coarse)` to true on its own, and `isMobile` is not needed -- which
  * matters, because `isMobile` also swaps the viewport and the user agent and

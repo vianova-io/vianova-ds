@@ -238,11 +238,23 @@ export function StatusToast({
             height and this one, because the modifier puts them in separate
             groups, so the fine-pointer size is untouched.
 
-            Grow the real box rather than padding a pseudo-element. A
-            `::after`-expanded target is invisible to getBoundingClientRect, so
-            it cannot be measured and tends to read as a false pass -- see
-            `ToastClose`, which has 48px of `after:-inset-2` hit area around a
-            32px box. Asserted in e2e/touch-target.spec.ts.
+            These two controls grow their real box because neither has any
+            slop to grow instead -- this one is parked absolutely over the
+            card's corner, where padding it out would overlap the link beneath
+            it. It is not a rule against slop. Slop conforms: 2.5.8 is about the
+            region that accepts the pointer action, so `ToastClose`'s 32px box
+            with 48px of `after:-inset-2` around it already clears the floor and
+            is deliberately left alone.
+
+            Do not write a registry-wide rule off getBoundingClientRect. Slop is
+            invisible to a rect, but it is NOT unmeasurable: elementFromPoint
+            resolves a hit on a `::after` back to the element that owns it, so
+            probing outward from a control's centre reads the real tap area in
+            pixels. Measured here: Checkbox is a 16x16 box with a 53x43 tap
+            area, and a rect-only sweep would call that a 16px failure and send
+            someone off to grow a box that is 16px on purpose. The registry-wide
+            census is e2e/touch-target-floor.spec.ts; e2e/touch-target.spec.ts is
+            the per-control gate that asserts these two.
           */
           className="absolute top-2 right-2 grid size-6 shrink-0 place-items-center rounded-sm outline-none hover:bg-current/15 focus-visible:ring-3 focus-visible:ring-current/40 pointer-coarse:size-11"
         >

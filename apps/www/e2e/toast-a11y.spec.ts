@@ -94,6 +94,57 @@ test.describe("the status toast's semantics", () => {
   });
 });
 
+/**
+ * The ordinary `Toaster`, which is the other half of the wrapper and was not
+ * reachable from any example until `toast-default` was fixed.
+ *
+ * That example wrapped its trigger and `<Toaster />` in its own
+ * `ToastProvider`, and `Toaster` builds a second provider inside it around its
+ * own manager -- so the click added to the outer store while `ToastList`
+ * rendered from the inner one, and no toast ever appeared. Silently: no
+ * console error, and a committed visual baseline of an empty frame that read
+ * as a toast waiting to be triggered. Every assertion below was unreachable,
+ * which is exactly why the defect survived.
+ */
+test.describe("the ordinary toaster", () => {
+  test("a toast with a title is named by it", async ({ page }) => {
+    await page.goto("/preview/toast-default");
+    await settle(page);
+
+    await page.getByRole("button", { name: "Add toast" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toHaveCount(1);
+    await expect(dialog).toHaveAccessibleName("View saved");
+  });
+
+  /**
+   * The defect this wrapper fixes for every toast in the system: `Toast.Title`
+   * renders nothing when the toast has no title, so Base UI's
+   * `aria-labelledby` pointed at nothing and the dialog had no name at all.
+   */
+  test("a toast with no title falls back to its description", async ({ page }) => {
+    await page.goto("/preview/toast-default");
+    await settle(page);
+
+    await page.getByRole("button", { name: "Add one with no title" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toHaveCount(1);
+    await expect(dialog).toHaveAccessibleName("Export started — we will email you");
+  });
+
+  test("its viewport keeps Base UI's name unless the app changes it", async ({ page }) => {
+    await page.goto("/preview/toast-default");
+    await settle(page);
+    await page.getByRole("button", { name: "Add toast" }).click();
+
+    // `label` defaults to upstream's "Notifications" here. The point of the
+    // prop is that an app running two queues can tell them apart, not that the
+    // default moved -- a renamed default would be a breaking change for every
+    // consumer's landmark list.
+    await expect(page.getByRole("region", { name: "Notifications" })).toHaveCount(1);
+  });
+});
+
 test.describe("focus when a toast is dismissed from inside it", () => {
   test("goes to the card still on screen", async ({ page }) => {
     await page.goto(QUEUE);
