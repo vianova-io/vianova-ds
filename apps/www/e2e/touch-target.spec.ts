@@ -27,9 +27,17 @@ import { settle } from "./examples";
  * wrong instrument for the registry at large: a control can conform entirely on
  * pseudo-element slop, which a rect cannot see but elementFromPoint can, by
  * resolving a hit on a `::after` back to the element that owns it. Checkbox is
- * a 16x16 box with a 53x43 tap area and conforms on slop alone. The
+ * a 16x16 box with a 38x28 tap area and conforms on slop alone. The
  * registry-wide census measures tap areas that way and lives in
  * e2e/touch-target-floor.spec.ts; do not grow this file into it.
+ *
+ * If you write such a probe, measure the SPAN and not the span plus the box.
+ * Reaches walked outward from the centre already contain half the box in each
+ * direction, so adding `getBoundingClientRect().width` back on double-counts
+ * it: that mistake turns Checkbox's 38x28 into 53x43, which is larger than the
+ * 40x32 its `after:-inset-x-3 after:-inset-y-2` can possibly produce. An
+ * inflated tap area is the dangerous direction to be wrong in -- it reports a
+ * control as conformant when it is not.
  *
  * `hasTouch: true` is the whole knob. Measured rather than assumed: it flips
  * `(pointer: coarse)` to true on its own, and `isMobile` is not needed -- which

@@ -250,11 +250,21 @@ export function StatusToast({
             invisible to a rect, but it is NOT unmeasurable: elementFromPoint
             resolves a hit on a `::after` back to the element that owns it, so
             probing outward from a control's centre reads the real tap area in
-            pixels. Measured here: Checkbox is a 16x16 box with a 53x43 tap
-            area, and a rect-only sweep would call that a 16px failure and send
-            someone off to grow a box that is 16px on purpose. The registry-wide
-            census is e2e/touch-target-floor.spec.ts; e2e/touch-target.spec.ts is
-            the per-control gate that asserts these two.
+            pixels. Checkbox is a 16x16 box with a 38x28 tap area -- a rect-only
+            sweep calls that a 16px failure and sends someone off to grow a box
+            that is 16px on purpose.
+
+            Two numbers exist for a control inside a Label and the census picks
+            the smaller deliberately. Checkbox's own aimable area is 38x28;
+            Label makes the whole 187x16 row clickable, verified by clicking
+            164px from the box. 187 is why a checkbox in a form is fine to tap;
+            38 is why one outside a Label would not be. Counting the Label would
+            report every checkbox as a 187px target and hide exactly what the
+            audit looks for.
+
+            The registry-wide census and that ruling are
+            e2e/touch-target-floor.spec.ts; e2e/touch-target.spec.ts is the
+            per-control gate that asserts these two controls.
           */
           className="absolute top-2 right-2 grid size-6 shrink-0 place-items-center rounded-sm outline-none hover:bg-current/15 focus-visible:ring-3 focus-visible:ring-current/40 pointer-coarse:size-11"
         >
