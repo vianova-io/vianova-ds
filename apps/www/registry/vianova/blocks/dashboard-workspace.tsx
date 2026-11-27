@@ -65,9 +65,9 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/registry/vianova/ui/alert";
-import { Avatar, AvatarFallback } from "@/registry/vianova/ui/avatar";
 import { Badge } from "@/registry/vianova/ui/badge";
 import { Button } from "@/registry/vianova/ui/button";
+import { Checkbox } from "@/registry/vianova/ui/checkbox";
 import {
   Tooltip,
   TooltipContent,
@@ -149,6 +149,15 @@ import {
   ToggleGroupItem,
 } from "@/registry/vianova/ui/toggle-group";
 import { ConfirmDialog } from "@/registry/vianova/patterns/confirm-dialog";
+import { PersonCell } from "@/registry/vianova/patterns/person-cell";
+import { RelativeTime } from "@/registry/vianova/patterns/relative-time";
+import { SelectionBar } from "@/registry/vianova/patterns/selection-bar";
+import {
+  TableSettings,
+  useTableView,
+  type ViewColumn,
+} from "@/registry/vianova/patterns/table-settings";
+import { TableCard } from "@/registry/vianova/patterns/table-card";
 import { InlineEdit } from "@/registry/vianova/patterns/inline-edit";
 import { ActivityHeatmap } from "@/registry/vianova/product/activity-heatmap";
 import { downloadFile, toCsv } from "@/registry/vianova/product/export-menu";
@@ -1001,24 +1010,6 @@ const compact = new Intl.NumberFormat("en", {
 });
 /** For chart props that must not change from one render to the next. */
 const formatCompact = (v: unknown) => compact.format(Number(v));
-/**
- * A moment in the viewer's own time zone. The page is rendered ahead of time
- * in UTC, so the text differs once it reaches a browser in Lisbon or New York;
- * the mismatch is expected, and this tells React so rather than letting it
- * throw away and rebuild the whole table.
- */
-function LocalTime({ iso }: { iso: string }) {
-  return (
-    <time dateTime={iso} suppressHydrationWarning>
-      {dateTimeFormat.format(new Date(iso))}
-    </time>
-  );
-}
-
-const dateTimeFormat = new Intl.DateTimeFormat("en", {
-  dateStyle: "medium",
-  timeStyle: "medium",
-});
 const MONTHS = [
   "Jan",
   "Feb",
@@ -5003,13 +4994,12 @@ function ReportView({
 /* List                                                                        */
 /* -------------------------------------------------------------------------- */
 
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 3)
-    .toUpperCase();
+const DASHBOARD_COLUMNS: ViewColumn[] = [
+  { id: "name", label: "Name", locked: true },
+  { id: "createdBy", label: "Created by" },
+  { id: "created", label: "Created" },
+  { id: "updated", label: "Last update" },
+];
 
 function ReportList({
   reports,
@@ -5031,6 +5021,18 @@ function ReportList({
   const [query, setQuery] = React.useState("");
   const [dir, setDir] = React.useState<"desc" | "asc">("desc");
   const [deleting, setDeleting] = React.useState<Report | null>(null);
+  const view = useTableView(DASHBOARD_COLUMNS, {
+    selection: true,
+    dates: true,
+  });
+  const selecting = view.selecting;
+  const [selected, setSelected] = React.useState<string[]>([]);
+  // Tick boxes put away take their ticks with them.
+  React.useEffect(() => {
+    if (!selecting) setSelected([]);
+  }, [selecting]);
+  /** The ticked dashboards, waiting on the confirmation. */
+  const [deletingMany, setDeletingMany] = React.useState(false);
 
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -5042,6 +5044,15 @@ function ReportList({
           : a.createdAt.localeCompare(b.createdAt),
       );
   }, [reports, query, dir]);
+
+  // A dashboard searched out from under a tick must not stay ticked, or
+  // Delete would remove something the user can no longer see.
+  React.useEffect(() => {
+    setSelected((cur) => cur.filter((id) => visible.some((r) => r.id === id)));
+  }, [visible]);
+
+  const allTicked = visible.length > 0 && selected.length === visible.length;
+  const someTicked = selected.length > 0 && !allTicked;
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 p-4 md:p-6">
@@ -5058,17 +5069,33 @@ function ReportList({
         </Button>
       </header>
 
-      <InputGroup>
-        <InputGroupAddon>
-          <Search />
-        </InputGroupAddon>
-        <InputGroupInput
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search for dashboards"
-          aria-label="Search for dashboards"
-        />
-      </InputGroup>
+      <div className="flex flex-wrap items-center gap-2">
+        <InputGroup className="min-w-48 flex-1">
+          <InputGroupAddon>
+            <Search />
+          </InputGroupAddon>
+          <InputGroupInput
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search dashboards"
+            aria-label="Search dashboards"
+          />
+        </InputGroup>
+        <TableSettings {...view.settings} />
+      </div>
+
+      {selecting && selected.length > 0 ? (
+        <SelectionBar count={selected.length} onClear={() => setSelected([])}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDeletingMany(true)}
+          >
+            <Trash2 data-icon="inline-start" />
+            Delete
+          </Button>
+        </SelectionBar>
+      ) : null}
 
       {status === "loading" ? (
         <div role="status" aria-label="Loading dashboards" className="space-y-2">
@@ -5120,12 +5147,29 @@ function ReportList({
           </EmptyContent>
         </Empty>
       ) : (
-        <div className="bg-card overflow-hidden rounded-xl border">
-          <Table className="[&_td:first-child]:pl-4 [&_td:last-child]:pr-4 [&_th:first-child]:pl-4 [&_th:last-child]:pr-4">
+        <TableCard>
+          <Table inset>
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                {selecting ? (
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={allTicked}
+                      indeterminate={someTicked}
+                      onCheckedChange={() =>
+                        setSelected(allTicked ? [] : visible.map((r) => r.id))
+                      }
+                      aria-label={
+                        allTicked ? "Clear selection" : "Select every dashboard"
+                      }
+                    />
+                  </TableHead>
+                ) : null}
                 <TableHead>Name</TableHead>
-                <TableHead>Creator</TableHead>
+                {view.shows("createdBy") ? (
+                <TableHead>Created by</TableHead>
+                ) : null}
+                {view.shows("created") ? (
                 <TableHead
                   aria-sort={dir === "desc" ? "descending" : "ascending"}
                 >
@@ -5136,7 +5180,7 @@ function ReportList({
                     }
                     className="hover:text-foreground focus-visible:ring-ring -mx-1 inline-flex items-center gap-1 rounded px-1 font-medium focus-visible:ring-2 focus-visible:outline-none"
                   >
-                    Created at
+                    Created
                     {dir === "desc" ? (
                       <ArrowDown className="size-3.5" aria-hidden />
                     ) : (
@@ -5144,46 +5188,66 @@ function ReportList({
                     )}
                   </button>
                 </TableHead>
+                ) : null}
+                {view.shows("updated") ? (
                 <TableHead>Last update</TableHead>
+                ) : null}
                 <TableHead className="w-24">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {visible.map((r) => (
-                <TableRow key={r.id}>
+                <TableRow
+                  key={r.id}
+                  data-state={selected.includes(r.id) ? "selected" : undefined}
+                >
+                  {selecting ? (
+                    <TableCell>
+                      <Checkbox
+                        checked={selected.includes(r.id)}
+                        onCheckedChange={() =>
+                          setSelected((cur) =>
+                            cur.includes(r.id)
+                              ? cur.filter((id) => id !== r.id)
+                              : [...cur, r.id],
+                          )
+                        }
+                        aria-label={`Select ${r.title}`}
+                        // Not decoration: Tab scrolls a focused row flush with
+                        // the workspace's edge, and the ring paints outside
+                        // the box, so it would be cut.
+                        className="scroll-my-1"
+                      />
+                    </TableCell>
+                  ) : null}
                   <TableCell className="max-w-64">
+                    {/* The name turns to the primary colour under the
+                        pointer, as it does in every other list. It used to
+                        underline here and nowhere else. */}
                     <button
                       type="button"
                       data-slot="report-link"
                       onClick={() => onOpen(r.id)}
-                      className="focus-visible:ring-ring block max-w-full truncate rounded text-left font-medium underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:outline-none"
+                      className="hover:text-primary focus-visible:ring-ring block max-w-full scroll-m-1 truncate rounded text-left font-medium focus-visible:ring-2 focus-visible:outline-none"
                     >
                       {r.title}
                     </button>
                   </TableCell>
+                  {view.shows("createdBy") ? (
                   <TableCell>
-                    <span className="flex items-center gap-2">
-                      <Avatar size="sm">
-                        <AvatarFallback>
-                          {initials(r.creator.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="min-w-0">
-                        <span className="block truncate">{r.creator.name}</span>
-                        {r.creator.email ? (
-                          <span className="text-muted-foreground block truncate text-xs">
-                            {r.creator.email}
-                          </span>
-                        ) : null}
-                      </span>
-                    </span>
+                    <PersonCell name={r.creator.name} email={r.creator.email} />
                   </TableCell>
-                  <TableCell className="whitespace-nowrap tabular-nums">
-                    <LocalTime iso={r.createdAt} />
+                  ) : null}
+                  {view.shows("created") ? (
+                  <TableCell className="text-muted-foreground">
+                    <RelativeTime iso={r.createdAt} display={view.dates} />
                   </TableCell>
-                  <TableCell className="whitespace-nowrap tabular-nums">
-                    <LocalTime iso={r.updatedAt} />
+                  ) : null}
+                  {view.shows("updated") ? (
+                  <TableCell className="text-muted-foreground">
+                    <RelativeTime iso={r.updatedAt} display={view.dates} />
                   </TableCell>
+                  ) : null}
                   <TableCell>
                     <span className="flex items-center gap-1">
                       <Button
@@ -5208,8 +5272,24 @@ function ReportList({
               ))}
             </TableBody>
           </Table>
-        </div>
+        </TableCard>
       )}
+
+      <ConfirmDialog
+        open={deletingMany}
+        onOpenChange={(o) => {
+          if (!o) setDeletingMany(false);
+        }}
+        title={`Delete ${selected.length} dashboard${selected.length === 1 ? "" : "s"}?`}
+        description="The dashboards and their layouts are deleted for everyone. The data behind them is not touched."
+        confirmLabel="Delete dashboards"
+        destructive
+        onConfirm={() => {
+          for (const r of reports) if (selected.includes(r.id)) onDelete(r);
+          setSelected([]);
+          setDeletingMany(false);
+        }}
+      />
 
       <ConfirmDialog
         open={deleting !== null}

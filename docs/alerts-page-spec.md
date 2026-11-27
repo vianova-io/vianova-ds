@@ -79,23 +79,31 @@ The tool's band carries its name and **Create alert**. Under it, two tabs with
 counts — **Alerts** and **Recipients** — the way Feeds draws *Your feeds* and
 *Catalogue*.
 
-Columns, as in Katell's prototype: **Name** · Created by · Date · Sent to ·
-Last sent · On. One line per alert.
+Columns, as in Katell's prototype: **Name** · Created by · Created · Sent to ·
+Last sent · On.
 
 - The name links into the editor.
-- **Date** is when the alert was created: *12 Nov 2026*.
+- **Created by** is the shared creator cell every workspace list uses: a mark,
+  the name, and the address under it. The platform's own rows get a square
+  mark and no address.
+- **Created** and **Last sent** are ages — *Just now*, *3 h ago*, *3 d ago* —
+  and the date itself once it is more than a week old. The exact day and time,
+  on the scope's clock, is on hover. An alert that has never sent says *Never
+  sent*.
 - **Sent to** shows the names themselves while there are one or two, then the
   first name and a **+ N more** chip. A name opens that recipient, in Recipients;
   the chip opens the whole list for that alert, with *Open the alert* in its
   footer. An address with no VIP account is shown as text, not a link.
-- **Last sent** is a day and a time on the scope's clock: *Today 10:00*,
-  *Yesterday 17:42*, *14 Nov 09:30*, or *Never sent*.
 - **On** is a switch for alert rows; for report rows it is a static badge with
   a tooltip naming the regulation where the switch lives.
 - Filter: search, and All / On / Off.
-- **No tick boxes and no bulk actions.** An alert is switched off far more
-  often than it is deleted, and the switch is on the row; Delete is in the
-  editor.
+- **A settings menu at the end of the toolbar**, the same one every workspace
+  list has. It turns **Select rows** on (tick boxes, with a bulk Delete),
+  hides and shows **columns** (Name and On always stay), and switches
+  **dates** between ages and the day and time. A dot on the button says the
+  view is not as it opens; *Reset view* puts it back.
+- Tick boxes are off until asked for: an alert is switched off far more often
+  than it is deleted, and the switch is on the row.
 - Sorted newest first.
 
 **From the backend:** `lastSentAt` is the one field you flagged as uncertain on
@@ -204,8 +212,8 @@ recipient** in the band.
   `Name <address>` keeps the name — with *Also add them to* one alert. The
   button counts what will be added, and addresses already on the list are
   skipped and said to be.
-- **Tick boxes and a bulk Delete live here**, unlike the alerts list: people
-  leave in groups.
+- **Bulk Delete matters most here**: people leave in groups. The tick boxes
+  are behind *Select rows* in the same settings menu as on the alerts list.
 - A name in the alerts list's *Sent to* column, or in its *+ N more* dialog,
   opens that recipient here.
 

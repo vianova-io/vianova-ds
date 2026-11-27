@@ -142,7 +142,15 @@ import {
   TooltipTrigger,
 } from "@/registry/vianova/ui/tooltip";
 import { InlineEdit } from "@/registry/vianova/patterns/inline-edit";
+import { PersonCell } from "@/registry/vianova/patterns/person-cell";
+import { RelativeTime } from "@/registry/vianova/patterns/relative-time";
 import { SaveBar } from "@/registry/vianova/patterns/save-bar";
+import { SelectionBar } from "@/registry/vianova/patterns/selection-bar";
+import {
+  TableSettings,
+  useTableView,
+  type ViewColumn,
+} from "@/registry/vianova/patterns/table-settings";
 import { StatusBadge } from "@/registry/vianova/patterns/status-badge";
 import { TableCard } from "@/registry/vianova/patterns/table-card";
 import { TagInput } from "@/registry/vianova/patterns/tag-input";
@@ -552,43 +560,6 @@ const recipientPhrase = (names: string[]) =>
  */
 const SCOPE_TZ = "Europe/Berlin";
 
-const dayKeyFmt = new Intl.DateTimeFormat("en-CA", { timeZone: SCOPE_TZ });
-const timeFmt = new Intl.DateTimeFormat("en-GB", {
-  timeZone: SCOPE_TZ,
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-const dayFmt = new Intl.DateTimeFormat("en-GB", {
-  timeZone: SCOPE_TZ,
-  day: "numeric",
-  month: "short",
-});
-const dateFmt = new Intl.DateTimeFormat("en-GB", {
-  timeZone: SCOPE_TZ,
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-});
-
-/** "12 Nov 2026". */
-const formatDate = (iso: string) => dateFmt.format(Date.parse(iso));
-
-/**
- * "Today 10:00", "Yesterday 17:42", "14 Nov 09:30" -- or nothing, for an alert
- * that has never sent. A day and a time rather than "3 h ago": the question
- * someone brings to this column is "did this morning's one go out", and an
- * hour on a clock answers it where an age has to be subtracted first.
- */
-function formatSent(iso: string | undefined, now = NOW) {
-  if (!iso) return null;
-  const then = Date.parse(iso);
-  const time = timeFmt.format(then);
-  const day = dayKeyFmt.format(then);
-  if (day === dayKeyFmt.format(now)) return `Today ${time}`;
-  if (day === dayKeyFmt.format(now - 86_400_000)) return `Yesterday ${time}`;
-  return `${dayFmt.format(then)} ${time}`;
-}
 
 /** "Anja Reiter" -> "AR", "Vianova" -> "V". */
 const initials = (name: string) =>
@@ -1905,14 +1876,26 @@ function SentToDialog({
   );
 }
 
+/** What the alerts list can show. Name and On are what make it a list. */
+const ALERT_COLUMNS: ViewColumn[] = [
+  { id: "name", label: "Name", locked: true },
+  { id: "createdBy", label: "Created by" },
+  { id: "created", label: "Created" },
+  { id: "sentTo", label: "Sent to" },
+  { id: "lastSent", label: "Last sent" },
+  { id: "on", label: "On", locked: true },
+];
+
 /**
- * The list, on Katell's columns: Name, Created by, Date, Sent to, Last sent,
- * On.
+ * The list, on Katell's columns: Name, Created by, Created, Sent to, Last
+ * sent, On.
  *
- * No tick boxes and no bulk bar. An alert is switched off far more often than
- * it is deleted, the switch is already on the row, and deleting one is a thing
- * you do having opened it and looked -- so Delete lives in the editor, and the
- * table gives its first column back to the name.
+ * It opens with no tick boxes. An alert is switched off far more often than it
+ * is deleted, the switch is already on the row, and so the first column is the
+ * name's. The boxes and the bulk Delete come in from `TableSettings` at the
+ * end of the toolbar, which is also where columns are hidden and dates are
+ * switched between ages and clock times -- the same menu every list in the
+ * workspaces has.
  */
 function AlertList({
   alerts,
@@ -1924,6 +1907,7 @@ function AlertList({
   onCreate,
   onOpen,
   onToggle,
+  onDelete,
   onPerson,
 }: {
   alerts: Alert[];
@@ -1935,6 +1919,7 @@ function AlertList({
   onCreate: () => void;
   onOpen: (id: string) => void;
   onToggle: (id: string) => void;
+  onDelete: (ids: string[]) => void;
   /** Opens one recipient, in Recipients. */
   onPerson: (id: string) => void;
 }) {
@@ -1942,6 +1927,13 @@ function AlertList({
   const [on, setOn] = React.useState<OnFilter>("all");
   /** The alert whose whole recipient list is open. */
   const [listing, setListing] = React.useState<string | null>(null);
+  const view = useTableView(ALERT_COLUMNS, { selection: true, dates: true });
+  const selecting = view.selecting;
+  const [selected, setSelected] = React.useState<string[]>([]);
+  // Tick boxes put away take their ticks with them.
+  React.useEffect(() => {
+    if (!selecting) setSelected([]);
+  }, [selecting]);
 
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -1960,6 +1952,26 @@ function AlertList({
   };
 
   const listed = listing ? alerts.find((a) => a.id === listing) : undefined;
+
+  // An alert filtered out from under a tick must not stay ticked, or Delete
+  // would remove something the user can no longer see.
+  React.useEffect(() => {
+    setSelected((cur) => cur.filter((id) => visible.some((a) => a.id === id)));
+  }, [visible]);
+
+  // Report rules cannot be deleted from here, so they are never part of a
+  // batch: a Delete that silently skipped half the ticks would be worse than
+  // one that cannot tick them.
+  const deletable = visible.filter((a) => a.kind === "alert");
+  const allTicked =
+    deletable.length > 0 && selected.length === deletable.length;
+  const someTicked = selected.length > 0 && !allTicked;
+
+  /** Who made each alert, found by name: the model keeps the name alone. */
+  const author = (name: string) => {
+    for (const c of contacts.values()) if (c.name === name) return c;
+    return undefined;
+  };
 
   return (
     <>
@@ -1991,7 +2003,24 @@ function AlertList({
             ))}
           </SelectContent>
         </Select>
+        <TableSettings {...view.settings} />
       </div>
+
+      {selecting && selected.length > 0 ? (
+        <SelectionBar count={selected.length} onClear={() => setSelected([])}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              onDelete(selected);
+              setSelected([]);
+            }}
+          >
+            <Trash2 data-icon="inline-start" />
+            Delete
+          </Button>
+        </SelectionBar>
+      ) : null}
 
       {status === "error" ? (
         <Empty className="min-h-fit flex-auto border">
@@ -2057,18 +2086,47 @@ function AlertList({
            * rest from collapsing on a tablet; below it the table scrolls
            * sideways rather than cutting every name to three words.
            */}
-          <Table inset className="min-w-[60rem] table-fixed">
+          <Table inset className="min-w-[64rem] table-fixed">
             <caption className="sr-only">
               Alerts in {scope}, newest first. Rules that file a report are
               listed but set on their regulation.
             </caption>
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
+                {selecting ? (
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={allTicked}
+                      indeterminate={someTicked}
+                      onCheckedChange={() =>
+                        setSelected(allTicked ? [] : deletable.map((a) => a.id))
+                      }
+                      disabled={status === "loading" || deletable.length === 0}
+                      aria-label={
+                        allTicked ? "Clear selection" : "Select every alert"
+                      }
+                    />
+                  </TableHead>
+                ) : null}
                 <TableHead>Name</TableHead>
-                <TableHead className="w-40">Created by</TableHead>
-                <TableHead className="w-32">Date</TableHead>
-                <TableHead className="w-72">Sent to</TableHead>
-                <TableHead className="w-36">Last sent</TableHead>
+                {view.shows("createdBy") ? (
+                <TableHead className="w-56">Created by</TableHead>
+                ) : null}
+                {view.shows("created") ? (
+                <TableHead
+                  // The column is fixed-width, and a day with a time is
+                  // wider than an age: at w-28 it ran into Sent to.
+                  className={view.dates === "exact" ? "w-40" : "w-28"}
+                >
+                  Created
+                </TableHead>
+                ) : null}
+                {view.shows("sentTo") ? (
+                <TableHead className="w-64">Sent to</TableHead>
+                ) : null}
+                {view.shows("lastSent") ? (
+                <TableHead className="w-40">Last sent</TableHead>
+                ) : null}
                 <TableHead className="w-20 text-right">On</TableHead>
               </TableRow>
             </TableHeader>
@@ -2076,6 +2134,11 @@ function AlertList({
               {status === "loading"
                 ? Array.from({ length: 5 }, (_, i) => (
                     <TableRow key={i} className="hover:bg-transparent">
+                      {selecting ? (
+                        <TableCell>
+                          <Skeleton className="size-4 rounded-[4px]" />
+                        </TableCell>
+                      ) : null}
                       <TableCell>
                         <Skeleton className="h-4 w-3/4" />
                       </TableCell>
@@ -2099,9 +2162,33 @@ function AlertList({
                 : visible.map((alert) => {
                     const found = rules.get(alert.ruleId);
                     const report = alert.kind === "report";
-                    const sent = formatSent(alert.lastSentAt);
+                    const ticked = selected.includes(alert.id);
+                    const by = author(alert.createdBy);
                     return (
-                      <TableRow key={alert.id}>
+                      <TableRow
+                        key={alert.id}
+                        data-state={ticked ? "selected" : undefined}
+                      >
+                        {selecting ? (
+                          <TableCell>
+                            <Checkbox
+                              checked={ticked}
+                              disabled={report}
+                              onCheckedChange={() =>
+                                setSelected((cur) => toggle(cur, alert.id))
+                              }
+                              aria-label={
+                                report
+                                  ? `${alert.name} is set on its regulation`
+                                  : `Select ${alert.name}`
+                              }
+                              // Not decoration: Tab scrolls a focused row
+                              // flush with the workspace's edge, and the ring
+                              // paints outside the box, so it would be cut.
+                              className="scroll-my-1"
+                            />
+                          </TableCell>
+                        ) : null}
                         <TableCell>
                           <span className="flex min-w-0 items-center gap-2">
                             <button
@@ -2126,14 +2213,28 @@ function AlertList({
                             ) : null}
                           </span>
                         </TableCell>
+                        {view.shows("createdBy") ? (
                         <TableCell>
-                          <span className="block truncate">
-                            {alert.createdBy}
-                          </span>
+                          <PersonCell
+                            name={alert.createdBy}
+                            email={by?.email}
+                            // The platform files the report rules, and it is
+                            // not one of the people.
+                            organisation={alert.createdBy === "Vianova"}
+                          />
                         </TableCell>
+                        ) : null}
+                        {view.shows("created") ? (
                         <TableCell className="text-muted-foreground">
-                          {formatDate(alert.createdAt)}
+                          <RelativeTime
+                            iso={alert.createdAt}
+                            now={NOW}
+                            timeZone={SCOPE_TZ}
+                            display={view.dates}
+                          />
                         </TableCell>
+                        ) : null}
+                        {view.shows("sentTo") ? (
                         <TableCell>
                           <SentTo
                             people={peopleOf(alert, contacts)}
@@ -2141,13 +2242,18 @@ function AlertList({
                             onAll={() => setListing(alert.id)}
                           />
                         </TableCell>
-                        <TableCell
-                          className={
-                            sent ? "font-medium" : "text-muted-foreground"
-                          }
-                        >
-                          {sent ?? "Never sent"}
+                        ) : null}
+                        {view.shows("lastSent") ? (
+                        <TableCell>
+                          <RelativeTime
+                            iso={alert.lastSentAt}
+                            now={NOW}
+                            timeZone={SCOPE_TZ}
+                            display={view.dates}
+                            never="Never sent"
+                          />
                         </TableCell>
+                        ) : null}
                         <TableCell>
                           {/* Against the right edge, not under the left of
                               its header. Tab scrolls a control only just into
@@ -2763,6 +2869,11 @@ function PasteDialog({
   );
 }
 
+const RECIPIENT_COLUMNS: ViewColumn[] = [
+  { id: "recipient", label: "Recipient", locked: true },
+  { id: "alerts", label: "Gets these alerts" },
+];
+
 /**
  * The recipients, on Katell's columns: who, and which alerts they get.
  *
@@ -2772,10 +2883,11 @@ function PasteDialog({
  * a colleague leaves, and it is why a name opens that person rather than a
  * menu of things to do to them.
  *
- * Tick boxes here, where the alerts list has none. Alerts are switched off,
- * not deleted, and one at a time; people leave in groups -- an operator loses
- * a contract, a team is reorganised -- and removing eleven addresses one
- * dialog at a time is the chore this tab exists to end.
+ * Bulk Delete matters more here than on the alerts list. Alerts are switched
+ * off, not deleted, and one at a time; people leave in groups -- an operator
+ * loses a contract, a team is reorganised -- and removing eleven addresses one
+ * dialog at a time is the chore this tab exists to end. The boxes still wait
+ * behind `TableSettings`, as they do on every list.
  */
 function RecipientList({
   contacts,
@@ -2803,7 +2915,13 @@ function RecipientList({
 }) {
   const [query, setQuery] = React.useState("");
   const [kind, setKind] = React.useState<KindFilter>("all");
+  const view = useTableView(RECIPIENT_COLUMNS, { selection: true });
+  const selecting = view.selecting;
   const [selected, setSelected] = React.useState<string[]>([]);
+  // Tick boxes put away take their ticks with them.
+  React.useEffect(() => {
+    if (!selecting) setSelected([]);
+  }, [selecting]);
 
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -2863,30 +2981,23 @@ function RecipientList({
             ))}
           </SelectContent>
         </Select>
+        <TableSettings {...view.settings} />
       </div>
 
-      {selected.length > 0 ? (
-        <div className="bg-muted/50 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2">
-          <p aria-live="polite" className="text-sm">
-            <span className="font-medium">{selected.length}</span> selected
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                onDelete(selected);
-                setSelected([]);
-              }}
-            >
-              <Trash2 data-icon="inline-start" />
-              Delete
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
-              Clear selection
-            </Button>
-          </div>
-        </div>
+      {selecting && selected.length > 0 ? (
+        <SelectionBar count={selected.length} onClear={() => setSelected([])}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              onDelete(selected);
+              setSelected([]);
+            }}
+          >
+            <Trash2 data-icon="inline-start" />
+            Delete
+          </Button>
+        </SelectionBar>
       ) : null}
 
       {visible.length === 0 ? (
@@ -2928,6 +3039,7 @@ function RecipientList({
             </caption>
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
+                {selecting ? (
                 <TableHead className="w-12">
                   <Checkbox
                     checked={allTicked}
@@ -2940,8 +3052,11 @@ function RecipientList({
                     }
                   />
                 </TableHead>
+                ) : null}
                 <TableHead className="w-[45%]">Recipient</TableHead>
+                {view.shows("alerts") ? (
                 <TableHead>Gets these alerts</TableHead>
+                ) : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -2963,6 +3078,7 @@ function RecipientList({
                     key={contact.id}
                     data-state={ticked ? "selected" : undefined}
                   >
+                    {selecting ? (
                     <TableCell className="align-top">
                       <Checkbox
                         checked={ticked}
@@ -2976,6 +3092,7 @@ function RecipientList({
                         className="mt-0.5 scroll-my-1"
                       />
                     </TableCell>
+                    ) : null}
                     <TableCell>
                       <span className="flex min-w-0 flex-col gap-0.5">
                         <span className="flex min-w-0 items-center gap-1.5">
@@ -3017,6 +3134,7 @@ function RecipientList({
                         ) : null}
                       </span>
                     </TableCell>
+                    {view.shows("alerts") ? (
                     <TableCell className="whitespace-normal">
                       {theirs.length === 0 ? (
                         <span className="text-muted-foreground">none</span>
@@ -3036,6 +3154,7 @@ function RecipientList({
                         </span>
                       )}
                     </TableCell>
+                    ) : null}
                   </TableRow>
                 );
               })}
@@ -3360,6 +3479,7 @@ export function AlertsWorkspace({
                       all.map((a) => (a.id === id ? { ...a, on: !a.on } : a)),
                     )
                   }
+                  onDelete={remove}
                   onPerson={(id) => {
                     setRecipientDialog({ kind: "edit", id });
                     setSection("recipients");
