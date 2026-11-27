@@ -79,19 +79,23 @@ The tool's band carries its name and **Create alert**. Under it, two tabs with
 counts — **Alerts** and **Recipients** — the way Feeds draws *Your feeds* and
 *Catalogue*.
 
-Columns: **Name** · Rule · Sent to · When · Last sent · On. One line per alert.
+Columns, as in Katell's prototype: **Name** · Created by · Date · Sent to ·
+Last sent · On. One line per alert.
 
 - The name links into the editor.
-- **Rule** is the no-parking rule watched, with its type icon; the regulation
-  it belongs to is in the tooltip.
-- **Sent to** shows the first recipient and `+N`.
-- **When** is the short form: *Every hour*, *Daily · 08:00*, *Mondays · 09:00*,
-  *Monthly · 08:00*.
+- **Date** is when the alert was created: *12 Nov 2026*.
+- **Sent to** shows the names themselves while there are one or two, then the
+  first name and a **+ N more** chip. A name opens that recipient, in Recipients;
+  the chip opens the whole list for that alert, with *Open the alert* in its
+  footer. An address with no VIP account is shown as text, not a link.
+- **Last sent** is a day and a time on the scope's clock: *Today 10:00*,
+  *Yesterday 17:42*, *14 Nov 09:30*, or *Never sent*.
 - **On** is a switch for alert rows; for report rows it is a static badge with
   a tooltip naming the regulation where the switch lives.
-- Filter: search, and On and off / On / Off. Multi-select deletes, and report
-  rows cannot be ticked — a Delete that silently skipped half the selection is
-  worse than one that cannot select them.
+- Filter: search, and All / On / Off.
+- **No tick boxes and no bulk actions.** An alert is switched off far more
+  often than it is deleted, and the switch is on the row; Delete is in the
+  editor.
 - Sorted newest first.
 
 **From the backend:** `lastSentAt` is the one field you flagged as uncertain on
@@ -176,14 +180,40 @@ nothing is typed, the list under it is the other alerts — **copy from another
 alert** (26 Nov call) is one press, not a dialog. A typed address with an `@`
 becomes a plain recipient.
 
-The Recipients tab exists for one job Katell named as the painful one: people
-change constantly, mostly at the operators, and today a swap is one alert at a
-time in Streamlit. So the row action is **Replace**, which takes someone off
-every alert they are on and puts someone else on the same ones, in one call.
-Remove is the destructive sibling, not the main verb.
+### The Recipients tab
 
-**From the backend:** a replace-across-alerts endpoint, or the UI has to fan
-out N updates and cannot report a partial failure honestly.
+As in Katell's prototype. Two columns — **Recipient** and **Gets these
+alerts** — with a search, an All / Members / Operators filter, and **Add
+recipient** in the band.
+
+- A recipient is a name over an address, or a bare address with an operator
+  chip when there is no person behind it (*Set up by Vianova* under the ones
+  the scope came with). *Invited* marks a member who has not signed in yet.
+- **A name opens that recipient.** First name and last name (both optional),
+  e-mail, type (Member / Operator), operator, and the alerts they get as chips
+  with a search to add more.
+- **Changing the address is how someone is replaced.** People change
+  constantly, mostly at the operators, and today a swap is one alert at a time
+  in Streamlit. Here the address is edited once and every alert they were on
+  follows. There is no separate Replace action.
+- **A VIP user of the organisation is locked**: name and e-mail come from the
+  Members page, so the dialog only chooses their alerts and offers no Delete.
+- **Add recipient** is the same dialog, empty. A new member gets a read-only
+  invitation to VIP. **Paste many e-mails** in its footer takes a pasted list
+  or a CSV — commas, semicolons and new lines all separate,
+  `Name <address>` keeps the name — with *Also add them to* one alert. The
+  button counts what will be added, and addresses already on the list are
+  skipped and said to be.
+- **Tick boxes and a bulk Delete live here**, unlike the alerts list: people
+  leave in groups.
+- A name in the alerts list's *Sent to* column, or in its *+ N more* dialog,
+  opens that recipient here.
+
+**From the backend:** editing a contact's address must carry their alert
+memberships, and saving a recipient sets their memberships across N alerts in
+one call — or the UI fans out N updates and cannot report a partial failure
+honestly. Report rules are not offered in *Gets these alerts*: who they tell is
+set on the regulation.
 
 ## 8. Open questions
 
