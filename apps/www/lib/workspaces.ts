@@ -19,6 +19,7 @@ export const WORKSPACE_ORDER = [
   "dashboard-workspace",
   "reports-workspace",
   "regulations-workspace",
+  "alerts-workspace",
   "feeds-workspace",
 ];
 
