@@ -517,6 +517,54 @@
       "dependencies": []
     },
     {
+      "name": "alerts-workspace",
+      "type": "registry:block",
+      "title": "Alerts workspace",
+      "description": "Alerts workspace layout, composed from Vianova components.",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/alert",
+        "@vianova/avatar",
+        "@vianova/badge",
+        "@vianova/button",
+        "@vianova/checkbox",
+        "@vianova/dialog",
+        "@vianova/empty",
+        "@vianova/inline-edit",
+        "@vianova/input",
+        "@vianova/input-group",
+        "@vianova/native-select",
+        "@vianova/popover",
+        "@vianova/rule-type-icon",
+        "@vianova/sample-regulations",
+        "@vianova/save-bar",
+        "@vianova/segmented-control",
+        "@vianova/select",
+        "@vianova/skeleton",
+        "@vianova/status-badge",
+        "@vianova/switch",
+        "@vianova/table",
+        "@vianova/table-card",
+        "@vianova/tabs",
+        "@vianova/tag-input",
+        "@vianova/tool-band",
+        "@vianova/tooltip",
+        "@vianova/utils",
+        "@vianova/zone-picker"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/blocks/alerts-workspace.tsx",
+          "type": "registry:block"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "citizen-workspace",
       "type": "registry:block",
       "title": "Citizen Platform workspace",

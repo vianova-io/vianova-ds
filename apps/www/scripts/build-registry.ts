@@ -76,6 +76,7 @@ const BLOCK_TITLES: Record<string, string> = {
   "dashboard-workspace": "Dashboard workspace",
   "reports-workspace": "Reports workspace",
   "regulations-workspace": "Regulations workspace",
+  "alerts-workspace": "Alerts workspace",
   "feeds-workspace": "Feeds workspace",
   "citizen-workspace": "Citizen Platform workspace",
 };
