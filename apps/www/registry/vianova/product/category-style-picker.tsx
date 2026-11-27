@@ -234,7 +234,7 @@ export function CategoryStylePicker({
             />
           </div>
           {error ? (
-            <p role="alert" className="text-destructive text-xs">
+            <p role="alert" className="text-destructive-ink text-xs">
               {error}
             </p>
           ) : null}
@@ -244,7 +244,7 @@ export function CategoryStylePicker({
               className={cn(
                 "flex items-start gap-2 rounded-md border p-2 text-xs",
                 a.kind === "warning"
-                  ? "border-destructive/40 text-destructive"
+                  ? "border-destructive-ink/40 text-destructive-ink"
                   : "text-muted-foreground",
               )}
             >

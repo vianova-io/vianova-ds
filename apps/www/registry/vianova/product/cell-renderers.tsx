@@ -77,8 +77,8 @@ export function DeltaCell({
       data-direction={direction}
       className={cn(
         "inline-flex items-center gap-0.5 tabular-nums",
-        resolved === "positive" && "text-success",
-        resolved === "negative" && "text-destructive",
+        resolved === "positive" && "text-success-ink",
+        resolved === "negative" && "text-destructive-ink",
         resolved === "neutral" && "text-muted-foreground",
         className,
       )}

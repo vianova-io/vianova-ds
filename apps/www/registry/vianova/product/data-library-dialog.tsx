@@ -437,7 +437,7 @@ export function DataLibraryDialog({
                       isAdded
                         ? "cursor-default opacity-60"
                         : "hover:border-foreground/25 cursor-pointer",
-                      isPicked && "border-primary ring-primary/30 ring-2",
+                      isPicked && "border-primary-ink ring-primary-ink/30 ring-2",
                     )}
                   >
                     <LibraryThumbnail

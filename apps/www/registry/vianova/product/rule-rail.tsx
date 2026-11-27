@@ -214,7 +214,7 @@ export function RuleRail({
                   // outer focus ring instead of being replaced by it, and so a
                   // scroller cannot clip it.
                   selected
-                    ? "inset-ring-2 inset-ring-primary"
+                    ? "inset-ring-2 inset-ring-primary-ink"
                     : "hover:inset-ring-1 hover:inset-ring-border",
                   focusRing,
                 )}
@@ -284,7 +284,7 @@ export function RuleRail({
                     ? "h-9 flex-row gap-1.5 px-2.5 text-sm lg:h-14 lg:w-full lg:flex-col lg:gap-0.5 lg:px-0 lg:text-xs"
                     : "h-14 w-full flex-col gap-0.5",
                   value === RULE_RAIL_GLOBAL
-                    ? "text-foreground inset-ring-2 inset-ring-primary"
+                    ? "text-foreground inset-ring-2 inset-ring-primary-ink"
                     : "hover:text-foreground",
                   focusRing,
                 )}

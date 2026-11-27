@@ -766,7 +766,7 @@ function RegulationRow({
           type="button"
           data-slot="regulation-link"
           onClick={onOpen}
-          className="hover:text-primary focus-visible:ring-ring/50 block w-full truncate rounded-sm text-left font-medium focus-visible:ring-[3px] focus-visible:outline-none"
+          className="hover:text-primary-ink focus-visible:ring-ring/50 block w-full truncate rounded-sm text-left font-medium focus-visible:ring-[3px] focus-visible:outline-none"
         >
           {reg.name}
         </button>
@@ -823,7 +823,7 @@ function VisibilityBadge({ visibility }: { visibility: Regulation["visibility"] 
   // not be missed. Private is the default and stays quiet. --info passes AA as
   // text in both themes, which --warning would not.
   return visibility === "public" ? (
-    <Badge variant="outline" data-visibility="public" className="border-info/30 bg-info/10 text-info">
+    <Badge variant="outline" data-visibility="public" className="border-info-ink/30 bg-info-ink/10 text-info-ink">
       <Globe />
       Public
     </Badge>

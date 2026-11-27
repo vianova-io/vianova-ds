@@ -40,7 +40,7 @@ export function ShowcaseWall() {
             <header className="border-border flex items-center justify-between gap-2 border-b px-4 py-2.5">
               <Link
                 href={`/components/${c.name}`}
-                className="hover:text-primary text-sm font-medium"
+                className="hover:text-primary-ink text-sm font-medium"
               >
                 {c.title}
               </Link>

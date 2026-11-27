@@ -82,7 +82,7 @@ export function SaveBar({
         aria-live="polite"
         className={cn(
           "flex min-w-0 flex-1 items-center gap-2 text-sm",
-          error ? "text-destructive" : dirty || saving ? "text-foreground" : "text-muted-foreground",
+          error ? "text-destructive-ink" : dirty || saving ? "text-foreground" : "text-muted-foreground",
         )}
       >
         {dirty && !error ? (

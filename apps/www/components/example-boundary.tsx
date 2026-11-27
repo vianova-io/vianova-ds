@@ -29,8 +29,8 @@ export class ExampleBoundary extends React.Component<
   render() {
     if (this.state.error) {
       return (
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
-          <p className="text-xs font-medium text-destructive">
+        <div className="rounded-md border border-destructive-ink/40 bg-destructive-ink/5 p-3">
+          <p className="text-xs font-medium text-destructive-ink">
             {this.props.name} failed to render
           </p>
           <p className="mt-1 font-mono text-[11px] break-words text-muted-foreground">

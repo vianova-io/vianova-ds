@@ -45,14 +45,34 @@ const TEXT_PAIRS: Array<[fg: string, bg: string]> = [
   ["secondary-foreground", "secondary"],
   ["muted-foreground", "muted"],
   ["muted-foreground", "background"],
-  // Used as text by variant="link" and anything with text-primary. Omitting it
-  // is why a 3.63:1 link button reached the browser unnoticed.
-  ["primary", "background"],
+  // `["primary", "background"]` used to sit here, pinning the FILL at 4.5:1 as
+  // if it were text -- which it was, because one token did both jobs. It is
+  // gone, and deliberately: a fill is held to `primary-foreground on primary`
+  // above, and the text bar moved to `primary-ink` below, where it belongs.
+  // Asserting both of a single token is what forced the near-black foregrounds
+  // in the first place; see the note above `extensions` in import-figma.ts.
   ["accent-foreground", "accent"],
   ["destructive-foreground", "destructive"],
   ["success-foreground", "success"],
   ["warning-foreground", "warning"],
   ["info-foreground", "info"],
+  // The ink half of each role that has one: `text-primary`, `text-destructive`,
+  // `text-success`, `text-info` and their `border-*`/`ring-*` siblings.
+  //
+  // Checked on `card` as well as `background`, and that is not belt-and-braces:
+  // in every dark theme the card is LIGHTER than the page, so ink that passes
+  // on the page can still fail inside every dialog and popover. The old
+  // `["primary", "background"]` pair caught only half of that, and only for
+  // primary -- `text-destructive` has 60 uses and was never checked at all,
+  // which is how red-900 on `#292524` sat at 1.3:1 in three themes.
+  ["primary-ink", "background"],
+  ["primary-ink", "card"],
+  ["destructive-ink", "background"],
+  ["destructive-ink", "card"],
+  ["success-ink", "background"],
+  ["success-ink", "card"],
+  ["info-ink", "background"],
+  ["info-ink", "card"],
   ["sidebar-foreground", "sidebar"],
   ["sidebar-primary-foreground", "sidebar-primary"],
   ["sidebar-accent-foreground", "sidebar-accent"],

@@ -82,7 +82,7 @@ export function ComponentIndex({
                 className="group border-border bg-card hover:border-ring/50 flex flex-col gap-2 rounded-lg border p-4 transition-colors"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <span className="group-hover:text-primary font-medium">{c.title}</span>
+                  <span className="group-hover:text-primary-ink font-medium">{c.title}</span>
                   {c.status !== "stable" ? (
                     <Badge variant="secondary">{c.status}</Badge>
                   ) : null}

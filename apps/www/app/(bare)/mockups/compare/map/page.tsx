@@ -610,7 +610,7 @@ function Row({
           // The earlier period: SAME hue, faded. Identity, not a second
           // colour -- the rule the dashboard's bars already follow.
           <div
-            className="bg-primary/25 absolute inset-y-0 left-0 rounded-sm"
+            className="bg-primary-ink/25 absolute inset-y-0 left-0 rounded-sm"
             style={{ width: `${(row.previous / peak) * 100}%` }}
           />
         ) : null}

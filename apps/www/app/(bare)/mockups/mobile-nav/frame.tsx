@@ -621,7 +621,7 @@ function BasemapChoices({
             aria-checked={active}
             className={cn(
               "focus-visible:ring-ring/50 group overflow-hidden rounded-lg border-2 text-left focus-visible:ring-[3px] focus-visible:outline-none",
-              active ? "border-primary" : "border-border",
+              active ? "border-primary-ink" : "border-border",
               layout === "list" && "flex w-full items-center gap-3",
             )}
           >
@@ -801,7 +801,7 @@ function DirectionB({
             onClick={() => setActive(r.id)}
             className={cn(
               "focus-visible:ring-ring/50 flex flex-1 flex-col items-center justify-center gap-0.5 focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:outline-none",
-              active === r.id ? "text-primary" : "text-muted-foreground",
+              active === r.id ? "text-primary-ink" : "text-muted-foreground",
             )}
           >
             <span className="[&_svg]:size-5">{r.icon}</span>
@@ -912,7 +912,7 @@ function DefectFrame() {
           <Badge variant="secondary">3</Badge>
         </Button>
       ),
-      tone: "border-destructive/60",
+      tone: "border-destructive-ink/60",
     },
     {
       when: "One frame later — after the effect runs",

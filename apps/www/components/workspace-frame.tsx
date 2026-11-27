@@ -187,7 +187,7 @@ export function WorkspaceFrame({
       </div>
 
       {error ? (
-        <p role="status" className="text-xs text-destructive">
+        <p role="status" className="text-xs text-destructive-ink">
           {error}
         </p>
       ) : null}

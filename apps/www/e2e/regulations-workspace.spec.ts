@@ -130,7 +130,7 @@ async function drawSession(page: Page, tool: string) {
    * It was wrong for exactly that reason once: `aria-pressed` read "true"
    * while the button was the same grey as the other three, because
    * `Button`'s outline variant paints dark with `dark:border-input` and beat
-   * a bare `aria-pressed:border-primary` on source order. The session's only
+   * a bare `aria-pressed:border-primary-ink` on source order. The session's only
    * state, invisible, with every assertion still green.
    *
    * So compare it against a tool that is not armed rather than against a

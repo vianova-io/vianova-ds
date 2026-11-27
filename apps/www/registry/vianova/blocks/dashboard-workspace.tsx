@@ -2545,7 +2545,7 @@ function KpiBody({
   const gradient = `kpi-${React.useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   return (
     <div className="flex h-full min-h-28 flex-col items-center justify-center gap-1 text-center">
-      <p className="text-primary text-4xl font-semibold tracking-tight tabular-nums">
+      <p className="text-primary-ink text-4xl font-semibold tracking-tight tabular-nums">
         {METRICS[widget.metric].count && !METRICS[widget.metric].unit
           ? compact.format(now)
           : formatMetric(now, widget.metric)}
@@ -2562,8 +2562,8 @@ function KpiBody({
             !METRICS[widget.metric].count
               ? "bg-muted text-muted-foreground"
               : delta > 0 === (data.dataset.id === "trips")
-                ? "bg-success/10 text-success"
-                : "bg-destructive/10 text-destructive",
+                ? "bg-success-ink/10 text-success-ink"
+                : "bg-destructive-ink/10 text-destructive-ink",
           )}
         >
           {Arrow ? <Arrow className="size-3" aria-hidden /> : null}
@@ -4329,7 +4329,7 @@ function WidgetCard({
         className="bg-card flex min-h-0 flex-1 flex-col overflow-auto p-3"
       >
         {exportFailed ? (
-          <p role="alert" className="text-destructive mb-2 text-xs">
+          <p role="alert" className="text-destructive-ink mb-2 text-xs">
             Couldn&apos;t draw this chart as an image.
           </p>
         ) : null}
@@ -5116,7 +5116,7 @@ const ReportCanvas = React.forwardRef<
                   // `+` sent us to stays lit while its hint is up, pointer or
                   // no pointer.
                   (isHover || isHinted) &&
-                    "bg-primary/10 ring-primary/50 ring-1",
+                    "bg-primary-ink/10 ring-primary-ink/50 ring-1",
                 )}
               >
                 {/* Why the `+` appeared to do nothing. It inserted a widget
@@ -5151,7 +5151,7 @@ const ReportCanvas = React.forwardRef<
                       tabIndex={isCurrent ? 0 : -1}
                       aria-label="Create a chart here"
                       title="Create a chart"
-                      className="bg-background hover:border-primary hover:text-primary w-full min-w-0 shadow-xs"
+                      className="bg-background hover:border-primary-ink hover:text-primary-ink w-full min-w-0 shadow-xs"
                       onClick={() =>
                         setAdding({
                           rect: { ...c, w: 1, h: 1 },
@@ -5171,7 +5171,7 @@ const ReportCanvas = React.forwardRef<
                       tabIndex={isCurrent ? 0 : -1}
                       aria-label="Create text here"
                       title="Create text"
-                      className="bg-background hover:border-primary hover:text-primary w-full min-w-0 shadow-xs"
+                      className="bg-background hover:border-primary-ink hover:text-primary-ink w-full min-w-0 shadow-xs"
                       onClick={() =>
                         placeText({
                           rect: { ...c, w: 1, h: 1 },
@@ -5199,8 +5199,8 @@ const ReportCanvas = React.forwardRef<
               className={cn(
                 "pointer-events-none z-10 flex items-center justify-center rounded-xl border-2 border-dashed text-xs font-medium",
                 drawFits
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-destructive bg-destructive/10 text-destructive",
+                  ? "border-primary-ink bg-primary-ink/10 text-primary-ink"
+                  : "border-destructive-ink bg-destructive-ink/10 text-destructive-ink",
               )}
             >
               {drawRect.w} × {drawRect.h}
@@ -5210,7 +5210,7 @@ const ReportCanvas = React.forwardRef<
             <div
               aria-hidden
               style={cellSpan(landing)}
-              className="border-primary bg-primary/10 pointer-events-none z-10 rounded-xl border-2 border-dashed transition-all duration-200"
+              className="border-primary-ink bg-primary-ink/10 pointer-events-none z-10 rounded-xl border-2 border-dashed transition-all duration-200"
             />
           ) : null}
           {target ? (
@@ -5315,9 +5315,9 @@ const ReportCanvas = React.forwardRef<
                     setAdding(target);
                     setTarget(null);
                   }}
-                  className="hover:border-primary/60 focus-visible:ring-ring flex flex-col items-start gap-1 rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:outline-none"
+                  className="hover:border-primary-ink/60 focus-visible:ring-ring flex flex-col items-start gap-1 rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:outline-none"
                 >
-                  <ChartColumn className="text-primary size-5" aria-hidden />
+                  <ChartColumn className="text-primary-ink size-5" aria-hidden />
                   <span className="text-sm font-medium">Chart</span>
                   <span className="text-muted-foreground text-xs">
                     Pick from your chart library
@@ -5326,9 +5326,9 @@ const ReportCanvas = React.forwardRef<
                 <button
                   type="button"
                   onClick={() => placeText(target)}
-                  className="hover:border-primary/60 focus-visible:ring-ring flex flex-col items-start gap-1 rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:outline-none"
+                  className="hover:border-primary-ink/60 focus-visible:ring-ring flex flex-col items-start gap-1 rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:outline-none"
                 >
-                  <Type className="text-primary size-5" aria-hidden />
+                  <Type className="text-primary-ink size-5" aria-hidden />
                   <span className="text-sm font-medium">Text</span>
                   <span className="text-muted-foreground text-xs">
                     A heading or a note for a section
@@ -5581,7 +5581,7 @@ function AddChartsDialog({
                     className={cn(
                       "bg-card focus-visible:ring-ring relative flex h-72 w-full min-w-0 flex-col gap-3 overflow-hidden rounded-xl border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none",
                       on
-                        ? "border-primary ring-primary bg-muted/40 ring-1"
+                        ? "border-primary-ink ring-primary-ink bg-muted/40 ring-1"
                         : "hover:border-foreground/25",
                     )}
                   >

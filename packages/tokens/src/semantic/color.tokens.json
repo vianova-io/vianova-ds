@@ -90,7 +90,8 @@
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "action/primary-foreground",
-            "cssVar": "--primary-foreground"
+            "cssVar": "--primary-foreground",
+            "a11yFix": true
           }
         }
       },
@@ -271,13 +272,14 @@
         }
       },
       "destructive": {
-        "$value": "oklch(0.577 0.245 27.325)",
+        "$value": "{tw.red.600}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": null,
             "cssVar": "--destructive",
-            "preset": "b5cRaL9Zg"
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
           }
         }
       },
@@ -287,7 +289,8 @@
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/destructive-foreground",
-            "cssVar": "--destructive-foreground"
+            "cssVar": "--destructive-foreground",
+            "a11yFix": true
           }
         }
       },
@@ -357,22 +360,24 @@
         }
       },
       "warning": {
-        "$value": "{tw.amber.400}",
+        "$value": "{tw.amber.700}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/warning",
-            "cssVar": "--warning"
+            "cssVar": "--warning",
+            "a11yFix": true
           }
         }
       },
       "warning-foreground": {
-        "$value": "{tw.amber.950}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/warning-foreground",
-            "cssVar": "--warning-foreground"
+            "cssVar": "--warning-foreground",
+            "a11yFix": true
           }
         }
       },
@@ -471,18 +476,17 @@
         }
       },
       "primary": {
-        "$value": "{tw.teal.400}",
+        "$value": "{tw.teal.700}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "action/primary",
-            "cssVar": "--primary",
-            "a11yFix": true
+            "cssVar": "--primary"
           }
         }
       },
       "primary-foreground": {
-        "$value": "{tw.zinc.950}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
@@ -663,18 +667,19 @@
         }
       },
       "destructive": {
-        "$value": "oklch(0.704 0.191 22.216)",
+        "$value": "{tw.red.600}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": null,
             "cssVar": "--destructive",
-            "preset": "b5cRaL9Zg"
+            "preset": "b5cRaL9Zg",
+            "a11yFix": true
           }
         }
       },
       "destructive-foreground": {
-        "$value": "{tw.zinc.950}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
@@ -749,22 +754,24 @@
         }
       },
       "warning": {
-        "$value": "{tw.amber.400}",
+        "$value": "{tw.amber.700}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/warning",
-            "cssVar": "--warning"
+            "cssVar": "--warning",
+            "a11yFix": true
           }
         }
       },
       "warning-foreground": {
-        "$value": "{tw.amber.950}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/warning-foreground",
-            "cssVar": "--warning-foreground"
+            "cssVar": "--warning-foreground",
+            "a11yFix": true
           }
         }
       },
@@ -861,18 +868,17 @@
         }
       },
       "primary": {
-        "$value": "{tw.teal.400}",
+        "$value": "{tw.teal.700}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "action/primary",
-            "cssVar": "--primary",
-            "a11yFix": true
+            "cssVar": "--primary"
           }
         }
       },
       "primary-foreground": {
-        "$value": "{tw.zinc.950}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
@@ -1049,22 +1055,24 @@
         }
       },
       "destructive": {
-        "$value": "{tw.red.900}",
+        "$value": "{tw.red.600}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/destructive",
-            "cssVar": "--destructive"
+            "cssVar": "--destructive",
+            "a11yFix": true
           }
         }
       },
       "destructive-foreground": {
-        "$value": "{tw.zinc.300}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/destructive-foreground",
-            "cssVar": "--destructive-foreground"
+            "cssVar": "--destructive-foreground",
+            "a11yFix": true
           }
         }
       },
@@ -1130,22 +1138,24 @@
         }
       },
       "warning": {
-        "$value": "{tw.amber.400}",
+        "$value": "{tw.amber.700}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/warning",
-            "cssVar": "--warning"
+            "cssVar": "--warning",
+            "a11yFix": true
           }
         }
       },
       "warning-foreground": {
-        "$value": "{tw.amber.950}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/warning-foreground",
-            "cssVar": "--warning-foreground"
+            "cssVar": "--warning-foreground",
+            "a11yFix": true
           }
         }
       },
@@ -1242,18 +1252,17 @@
         }
       },
       "primary": {
-        "$value": "{tw.teal.400}",
+        "$value": "{tw.teal.700}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "action/primary",
-            "cssVar": "--primary",
-            "a11yFix": true
+            "cssVar": "--primary"
           }
         }
       },
       "primary-foreground": {
-        "$value": "{tw.zinc.950}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
@@ -1430,22 +1439,24 @@
         }
       },
       "destructive": {
-        "$value": "{tw.red.900}",
+        "$value": "{tw.red.600}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/destructive",
-            "cssVar": "--destructive"
+            "cssVar": "--destructive",
+            "a11yFix": true
           }
         }
       },
       "destructive-foreground": {
-        "$value": "{tw.neutral.200}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/destructive-foreground",
-            "cssVar": "--destructive-foreground"
+            "cssVar": "--destructive-foreground",
+            "a11yFix": true
           }
         }
       },
@@ -1511,22 +1522,24 @@
         }
       },
       "warning": {
-        "$value": "{tw.amber.400}",
+        "$value": "{tw.amber.700}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/warning",
-            "cssVar": "--warning"
+            "cssVar": "--warning",
+            "a11yFix": true
           }
         }
       },
       "warning-foreground": {
-        "$value": "{tw.amber.950}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/warning-foreground",
-            "cssVar": "--warning-foreground"
+            "cssVar": "--warning-foreground",
+            "a11yFix": true
           }
         }
       },
@@ -1623,7 +1636,7 @@
         }
       },
       "primary": {
-        "$value": "{tw.fuchsia.400}",
+        "$value": "{tw.fuchsia.600}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
@@ -1634,7 +1647,7 @@
         }
       },
       "primary-foreground": {
-        "$value": "{tw.zinc.950}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
@@ -1811,22 +1824,24 @@
         }
       },
       "destructive": {
-        "$value": "{tw.red.900}",
+        "$value": "{tw.red.600}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/destructive",
-            "cssVar": "--destructive"
+            "cssVar": "--destructive",
+            "a11yFix": true
           }
         }
       },
       "destructive-foreground": {
-        "$value": "{tw.zinc.300}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/destructive-foreground",
-            "cssVar": "--destructive-foreground"
+            "cssVar": "--destructive-foreground",
+            "a11yFix": true
           }
         }
       },
@@ -1892,22 +1907,24 @@
         }
       },
       "warning": {
-        "$value": "{tw.amber.400}",
+        "$value": "{tw.amber.700}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/warning",
-            "cssVar": "--warning"
+            "cssVar": "--warning",
+            "a11yFix": true
           }
         }
       },
       "warning-foreground": {
-        "$value": "{tw.amber.950}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/warning-foreground",
-            "cssVar": "--warning-foreground"
+            "cssVar": "--warning-foreground",
+            "a11yFix": true
           }
         }
       },
@@ -2004,22 +2021,24 @@
         }
       },
       "primary": {
-        "$value": "{tw.teal.300}",
+        "$value": "{tw.teal.700}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "action/primary",
-            "cssVar": "--primary"
+            "cssVar": "--primary",
+            "a11yFix": true
           }
         }
       },
       "primary-foreground": {
-        "$value": "{tw.zinc.950}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "action/primary-foreground",
-            "cssVar": "--primary-foreground"
+            "cssVar": "--primary-foreground",
+            "a11yFix": true
           }
         }
       },
@@ -2190,22 +2209,24 @@
         }
       },
       "destructive": {
-        "$value": "{tw.red.700}",
+        "$value": "{tw.red.600}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/destructive",
-            "cssVar": "--destructive"
+            "cssVar": "--destructive",
+            "a11yFix": true
           }
         }
       },
       "destructive-foreground": {
-        "$value": "{tw.slate.100}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/destructive-foreground",
-            "cssVar": "--destructive-foreground"
+            "cssVar": "--destructive-foreground",
+            "a11yFix": true
           }
         }
       },
@@ -2271,22 +2292,24 @@
         }
       },
       "warning": {
-        "$value": "{tw.amber.400}",
+        "$value": "{tw.amber.700}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/warning",
-            "cssVar": "--warning"
+            "cssVar": "--warning",
+            "a11yFix": true
           }
         }
       },
       "warning-foreground": {
-        "$value": "{tw.amber.950}",
+        "$value": "{tw.zinc.50}",
         "$type": "color",
         "$extensions": {
           "io.vianova.tokens": {
             "figma": "feedback/warning-foreground",
-            "cssVar": "--warning-foreground"
+            "cssVar": "--warning-foreground",
+            "a11yFix": true
           }
         }
       },

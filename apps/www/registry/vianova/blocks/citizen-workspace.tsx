@@ -621,7 +621,7 @@ function ScanView({
       >
         <span
           aria-hidden
-          className="border-primary absolute inset-6 rounded-md border-2 border-dashed"
+          className="border-primary-ink absolute inset-6 rounded-md border-2 border-dashed"
         />
         {busy ? (
           <Spinner className="size-8" />

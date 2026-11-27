@@ -128,7 +128,7 @@ export function ColorStopSlider({
               "absolute top-0 size-3.5 -translate-x-1/2 cursor-grab rounded-[3px] border border-border shadow-sm",
               "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
               "active:cursor-grabbing",
-              selectedIndex === i && "ring-2 ring-primary",
+              selectedIndex === i && "ring-2 ring-primary-ink",
             )}
           />
         ))}

@@ -125,7 +125,7 @@ export default function MapTopBarHarness() {
           href={src}
           target="_blank"
           rel="noreferrer"
-          className="text-primary text-sm underline underline-offset-4"
+          className="text-primary-ink text-sm underline underline-offset-4"
         >
           Open at this window&rsquo;s own width
         </a>

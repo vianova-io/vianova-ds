@@ -64,7 +64,7 @@ export function FileDropzone({
       }}
       className={cn(
         "rounded-lg border border-dashed transition-colors",
-        dragging ? "border-primary bg-primary/5" : "border-input",
+        dragging ? "border-primary-ink bg-primary-ink/5" : "border-input",
         disabled && "pointer-events-none opacity-50",
         className,
       )}
@@ -76,7 +76,7 @@ export function FileDropzone({
       >
         <UploadCloud
           aria-hidden
-          className={cn("size-6", dragging ? "text-primary" : "text-muted-foreground")}
+          className={cn("size-6", dragging ? "text-primary-ink" : "text-muted-foreground")}
         />
         <span className="text-sm font-medium">{label}</span>
         {hint ? <span className="text-muted-foreground text-xs">{hint}</span> : null}

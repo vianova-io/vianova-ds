@@ -46,7 +46,7 @@ export const markdownContentClass = cn(
   "[&_blockquote]:text-muted-foreground [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:pl-3",
   "[&_code]:bg-muted [&_code]:rounded [&_code]:px-1 [&_code]:font-mono [&_code]:text-[0.85em]",
   "[&_pre]:bg-muted [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0",
-  "[&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2",
+  "[&_a]:text-primary-ink [&_a]:underline [&_a]:underline-offset-2",
 );
 
 type BlockType = "paragraph" | "h1" | "h2" | "h3";

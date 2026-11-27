@@ -31,7 +31,7 @@ export default function BlocksPage() {
             <div className="flex items-baseline justify-between gap-3">
               <Link
                 href={`/blocks/${b.name}`}
-                className="text-sm font-medium hover:text-primary"
+                className="text-sm font-medium hover:text-primary-ink"
               >
                 {b.title}
               </Link>
