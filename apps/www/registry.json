@@ -537,12 +537,15 @@
         "@vianova/input",
         "@vianova/input-group",
         "@vianova/native-select",
+        "@vianova/person-cell",
         "@vianova/popover",
+        "@vianova/relative-time",
         "@vianova/rule-type-icon",
         "@vianova/sample-regulations",
         "@vianova/save-bar",
         "@vianova/segmented-control",
         "@vianova/select",
+        "@vianova/selection-bar",
         "@vianova/skeleton",
         "@vianova/status-badge",
         "@vianova/switch",
@@ -625,11 +628,11 @@
       "registryDependencies": [
         "@vianova/activity-heatmap",
         "@vianova/alert",
-        "@vianova/avatar",
         "@vianova/badge",
         "@vianova/button",
         "@vianova/category-style",
         "@vianova/chart",
+        "@vianova/checkbox",
         "@vianova/command",
         "@vianova/confirm-dialog",
         "@vianova/csv",
@@ -644,11 +647,15 @@
         "@vianova/input",
         "@vianova/input-group",
         "@vianova/markdown-editor",
+        "@vianova/person-cell",
         "@vianova/popover",
+        "@vianova/relative-time",
         "@vianova/report-grid",
         "@vianova/sample-datasets",
+        "@vianova/selection-bar",
         "@vianova/skeleton",
         "@vianova/table",
+        "@vianova/table-card",
         "@vianova/textarea",
         "@vianova/toggle-group",
         "@vianova/tooltip",
@@ -859,6 +866,7 @@
         "@vianova/map-controls",
         "@vianova/map-draw-control",
         "@vianova/popover",
+        "@vianova/relative-time",
         "@vianova/rule-rail",
         "@vianova/rule-type-icon",
         "@vianova/sample-regulations",
@@ -870,6 +878,7 @@
         "@vianova/slider-field",
         "@vianova/status-badge",
         "@vianova/table",
+        "@vianova/table-card",
         "@vianova/use-category-shape-layer",
         "@vianova/utils",
         "@vianova/zone-picker"
@@ -894,16 +903,19 @@
       ],
       "registryDependencies": [
         "@vianova/alert",
-        "@vianova/avatar",
         "@vianova/badge",
         "@vianova/button",
         "@vianova/checkbox",
         "@vianova/dialog",
         "@vianova/empty",
         "@vianova/input-group",
+        "@vianova/person-cell",
+        "@vianova/relative-time",
         "@vianova/select",
+        "@vianova/selection-bar",
         "@vianova/skeleton",
         "@vianova/table",
+        "@vianova/table-card",
         "@vianova/toggle",
         "@vianova/tooltip",
         "@vianova/utils"
@@ -3862,6 +3874,28 @@
       }
     },
     {
+      "name": "person-cell",
+      "type": "registry:ui",
+      "title": "Person Cell",
+      "description": "Person Cell — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "registryDependencies": [
+        "@vianova/avatar",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/person-cell.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "phone-frame",
       "type": "registry:ui",
       "title": "Phone Frame",
@@ -3875,6 +3909,27 @@
       "files": [
         {
           "path": "registry/vianova/patterns/phone-frame.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "relative-time",
+      "type": "registry:ui",
+      "title": "Relative Time",
+      "description": "Relative Time — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "registryDependencies": [
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/relative-time.tsx",
           "type": "registry:ui"
         }
       ],
@@ -3946,6 +4001,32 @@
       "files": [
         {
           "path": "registry/vianova/patterns/section-card.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "selection-bar",
+      "type": "registry:ui",
+      "title": "Selection Bar",
+      "description": "Selection Bar — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/button",
+        "@vianova/toggle",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/selection-bar.tsx",
           "type": "registry:ui"
         }
       ],

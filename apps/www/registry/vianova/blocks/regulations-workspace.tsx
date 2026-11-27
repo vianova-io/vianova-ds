@@ -178,6 +178,8 @@ import {
   type Rule,
   type Vehicle,
 } from "@/registry/vianova/lib/sample-regulations";
+import { RelativeTime } from "@/registry/vianova/patterns/relative-time";
+import { TableCard } from "@/registry/vianova/patterns/table-card";
 import { cn } from "@/registry/vianova/lib/utils";
 
 /* -------------------------------------------------------------------------- */
@@ -231,14 +233,13 @@ const STATUS_FILTERS: Record<StatusFilter, string> = {
 
 type SortDir = "desc" | "asc";
 
-const dateFmt = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
-const formatDate = (iso: string) => dateFmt.format(new Date(iso));
+/**
+ * The demo's "today", as a moment: what the list's ages are counted back
+ * from. The same fixed day the statuses are worked out against, so a
+ * regulation cannot read "3 d ago" in one column and "not active yet" in the
+ * next.
+ */
+const LIST_NOW = Date.parse(`${REFERENCE_DATE}T12:00:00Z`);
 
 let seq = 0;
 /** Ids for things made in this session. Prefixed so they never collide with a sample's. */
@@ -692,10 +693,10 @@ function RegulationList({
           </EmptyContent>
         </Empty>
       ) : (
-        <div className="rounded-lg border">
-          <Table>
+        <TableCard>
+          <Table inset>
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
                 <TableHead className="w-28">Rules</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead className="hidden sm:table-cell">Status</TableHead>
@@ -727,7 +728,7 @@ function RegulationList({
               ))}
             </TableBody>
           </Table>
-        </div>
+        </TableCard>
       )}
     </div>
   );
@@ -787,10 +788,10 @@ function RegulationRow({
         </span>
       </TableCell>
       <TableCell className="text-muted-foreground hidden whitespace-nowrap md:table-cell">
-        {formatDate(reg.createdAt)}
+        <RelativeTime iso={reg.createdAt} now={LIST_NOW} timeZone="UTC" />
       </TableCell>
       <TableCell className="text-muted-foreground hidden whitespace-nowrap md:table-cell">
-        {formatDate(reg.updatedAt)}
+        <RelativeTime iso={reg.updatedAt} now={LIST_NOW} timeZone="UTC" />
       </TableCell>
       <TableCell>
         {/* Download alone. The ⋯ menu held Open and Download GeoJSON and

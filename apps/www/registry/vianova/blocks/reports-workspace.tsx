@@ -43,7 +43,6 @@ import {
   RotateCcw,
   Search,
   Trash2,
-  X,
 } from "lucide-react";
 
 import {
@@ -52,7 +51,6 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/registry/vianova/ui/alert";
-import { Avatar, AvatarFallback } from "@/registry/vianova/ui/avatar";
 import { Badge } from "@/registry/vianova/ui/badge";
 import { Button } from "@/registry/vianova/ui/button";
 import { Checkbox } from "@/registry/vianova/ui/checkbox";
@@ -99,6 +97,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/registry/vianova/ui/tooltip";
+import { PersonCell } from "@/registry/vianova/patterns/person-cell";
+import { RelativeTime } from "@/registry/vianova/patterns/relative-time";
+import {
+  SelectionBar,
+  SelectionToggle,
+} from "@/registry/vianova/patterns/selection-bar";
+import { TableCard } from "@/registry/vianova/patterns/table-card";
 import { cn } from "@/registry/vianova/lib/utils";
 
 /* -------------------------------------------------------------------------- */
@@ -123,6 +128,8 @@ export type Report = {
   period: string;
   /** "Vianova" for the automatic reports. */
   createdBy: string;
+  /** Under the name in the list. The platform has none. */
+  createdByEmail?: string;
   /** Drives the "Created by: Me" filter. */
   mine?: boolean;
   createdAt: string;
@@ -244,6 +251,7 @@ export const SAMPLE_REPORTS: Report[] = [
     territory: "Freising",
     period: "2026-10",
     createdBy: "Anja Reiter",
+    createdByEmail: "anja.reiter@muenchen.de",
     createdAt: "2026-10-27T15:42:00Z",
     pinned: true,
     built: ["pdf", "data"],
@@ -256,6 +264,7 @@ export const SAMPLE_REPORTS: Report[] = [
     territory: "Garching",
     period: "2026-10",
     createdBy: "Thomas Brandl",
+    createdByEmail: "thomas.brandl@muenchen.de",
     createdAt: "2026-10-31T11:05:00Z",
     built: ["pptx"],
   },
@@ -267,6 +276,7 @@ export const SAMPLE_REPORTS: Report[] = [
     territory: "Freising",
     period: "2026-10",
     createdBy: "You",
+    createdByEmail: "you@muenchen.de",
     mine: true,
     createdAt: "2026-11-03T08:20:00Z",
   },
@@ -301,6 +311,7 @@ export const SAMPLE_REPORTS: Report[] = [
     territory: "Whole region",
     period: "2026-Q3",
     createdBy: "Anja Reiter",
+    createdByEmail: "anja.reiter@muenchen.de",
     createdAt: "2026-10-02T16:30:00Z",
     built: ["pdf"],
   },
@@ -336,29 +347,6 @@ const AUTHORS: Record<string, string> = {
   vianova: "Vianova",
   me: "Me",
 };
-
-/** "Anja Reiter" -> "AR", "Vianova" -> "V". */
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 3)
-    .toUpperCase();
-
-function formatCreated(iso: string, now = NOW) {
-  const then = Date.parse(iso);
-  const hours = Math.round((now - then) / 3_600_000);
-  if (hours < 1) return "Just now";
-  if (hours < 24) return `${hours} h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 7) return `${days} d ago`;
-  return new Date(then).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
 
 /**
  * File names follow Katell's rule. A monthly report names its fleet, territory
@@ -486,20 +474,22 @@ function DownloadDialog({
 /*                                  Row bits                                  */
 /* -------------------------------------------------------------------------- */
 
-function RowSkeleton() {
+function RowSkeleton({ selecting }: { selecting: boolean }) {
   return (
     <TableRow>
-      <TableCell className="w-10">
-        <Skeleton className="size-4 rounded-[4px]" />
-      </TableCell>
+      {selecting ? (
+        <TableCell>
+          <Skeleton className="size-4 rounded-[4px]" />
+        </TableCell>
+      ) : null}
       <TableCell>
         <Skeleton className="h-4 w-64" />
         <Skeleton className="mt-2 h-3 w-80" />
       </TableCell>
       <TableCell>
         <span className="flex items-center gap-2">
-          <Skeleton className="size-5 rounded-full" />
-          <Skeleton className="h-4 w-20" />
+          <Skeleton className="size-6 rounded-full" />
+          <Skeleton className="h-4 w-28" />
         </span>
       </TableCell>
       <TableCell>
@@ -509,42 +499,6 @@ function RowSkeleton() {
         <Skeleton className="ml-auto h-8 w-20" />
       </TableCell>
     </TableRow>
-  );
-}
-
-/**
- * Everyone in a scope sees every export in it, so this column carries a mark
- * as well as a name: at a glance you want to know whether a row is one of the
- * platform's monthlies or something a colleague built.
- *
- * Two shapes, the same distinction the feeds list draws -- a round disc is a
- * person, a rounded square is an organisation. Vianova is the platform, and
- * seven of the eleven rows here are its own, so a round "V" sitting among the
- * round people would read as one more member of the scope.
- *
- * Initials on `muted`, not a photo and not a brand colour: no portraits or
- * logos ship with the design system, and a tint per author would turn the
- * column into something about who rather than about what they made.
- *
- * size-5 rather than the `sm` size, as in the data hub's Owner fact: 20px is
- * exactly the line box of the name beside it, and the cell is align-top, so a
- * 24px disc would push this row's first line below the Name column's.
- */
-function AuthorMark({ name }: { name: string }) {
-  const organisation = name === "Vianova";
-  return (
-    <Avatar
-      // The name sits right beside it, so the disc is decoration. Hearing
-      // "A R Anja Reiter" is worse than not hearing the disc at all.
-      aria-hidden
-      className={cn("size-5", organisation && "rounded-md after:rounded-md")}
-    >
-      <AvatarFallback
-        className={cn("text-[10px] font-medium", organisation && "rounded-md")}
-      >
-        {initials(name)}
-      </AvatarFallback>
-    </Avatar>
   );
 }
 
@@ -631,6 +585,7 @@ export function ReportsWorkspace({
   const [territory, setTerritory] = React.useState("all");
   const [author, setAuthor] = React.useState("all");
   const [pinnedOnly, setPinnedOnly] = React.useState(false);
+  const [selecting, setSelecting] = React.useState(false);
   const [selected, setSelected] = React.useState<string[]>([]);
   const [downloading, setDownloading] = React.useState<Report[] | null>(null);
   const [busy, setBusy] = React.useState<ReportFormat | null>(null);
@@ -817,7 +772,7 @@ export function ReportsWorkspace({
                 <Search className="size-4" />
               </InputGroupAddon>
               <InputGroupInput
-                placeholder="Search by name"
+                placeholder="Search reports"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 aria-label="Search reports by name"
@@ -885,6 +840,15 @@ export function ReportsWorkspace({
               Pinned
             </Toggle>
 
+            <SelectionToggle
+              pressed={selecting}
+              onPressedChange={(next) => {
+                setSelecting(next);
+                if (!next) setSelected([]);
+              }}
+              label="Select several reports"
+            />
+
             {filtering ? (
               <Button variant="ghost" size="sm" onClick={clearFilters}>
                 Clear
@@ -928,46 +892,34 @@ export function ReportsWorkspace({
             </Alert>
           ) : null}
 
-          {/* The multi-select toolbar replaces nothing: it appears above the
-              table when something is ticked, so the table never shifts on a
-              tick. */}
-          {selected.length > 0 ? (
-            <div className="bg-muted/50 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
-              <p aria-live="polite" className="text-sm">
-                <span className="font-medium">{selected.length}</span> selected
-              </p>
-              <div className="flex items-center gap-2">
+          {/* Tick boxes are asked for, with the toggle at the end of the
+              filters, and this bar is what they are for. It sits above the
+              table, so a tick never moves the row under the pointer. */}
+          {selecting && selected.length > 0 ? (
+            <SelectionBar
+              count={selected.length}
+              onClear={() => setSelected([])}
+            >
+              <Button
+                size="sm"
+                onClick={() =>
+                  setDownloading(reports.filter((r) => selected.includes(r.id)))
+                }
+              >
+                <Download className="size-4" />
+                Download
+              </Button>
+              {canDelete ? (
                 <Button
+                  variant="outline"
                   size="sm"
-                  onClick={() =>
-                    setDownloading(
-                      reports.filter((r) => selected.includes(r.id)),
-                    )
-                  }
+                  onClick={() => remove(selected)}
                 >
-                  <Download className="size-4" />
-                  Download
+                  <Trash2 className="size-4" />
+                  Delete
                 </Button>
-                {canDelete ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => remove(selected)}
-                  >
-                    <Trash2 className="size-4" />
-                    Delete
-                  </Button>
-                ) : null}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelected([])}
-                >
-                  <X className="size-4" />
-                  Clear
-                </Button>
-              </div>
-            </div>
+              ) : null}
+            </SelectionBar>
           ) : null}
 
           {status === "error" ? (
@@ -990,14 +942,15 @@ export function ReportsWorkspace({
               ) : null}
             </Empty>
           ) : (
-            <div className="overflow-hidden rounded-lg border border-border">
-              <Table>
+            <TableCard>
+              <Table inset>
                 <caption className="sr-only">
                   Reports in {scope}, newest first, pinned reports on top.
                 </caption>
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead className="w-10 pl-3">
+                    {selecting ? (
+                    <TableHead className="w-12">
                       <Checkbox
                         checked={allTicked}
                         indeterminate={someTicked}
@@ -1008,8 +961,9 @@ export function ReportsWorkspace({
                         }
                       />
                     </TableHead>
+                    ) : null}
                     <TableHead>Name</TableHead>
-                    <TableHead className="w-36">Created by</TableHead>
+                    <TableHead className="w-60">Created by</TableHead>
                     <TableHead className="w-28">Created</TableHead>
                     <TableHead className="w-32 text-right">Actions</TableHead>
                   </TableRow>
@@ -1017,15 +971,15 @@ export function ReportsWorkspace({
                 <TableBody>
                   {status === "loading" ? (
                     <>
-                      <RowSkeleton />
-                      <RowSkeleton />
-                      <RowSkeleton />
-                      <RowSkeleton />
-                      <RowSkeleton />
+                      <RowSkeleton selecting={selecting} />
+                      <RowSkeleton selecting={selecting} />
+                      <RowSkeleton selecting={selecting} />
+                      <RowSkeleton selecting={selecting} />
+                      <RowSkeleton selecting={selecting} />
                     </>
                   ) : visible.length === 0 ? (
                     <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={5} className="p-0">
+                      <TableCell colSpan={selecting ? 5 : 4} className="p-0">
                         {/* Two different empties. "Nothing matches" is a
                             filter problem with a way out; "no reports yet" is
                             a new scope waiting for the 1st. Showing the wrong
@@ -1067,7 +1021,8 @@ export function ReportsWorkspace({
                           key={report.id}
                           data-state={ticked ? "selected" : undefined}
                         >
-                          <TableCell className="w-10 pl-3 align-top">
+                          {selecting ? (
+                          <TableCell className="align-top">
                             <Checkbox
                               checked={ticked}
                               onCheckedChange={() => toggleOne(report.id)}
@@ -1078,6 +1033,7 @@ export function ReportsWorkspace({
                               className="scroll-my-1"
                             />
                           </TableCell>
+                          ) : null}
                           {/* Capped below lg, where the table is wider than
                               its scroll container: an uncapped name grows to
                               the cell's natural width, which is wider than the
@@ -1142,16 +1098,19 @@ export function ReportsWorkspace({
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className="w-36 align-top text-sm">
-                            <span className="flex min-w-0 items-center gap-2">
-                              <AuthorMark name={report.createdBy} />
-                              <span className="truncate">
-                                {report.createdBy}
-                              </span>
-                            </span>
+                          <TableCell className="align-top text-sm">
+                            {/* Everyone in a scope sees every export in it,
+                                so the mark matters here: square for the
+                                platform's monthlies, round for something a
+                                colleague built. */}
+                            <PersonCell
+                              name={report.createdBy}
+                              email={report.createdByEmail}
+                              organisation={report.createdBy === "Vianova"}
+                            />
                           </TableCell>
                           <TableCell className="text-muted-foreground w-28 align-top text-sm">
-                            {formatCreated(report.createdAt)}
+                            <RelativeTime iso={report.createdAt} now={NOW} />
                           </TableCell>
                           <TableCell className="w-32 align-top">
                             {/* Download and delete side by side, with the pin
@@ -1191,7 +1150,7 @@ export function ReportsWorkspace({
                   )}
                 </TableBody>
               </Table>
-            </div>
+            </TableCard>
           )}
 
           {status === "ready" && visible.length > 0 ? (
