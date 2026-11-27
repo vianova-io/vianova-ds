@@ -7,6 +7,7 @@ import { MapWorkspaceVariants } from "@/components/map-workspace-variants";
 import { RegulationsWorkspaceDemo } from "@/components/regulations-workspace-demo";
 import { DashboardWorkspaceVariants } from "@/components/dashboard-workspace-variants";
 import { InstallTabs } from "@/components/install-tabs";
+import { WorkspaceFrame } from "@/components/workspace-frame";
 import { readRegistryFile, rewriteAliases } from "@/lib/source";
 import { Blocks } from "@/__registry__";
 
@@ -66,6 +67,18 @@ export default async function BlockPage({
           <Demo />
         )}
       </React.Suspense>
+
+      {/*
+        The same workspace at a real Desktop / Tablet / Phone viewport.
+        Separate from the demo above because it answers a different question:
+        that one is "what does this do", this one is "what does this become
+        at 375px" -- which the demo above cannot show at any width, since the
+        workspaces read the viewport rather than their container.
+      */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium">Breakpoints</h2>
+        <WorkspaceFrame slug={slug} title={block.title} />
+      </section>
 
       <section className="mx-auto max-w-3xl space-y-3">
         <h2 className="text-sm font-medium">Installation</h2>
