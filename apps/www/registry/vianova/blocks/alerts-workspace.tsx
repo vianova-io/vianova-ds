@@ -25,8 +25,8 @@
  * - **Recipients are the report contacts.** Jimmy's point 4 of 19 Nov: a
  *   separate list of addresses per alert puts the same people in two places,
  *   and the thing CS actually does all day is swap one person for another
- *   across everything. So the Recipients view edits that one list, and the
- *   per-row action is Replace, not Delete-then-add.
+ *   across everything. So the Recipients view edits that one list, and
+ *   swapping someone is changing their address there: every alert follows.
  * - **The e-mail is the one we already send.** Not redesigned here. The
  *   preview is a frame around it, so what the page promises is what arrives.
  *
@@ -58,6 +58,7 @@ import {
   ChevronDown,
   Mail,
   Paperclip,
+  Pencil,
   Plus,
   RotateCcw,
   Search,
@@ -94,6 +95,11 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/registry/vianova/ui/empty";
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+} from "@/registry/vianova/ui/field";
 import { Input } from "@/registry/vianova/ui/input";
 import {
   InputGroup,
@@ -120,6 +126,7 @@ import {
 import { Skeleton } from "@/registry/vianova/ui/skeleton";
 import { Switch } from "@/registry/vianova/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/registry/vianova/ui/tabs";
+import { Textarea } from "@/registry/vianova/ui/textarea";
 import {
   Table,
   TableBody,
@@ -215,6 +222,10 @@ export type RecipientKind = "member" | "operator";
  */
 export type Contact = {
   id: string;
+  /**
+   * May be empty. An operator's address is often a shared mailbox with no
+   * person behind it, and the list shows the address where a name would be.
+   */
   name: string;
   email: string;
   kind: RecipientKind;
@@ -222,6 +233,13 @@ export type Contact = {
   operator?: string;
   /** Invited, has not signed in yet. Their read-only account is pending. */
   pending?: boolean;
+  /**
+   * A VIP user of the organisation. Their name and e-mail are the Members
+   * page's to change, so here they can only be given alerts.
+   */
+  account?: boolean;
+  /** Put on the list by Vianova when the scope was set up. */
+  managed?: boolean;
 };
 
 /**
@@ -265,18 +283,21 @@ export const SAMPLE_CONTACTS: Contact[] = [
     name: "Anja Reiter",
     email: "anja.reiter@muenchen.de",
     kind: "member",
+    account: true,
   },
   {
     id: "c-thomas",
     name: "Thomas Brandl",
     email: "thomas.brandl@muenchen.de",
     kind: "member",
+    account: true,
   },
   {
     id: "c-you",
     name: "You",
     email: "you@muenchen.de",
     kind: "member",
+    account: true,
   },
   {
     id: "c-kvr",
@@ -287,24 +308,27 @@ export const SAMPLE_CONTACTS: Contact[] = [
   },
   {
     id: "c-bolt",
-    name: "Bolt city team",
+    name: "",
     email: "munich-ops@bolt.eu",
     kind: "operator",
     operator: "Bolt",
+    managed: true,
   },
   {
     id: "c-voi",
-    name: "Voi city team",
+    name: "",
     email: "munich@voi.com",
     kind: "operator",
     operator: "Voi",
+    managed: true,
   },
   {
     id: "c-lime",
-    name: "Lime city team",
+    name: "",
     email: "muc-ops@li.me",
     kind: "operator",
     operator: "Lime",
+    managed: true,
   },
 ];
 
@@ -575,6 +599,16 @@ const initials = (name: string) =>
     .slice(0, 3)
     .toUpperCase();
 
+/** What someone is called: their name, or their address when they have none. */
+const contactLabel = (c: Contact) => c.name || c.email;
+
+/**
+ * The same, for a place with no badge beside it to say whose address it is:
+ * "Bolt · munich-ops@bolt.eu" where the list has the address and a Bolt chip.
+ */
+const contactLongLabel = (c: Contact) =>
+  !c.name && c.operator ? `${c.operator} · ${c.email}` : contactLabel(c);
+
 let seq = 0;
 /** Ids for things made in this session. Prefixed so they never collide with a sample's. */
 const uid = (prefix: string) => `${prefix}-new-${++seq}`;
@@ -601,44 +635,9 @@ function ContactMark({ contact }: { contact: Contact }) {
       <AvatarFallback
         className={cn("text-[10px] font-medium", organisation && "rounded-md")}
       >
-        {initials(contact.name)}
+        {initials(contact.name || contact.operator || contact.email)}
       </AvatarFallback>
     </Avatar>
-  );
-}
-
-function IconAction({
-  label,
-  onClick,
-  children,
-  className,
-}: {
-  label: string;
-  onClick: () => void;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={label}
-            onClick={onClick}
-            // The ring paints outside the border box and Tab scrolls a control
-            // flush against the scrollport edge, where there is nothing left
-            // for it to paint on. Both axes: these sit in the last cell and the
-            // table scrolls sideways on a phone.
-            className={cn("scroll-m-1", className)}
-          >
-            {children}
-          </Button>
-        }
-      />
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
   );
 }
 
@@ -981,7 +980,10 @@ function RecipientPicker({
       <TagInput
         value={values}
         onValueChange={setValues}
-        getTagLabel={(v) => contacts.find((c) => c.id === v)?.name ?? v}
+        getTagLabel={(v) => {
+          const c = contacts.find((x) => x.id === v);
+          return c ? contactLongLabel(c) : v;
+        }}
         draft={draft}
         onDraftChange={setDraft}
         onDraftCommit={(text) => {
@@ -1015,9 +1017,11 @@ function RecipientPicker({
               >
                 <ContactMark contact={contact} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{contact.name}</span>
+                  <span className="block truncate text-sm">
+                    {contactLabel(contact)}
+                  </span>
                   <span className="text-muted-foreground block truncate text-xs">
-                    {contact.email}
+                    {contact.name ? contact.email : contact.operator}
                   </span>
                 </span>
               </button>
@@ -1366,7 +1370,7 @@ function AlertEditor({
     .map((id) => contacts.find((c) => c.id === id))
     .filter((c): c is Contact => Boolean(c));
   const recipientNames = [
-    ...chosenContacts.map((c) => c.name),
+    ...chosenContacts.map(contactLongLabel),
     ...draft.extraEmails,
   ];
   const recipientEmails = [
@@ -1715,7 +1719,7 @@ function peopleOf(alert: Alert, contacts: Map<string, Contact>): Person[] {
     ...alert.recipientIds.flatMap((id) => {
       const c = contacts.get(id);
       return c
-        ? [{ key: c.id, label: c.name, email: c.email, contact: true }]
+        ? [{ key: c.id, label: contactLongLabel(c), email: c.email, contact: true }]
         : [];
     }),
     ...alert.extraEmails.map((email) => ({
@@ -1727,13 +1731,13 @@ function peopleOf(alert: Alert, contacts: Map<string, Contact>): Person[] {
   ];
 }
 
-/** A recipient's name as a way into Recipients; a plain address as text. */
+/** A recipient's name opens that recipient; a plain address is text. */
 function PersonLink({
   person,
   onPerson,
 }: {
   person: Person;
-  onPerson: (name: string) => void;
+  onPerson: (id: string) => void;
 }) {
   if (!person.contact) {
     return <span className="max-w-full truncate">{person.label}</span>;
@@ -1741,7 +1745,7 @@ function PersonLink({
   return (
     <button
       type="button"
-      onClick={() => onPerson(person.label)}
+      onClick={() => onPerson(person.key)}
       // The ring paints outside the box, so nothing around a name may clip:
       // the name truncates itself rather than being cut by its cell.
       className="text-primary focus-visible:ring-ring max-w-full scroll-m-1 truncate rounded underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
@@ -1765,7 +1769,7 @@ function SentTo({
   onAll,
 }: {
   people: Person[];
-  onPerson: (name: string) => void;
+  onPerson: (id: string) => void;
   onAll: () => void;
 }) {
   if (people.length === 0) {
@@ -1820,7 +1824,7 @@ function SentToDialog({
   people: Person[];
   onOpenChange: (open: boolean) => void;
   onOpenAlert: (id: string) => void;
-  onPerson: (name: string) => void;
+  onPerson: (id: string) => void;
 }) {
   const [query, setQuery] = React.useState("");
   // A different alert is a different list: nothing typed for one may be
@@ -1866,7 +1870,7 @@ function SentToDialog({
                 <button
                   key={person.key}
                   type="button"
-                  onClick={() => onPerson(person.label)}
+                  onClick={() => onPerson(person.key)}
                   className="hover:bg-muted focus-visible:ring-ring/50 flex min-h-11 w-full flex-col justify-center rounded-md px-2 py-1.5 text-left outline-none focus-visible:ring-3"
                 >
                   <span className="truncate text-sm">{person.label}</span>
@@ -1931,8 +1935,8 @@ function AlertList({
   onCreate: () => void;
   onOpen: (id: string) => void;
   onToggle: (id: string) => void;
-  /** Opens Recipients on one person. */
-  onPerson: (name: string) => void;
+  /** Opens one recipient, in Recipients. */
+  onPerson: (id: string) => void;
 }) {
   const [query, setQuery] = React.useState("");
   const [on, setOn] = React.useState<OnFilter>("all");
@@ -2210,9 +2214,9 @@ function AlertList({
           setListing(null);
           onOpen(id);
         }}
-        onPerson={(name) => {
+        onPerson={(id) => {
           setListing(null);
-          onPerson(name);
+          onPerson(id);
         }}
       />
     </>
@@ -2223,50 +2227,611 @@ function AlertList({
 /* Recipients                                                                 */
 /* -------------------------------------------------------------------------- */
 
+type KindFilter = "all" | RecipientKind;
+
+const KIND_FILTERS: Record<KindFilter, string> = {
+  all: "All",
+  member: "Members",
+  operator: "Operators",
+};
+
+const KIND_LABELS: Record<RecipientKind, string> = {
+  member: "Member",
+  operator: "Operator",
+};
+
+/** Which of the Recipients view's dialogs is open, and on whom. */
+type RecipientDialogState =
+  | { kind: "add" }
+  | { kind: "paste" }
+  | { kind: "edit"; id: string }
+  | null;
+
 /**
- * The contacts list, read by who gets what.
+ * Addresses out of whatever was pasted.
  *
- * This view exists for one job Katell named as the painful one: people change
- * all the time, mostly at the operators, and today a swap is done one alert at
- * a time in Streamlit. So the row action is **Replace**, which moves someone
- * out of every alert and someone else in, in one go -- the thing CS actually
- * needs -- and Remove is the destructive sibling rather than the main verb.
+ * Commas, semicolons and new lines all separate, because the three places a
+ * list comes from -- a spreadsheet column, Outlook's To line, a CSV -- use one
+ * each. "Bolt Munich <munich@bolt.eu>" keeps its name; a bare address has
+ * none. An address pasted twice is one recipient.
+ */
+export function parseRecipients(text: string): { name: string; email: string }[] {
+  const found = new Map<string, { name: string; email: string }>();
+  for (const part of text.split(/[\n;,]+/)) {
+    const match = /<?([^\s<>"']+@[^\s<>"']+\.[^\s<>"']+)>?/.exec(part);
+    if (!match) continue;
+    const email = match[1]!.toLowerCase();
+    const name = part.slice(0, match.index).replace(/["']/g, "").trim();
+    if (!found.has(email)) found.set(email, { name, email });
+  }
+  return [...found.values()];
+}
+
+const PASTE_SAMPLE = `ops-munich@bolt.eu; fleet-de@bolt.eu
+Bolt Munich <munich@bolt.eu>
+streife-nord@muenchen.de, streife-sued@muenchen.de`;
+
+/**
+ * Which alerts someone gets, as chips with a search under them.
  *
- * It is the scope's report contacts, the same list Settings › Report contacts
- * edits and the report rules read. Nothing here is a second copy of it.
+ * The same field in the editor of one recipient and in Add recipient, because
+ * it is the same question, and the one that makes this tab worth having: a
+ * person's alerts are changed in one place rather than alert by alert.
+ */
+function AlertsField({
+  id,
+  alerts,
+  value,
+  onChange,
+}: {
+  id: string;
+  alerts: Alert[];
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = React.useState("");
+  const q = draft.trim().toLowerCase();
+  const matches = q
+    ? alerts
+        .filter((a) => !value.includes(a.id))
+        .filter((a) => a.name.toLowerCase().includes(q))
+        .slice(0, 5)
+    : [];
+  const add = (alertId: string) => {
+    onChange([...value, alertId]);
+    setDraft("");
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      {value.length === 0 ? (
+        <p className="text-muted-foreground text-xs">No alert yet.</p>
+      ) : null}
+      <TagInput
+        id={id}
+        value={value}
+        onValueChange={onChange}
+        getTagLabel={(v) => alerts.find((a) => a.id === v)?.name ?? v}
+        draft={draft}
+        onDraftChange={setDraft}
+        onDraftCommit={() => {
+          if (matches[0]) add(matches[0].id);
+        }}
+        placeholder="Search alerts to add"
+        inputLabel="Search alerts to add"
+      />
+      {matches.length > 0 ? (
+        <div className="-mx-1 flex flex-col">
+          {matches.map((alert) => (
+            <button
+              key={alert.id}
+              type="button"
+              onClick={() => add(alert.id)}
+              className="hover:bg-muted focus-visible:ring-ring/50 flex min-h-11 w-full items-center rounded-md px-2 text-left text-sm outline-none focus-visible:ring-3"
+            >
+              <span className="truncate">{alert.name}</span>
+            </button>
+          ))}
+        </div>
+      ) : q ? (
+        <p className="text-muted-foreground px-1 text-xs">No alert matches.</p>
+      ) : null}
+    </div>
+  );
+}
+
+const optional = (
+  <span className="text-muted-foreground font-normal">(optional)</span>
+);
+
+/**
+ * One recipient: adding them, or changing them.
+ *
+ * This is where a person is swapped. Somebody leaves an operator, their
+ * address is changed here, and every alert they were on now goes to their
+ * replacement -- which is the whole of what CS used to do one alert at a time.
+ * So there is no separate "replace" action: editing the address is it.
+ *
+ * A VIP user of the organisation is the exception. Their name and e-mail are
+ * the Members page's to change, and letting this dialog edit them would make
+ * two places disagree about who someone is. Here they only get their alerts
+ * chosen, and they cannot be deleted from a list they are not really kept in.
+ */
+function RecipientDialog({
+  contact,
+  contacts,
+  alerts,
+  onOpenChange,
+  onSave,
+  onDelete,
+  onPasteMany,
+}: {
+  /** The recipient being changed, or nothing when adding one. */
+  contact?: Contact;
+  contacts: Contact[];
+  /** The alerts someone can be put on: never the rules that file a report. */
+  alerts: Alert[];
+  onOpenChange: (open: boolean) => void;
+  onSave: (contact: Contact, alertIds: string[]) => void;
+  onDelete: (id: string) => void;
+  onPasteMany: () => void;
+}) {
+  const uidPrefix = React.useId();
+  const [first, ...rest] = (contact?.name ?? "").split(" ");
+  const [firstName, setFirstName] = React.useState(first ?? "");
+  const [lastName, setLastName] = React.useState(rest.join(" "));
+  const [email, setEmail] = React.useState(contact?.email ?? "");
+  const [kind, setKind] = React.useState<RecipientKind>(
+    contact?.kind ?? "member",
+  );
+  const [operator, setOperator] = React.useState<string>(
+    contact?.operator ?? OPERATORS[0],
+  );
+  const [alertIds, setAlertIds] = React.useState(() =>
+    contact
+      ? alerts.filter((a) => a.recipientIds.includes(contact.id)).map((a) => a.id)
+      : [],
+  );
+
+  const locked = Boolean(contact?.account);
+  const address = email.trim().toLowerCase();
+  const taken = contacts.some(
+    (c) => c.id !== contact?.id && c.email.toLowerCase() === address,
+  );
+  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) && !taken;
+
+  const save = () => {
+    if (!valid) return;
+    onSave(
+      {
+        // Everything not edited here -- being a VIP user, being invited,
+        // having been set up by Vianova -- is carried, not rebuilt.
+        ...contact,
+        id: contact?.id ?? uid("c"),
+        name: [firstName.trim(), lastName.trim()].filter(Boolean).join(" "),
+        email: address,
+        kind,
+        operator: kind === "operator" ? operator : undefined,
+        // Someone new to the organisation is invited; an operator's address
+        // is just an address and has no account to wait for.
+        pending: contact ? contact.pending : kind === "member" ? true : undefined,
+      },
+      alertIds,
+    );
+  };
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {contact ? contactLongLabel(contact) : "Add recipient"}
+          </DialogTitle>
+          <DialogDescription>
+            {!contact
+              ? "Add someone who gets alert e-mails."
+              : locked
+                ? "VIP user of your organisation: name and e-mail come from the Members page. Here you only choose the alerts."
+                : contact.managed
+                  ? "Set up by Vianova. You can change the address or the alerts it gets."
+                  : "Change the address, and every alert they are on follows it."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <form
+          className="grid gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save();
+          }}
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <Field>
+              <FieldLabel htmlFor={`${uidPrefix}-first`}>
+                First name {optional}
+              </FieldLabel>
+              <Input
+                id={`${uidPrefix}-first`}
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                disabled={locked}
+                autoComplete="off"
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${uidPrefix}-last`}>
+                Last name {optional}
+              </FieldLabel>
+              <Input
+                id={`${uidPrefix}-last`}
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                disabled={locked}
+                autoComplete="off"
+              />
+            </Field>
+          </div>
+
+          <Field>
+            <FieldLabel htmlFor={`${uidPrefix}-email`}>Email address</FieldLabel>
+            <Input
+              id={`${uidPrefix}-email`}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@work-email.com"
+              disabled={locked}
+              aria-invalid={taken || undefined}
+              autoComplete="off"
+            />
+            {taken ? (
+              <FieldDescription className="text-destructive">
+                That address is already a recipient.
+              </FieldDescription>
+            ) : null}
+          </Field>
+
+          {locked ? null : (
+            <>
+              <Field>
+                <FieldLabel htmlFor={`${uidPrefix}-kind`}>Type</FieldLabel>
+                <NativeSelect
+                  id={`${uidPrefix}-kind`}
+                  className="w-full"
+                  value={kind}
+                  onChange={(e) => setKind(e.target.value as RecipientKind)}
+                >
+                  {(Object.keys(KIND_LABELS) as RecipientKind[]).map((k) => (
+                    <NativeSelectOption key={k} value={k}>
+                      {KIND_LABELS[k]}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                {!contact && kind === "member" ? (
+                  <FieldDescription>
+                    If they are not in your organisation yet, they get an
+                    invitation with read-only access to VIP.
+                  </FieldDescription>
+                ) : null}
+              </Field>
+              {kind === "operator" ? (
+                <Field>
+                  <FieldLabel htmlFor={`${uidPrefix}-operator`}>
+                    Operator
+                  </FieldLabel>
+                  <NativeSelect
+                    id={`${uidPrefix}-operator`}
+                    className="w-full"
+                    value={operator}
+                    onChange={(e) => setOperator(e.target.value)}
+                  >
+                    {OPERATORS.map((o) => (
+                      <NativeSelectOption key={o} value={o}>
+                        {o}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+              ) : null}
+            </>
+          )}
+
+          <Field>
+            <FieldLabel htmlFor={`${uidPrefix}-alerts`}>
+              Gets these alerts
+            </FieldLabel>
+            <AlertsField
+              id={`${uidPrefix}-alerts`}
+              alerts={alerts}
+              value={alertIds}
+              onChange={setAlertIds}
+            />
+          </Field>
+
+          <DialogFooter className="sm:justify-between">
+            {/* The quiet end of the footer: the way out of this one person,
+                in whichever direction applies. */}
+            {!contact ? (
+              <Button type="button" variant="ghost" onClick={onPasteMany}>
+                Paste many e-mails
+              </Button>
+            ) : locked ? (
+              <span />
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                onClick={() => onDelete(contact.id)}
+              >
+                Delete
+              </Button>
+            )}
+            <span className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!valid}>
+                {contact ? "Save" : "Add recipient"}
+              </Button>
+            </span>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Many recipients at once, from a paste or a file.
+ *
+ * The count on the button is the parse, live: what will be added is said
+ * before it is, and an address already on the list is not counted, so "Add 3
+ * recipients" never adds two.
+ */
+function PasteDialog({
+  contacts,
+  alerts,
+  onOpenChange,
+  onAdd,
+}: {
+  contacts: Contact[];
+  alerts: Alert[];
+  onOpenChange: (open: boolean) => void;
+  onAdd: (
+    people: { name: string; email: string }[],
+    kind: RecipientKind,
+    operator: string | undefined,
+    alertId: string | null,
+  ) => void;
+}) {
+  const uidPrefix = React.useId();
+  const [kind, setKind] = React.useState<RecipientKind>("member");
+  const [operator, setOperator] = React.useState<string>(OPERATORS[0]);
+  const [text, setText] = React.useState("");
+  const [alertId, setAlertId] = React.useState("");
+  const fileRef = React.useRef<HTMLInputElement>(null);
+
+  const known = new Set(contacts.map((c) => c.email.toLowerCase()));
+  const parsed = parseRecipients(text);
+  const fresh = parsed.filter((p) => !known.has(p.email));
+  const skipped = parsed.length - fresh.length;
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add recipients</DialogTitle>
+          <DialogDescription>
+            Paste a list from Excel or Outlook, or import a CSV. Commas,
+            semicolons and new lines all work. New members get a read-only
+            invitation to VIP.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor={`${uidPrefix}-kind`}>Type</FieldLabel>
+              <NativeSelect
+                id={`${uidPrefix}-kind`}
+                className="w-full"
+                value={kind}
+                onChange={(e) => setKind(e.target.value as RecipientKind)}
+              >
+                {(Object.keys(KIND_LABELS) as RecipientKind[]).map((k) => (
+                  <NativeSelectOption key={k} value={k}>
+                    {KIND_LABELS[k]}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+            {kind === "operator" ? (
+              <Field>
+                <FieldLabel htmlFor={`${uidPrefix}-operator`}>
+                  Operator
+                </FieldLabel>
+                <NativeSelect
+                  id={`${uidPrefix}-operator`}
+                  className="w-full"
+                  value={operator}
+                  onChange={(e) => setOperator(e.target.value)}
+                >
+                  {OPERATORS.map((o) => (
+                    <NativeSelectOption key={o} value={o}>
+                      {o}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+            ) : null}
+          </div>
+
+          <Field>
+            <FieldLabel htmlFor={`${uidPrefix}-text`} className="sr-only">
+              E-mail addresses
+            </FieldLabel>
+            <Textarea
+              id={`${uidPrefix}-text`}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={5}
+              placeholder={"ops-munich@bolt.eu; fleet-de@bolt.eu\nBolt Munich <munich@bolt.eu>"}
+            />
+            {skipped > 0 ? (
+              <FieldDescription>
+                {plural(skipped, "address is", "addresses are")} already on the
+                list and will be left as they are.
+              </FieldDescription>
+            ) : null}
+          </Field>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv,text/plain"
+              className="sr-only"
+              tabIndex={-1}
+              aria-hidden
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (file) setText(await file.text());
+                e.target.value = "";
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => fileRef.current?.click()}
+            >
+              Import a CSV
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setText(PASTE_SAMPLE)}
+            >
+              Try a sample
+            </Button>
+          </div>
+
+          <Field>
+            <FieldLabel htmlFor={`${uidPrefix}-alert`}>
+              Also add them to
+            </FieldLabel>
+            <NativeSelect
+              id={`${uidPrefix}-alert`}
+              className="w-full"
+              value={alertId}
+              onChange={(e) => setAlertId(e.target.value)}
+            >
+              <NativeSelectOption value="">No alert for now</NativeSelectOption>
+              {alerts.map((a) => (
+                <NativeSelectOption key={a.id} value={a.id}>
+                  {a.name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            disabled={fresh.length === 0}
+            onClick={() =>
+              onAdd(
+                fresh,
+                kind,
+                kind === "operator" ? operator : undefined,
+                alertId || null,
+              )
+            }
+          >
+            Add {plural(fresh.length, "recipient", "recipients")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * The recipients, on Katell's columns: who, and which alerts they get.
+ *
+ * It is the scope's report contacts -- the list Settings › Report contacts
+ * edits and the report rules read -- seen from the other side: not who an
+ * alert goes to, but what a person gets. That is the view someone needs when
+ * a colleague leaves, and it is why a name opens that person rather than a
+ * menu of things to do to them.
+ *
+ * Tick boxes here, where the alerts list has none. Alerts are switched off,
+ * not deleted, and one at a time; people leave in groups -- an operator loses
+ * a contract, a team is reorganised -- and removing eleven addresses one
+ * dialog at a time is the chore this tab exists to end.
  */
 function RecipientList({
   contacts,
   alerts,
-  initialQuery = "",
-  onReplace,
-  onRemove,
+  dialog,
+  onDialogChange,
+  onSave,
+  onAddMany,
+  onDelete,
   onOpenAlert,
 }: {
   contacts: Contact[];
   alerts: Alert[];
-  /** What the search opens holding -- a name pressed in the alerts list. */
-  initialQuery?: string;
-  onReplace: (fromId: string, toId: string) => void;
-  onRemove: (id: string) => void;
+  dialog: RecipientDialogState;
+  onDialogChange: (next: RecipientDialogState) => void;
+  onSave: (contact: Contact, alertIds: string[]) => void;
+  onAddMany: (
+    people: { name: string; email: string }[],
+    kind: RecipientKind,
+    operator: string | undefined,
+    alertId: string | null,
+  ) => void;
+  onDelete: (ids: string[]) => void;
   onOpenAlert: (id: string) => void;
 }) {
-  const [query, setQuery] = React.useState(initialQuery);
-  const [replacing, setReplacing] = React.useState<Contact | null>(null);
-
-  const alertsFor = React.useCallback(
-    (id: string) => alerts.filter((a) => a.recipientIds.includes(id)),
-    [alerts],
-  );
+  const [query, setQuery] = React.useState("");
+  const [kind, setKind] = React.useState<KindFilter>("all");
+  const [selected, setSelected] = React.useState<string[]>([]);
 
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    return contacts.filter(
-      (c) =>
-        !q ||
-        `${c.name} ${c.email} ${c.operator ?? ""}`.toLowerCase().includes(q),
-    );
-  }, [contacts, query]);
+    return contacts
+      .filter((c) => kind === "all" || c.kind === kind)
+      .filter(
+        (c) =>
+          !q ||
+          `${c.name} ${c.email} ${c.operator ?? ""}`.toLowerCase().includes(q),
+      );
+  }, [contacts, kind, query]);
+
+  // Someone filtered out from under a tick must not stay ticked, or Delete
+  // would remove a person the user can no longer see.
+  React.useEffect(() => {
+    setSelected((cur) => cur.filter((id) => visible.some((c) => c.id === id)));
+  }, [visible]);
+
+  const filtering = query.trim() !== "" || kind !== "all";
+  const allTicked = visible.length > 0 && selected.length === visible.length;
+  const someTicked = selected.length > 0 && !allTicked;
+
+  /** Only alerts can be given or taken here; a report rule's people are its own. */
+  const editable = alerts.filter((a) => a.kind === "alert");
+  const editing =
+    dialog?.kind === "edit"
+      ? contacts.find((c) => c.id === dialog.id)
+      : undefined;
 
   return (
     <>
@@ -2276,105 +2841,200 @@ function RecipientList({
             <Search />
           </InputGroupAddon>
           <InputGroupInput
-            placeholder="Search recipients"
+            placeholder="Search names or e-mails"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search recipients by name, e-mail or operator"
+            aria-label="Search names or e-mails"
           />
         </InputGroup>
+        <Select
+          items={KIND_FILTERS}
+          value={kind}
+          onValueChange={(v) => setKind((v ?? "all") as KindFilter)}
+        >
+          <SelectTrigger className="w-32" aria-label="Members or operators">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(KIND_FILTERS) as KindFilter[]).map((k) => (
+              <SelectItem key={k} value={k}>
+                {KIND_FILTERS[k]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+
+      {selected.length > 0 ? (
+        <div className="bg-muted/50 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2">
+          <p aria-live="polite" className="text-sm">
+            <span className="font-medium">{selected.length}</span> selected
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                onDelete(selected);
+                setSelected([]);
+              }}
+            >
+              <Trash2 data-icon="inline-start" />
+              Delete
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
+              Clear selection
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {visible.length === 0 ? (
         <Empty className="min-h-fit flex-auto border">
           <EmptyHeader>
             <EmptyMedia variant="icon">
-              {query ? <Search /> : <Users />}
+              {filtering ? <Search /> : <Users />}
             </EmptyMedia>
             <EmptyTitle>
-              {query ? "Nobody matches" : "No contacts yet"}
+              {filtering ? "Nobody matches" : "No recipients yet"}
             </EmptyTitle>
           </EmptyHeader>
-          {query ? (
-            <EmptyContent>
-              <Button variant="outline" size="sm" onClick={() => setQuery("")}>
-                Clear search
+          <EmptyContent>
+            {filtering ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setQuery("");
+                  setKind("all");
+                }}
+              >
+                Clear filters
               </Button>
-            </EmptyContent>
-          ) : null}
+            ) : (
+              <Button size="sm" onClick={() => onDialogChange({ kind: "add" })}>
+                <Plus data-icon="inline-start" />
+                Add recipient
+              </Button>
+            )}
+          </EmptyContent>
         </Empty>
       ) : (
         <TableCard>
-          <Table inset>
+          <Table inset className="min-w-[44rem] table-fixed">
             <caption className="sr-only">
               Everyone on the scope&rsquo;s report contacts list, and the
-              alerts they are on.
+              alerts they get.
             </caption>
             <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>Recipient</TableHead>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={allTicked}
+                    indeterminate={someTicked}
+                    onCheckedChange={() =>
+                      setSelected(allTicked ? [] : visible.map((c) => c.id))
+                    }
+                    aria-label={
+                      allTicked ? "Clear selection" : "Select every recipient"
+                    }
+                  />
+                </TableHead>
+                <TableHead className="w-[45%]">Recipient</TableHead>
                 <TableHead>Gets these alerts</TableHead>
-                <TableHead className="w-28 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {visible.map((contact) => {
-                const theirs = alertsFor(contact.id);
+                const theirs = alerts.filter((a) =>
+                  a.recipientIds.includes(contact.id),
+                );
+                const ticked = selected.includes(contact.id);
+                const label = contactLabel(contact);
+                // Under a name, the address. Under a bare address there is
+                // nothing left to say but where it came from.
+                const detail = contact.name
+                  ? contact.email
+                  : contact.managed
+                    ? "Set up by Vianova"
+                    : null;
                 return (
-                  <TableRow key={contact.id}>
-                    <TableCell className="max-w-64">
-                      <span className="flex min-w-0 items-center gap-2.5">
-                        <ContactMark contact={contact} />
-                        <span className="min-w-0">
-                          <span className="flex items-center gap-1.5">
-                            <span className="truncate text-sm font-medium">
-                              {contact.name}
+                  <TableRow
+                    key={contact.id}
+                    data-state={ticked ? "selected" : undefined}
+                  >
+                    <TableCell className="align-top">
+                      <Checkbox
+                        checked={ticked}
+                        onCheckedChange={() =>
+                          setSelected((cur) => toggle(cur, contact.id))
+                        }
+                        aria-label={`Select ${label}`}
+                        // Not decoration: Tab scrolls a focused row flush
+                        // with the workspace's edge, and the ring paints
+                        // outside the box, so it would be cut.
+                        className="mt-0.5 scroll-my-1"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onDialogChange({ kind: "edit", id: contact.id })
+                            }
+                            data-slot="recipient-edit-link"
+                            aria-label={`Edit ${label}`}
+                            className="text-primary focus-visible:ring-ring flex min-w-0 scroll-m-1 items-center gap-1.5 rounded text-left text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
+                          >
+                            <span className="truncate underline underline-offset-2">
+                              {label}
                             </span>
-                            {contact.pending ? (
-                              <StatusBadge tone="warning">Invited</StatusBadge>
-                            ) : null}
-                          </span>
-                          <span className="text-muted-foreground block truncate text-xs">
-                            {contact.email}
-                          </span>
+                            <Pencil
+                              aria-hidden
+                              className="text-muted-foreground size-3 shrink-0"
+                            />
+                          </button>
+                          {contact.operator ? (
+                            <Badge
+                              variant="outline"
+                              className="shrink-0 text-[11px]"
+                            >
+                              {contact.operator}
+                            </Badge>
+                          ) : null}
+                          {contact.pending ? (
+                            <StatusBadge tone="warning" className="shrink-0">
+                              Invited
+                            </StatusBadge>
+                          ) : null}
                         </span>
+                        {detail ? (
+                          <span className="text-muted-foreground truncate text-xs">
+                            {detail}
+                          </span>
+                        ) : null}
                       </span>
                     </TableCell>
                     <TableCell className="whitespace-normal">
                       {theirs.length === 0 ? (
-                        <span className="text-muted-foreground">None</span>
+                        <span className="text-muted-foreground">none</span>
                       ) : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {theirs.map((alert) => (
-                            <Button
+                        <span className="flex flex-wrap gap-x-1.5 gap-y-0.5">
+                          {theirs.map((alert, i) => (
+                            <button
                               key={alert.id}
                               type="button"
-                              variant="outline"
-                              size="xs"
-                              className="max-w-56 scroll-m-1 font-normal"
                               onClick={() => onOpenAlert(alert.id)}
+                              className="hover:text-primary focus-visible:ring-ring max-w-full scroll-m-1 rounded text-left text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
                             >
-                              <span className="truncate">{alert.name}</span>
-                            </Button>
+                              {alert.name}
+                              {i < theirs.length - 1 ? "," : ""}
+                            </button>
                           ))}
-                        </div>
+                        </span>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-0.5">
-                        <IconAction
-                          label={`Replace ${contact.name} everywhere`}
-                          onClick={() => setReplacing(contact)}
-                        >
-                          <UserCog />
-                        </IconAction>
-                        <IconAction
-                          label={`Remove ${contact.name} from every alert`}
-                          onClick={() => onRemove(contact.id)}
-                          className="hover:text-destructive"
-                        >
-                          <Trash2 />
-                        </IconAction>
-                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -2384,90 +3044,50 @@ function RecipientList({
         </TableCard>
       )}
 
-      <ReplaceDialog
-        contact={replacing}
-        contacts={contacts}
-        count={replacing ? alertsFor(replacing.id).length : 0}
-        onOpenChange={(open) => {
-          if (!open) setReplacing(null);
-        }}
-        onReplace={(toId) => {
-          if (replacing) onReplace(replacing.id, toId);
-          setReplacing(null);
-        }}
-      />
+      {visible.length > 0 ? (
+        <p className="text-muted-foreground text-xs">
+          {visible.length === contacts.length
+            ? plural(contacts.length, "recipient", "recipients")
+            : `${visible.length} of ${plural(contacts.length, "recipient", "recipients")}`}
+        </p>
+      ) : null}
+
+      {dialog?.kind === "add" || editing ? (
+        <RecipientDialog
+          // A different person is a different form.
+          key={editing?.id ?? "add"}
+          contact={editing}
+          contacts={contacts}
+          alerts={editable}
+          onOpenChange={(open) => {
+            if (!open) onDialogChange(null);
+          }}
+          onSave={(contact, alertIds) => {
+            onSave(contact, alertIds);
+            onDialogChange(null);
+          }}
+          onDelete={(id) => {
+            onDelete([id]);
+            onDialogChange(null);
+          }}
+          onPasteMany={() => onDialogChange({ kind: "paste" })}
+        />
+      ) : null}
+
+      {dialog?.kind === "paste" ? (
+        <PasteDialog
+          contacts={contacts}
+          alerts={editable}
+          onOpenChange={(open) => {
+            if (!open) onDialogChange(null);
+          }}
+          onAdd={(people, as, operator, alertId) => {
+            onAddMany(people, as, operator, alertId);
+            onDialogChange(null);
+          }}
+        />
+      ) : null}
     </>
-  );
-}
-
-function ReplaceDialog({
-  contact,
-  contacts,
-  count,
-  onOpenChange,
-  onReplace,
-}: {
-  contact: Contact | null;
-  contacts: Contact[];
-  count: number;
-  onOpenChange: (open: boolean) => void;
-  onReplace: (toId: string) => void;
-}) {
-  const [picked, setPicked] = React.useState<string | null>(null);
-
-  // A different person is a different question: nothing picked for one may be
-  // carried into the next.
-  React.useEffect(() => setPicked(null), [contact?.id]);
-
-  const others = contacts.filter((c) => c.id !== contact?.id);
-
-  return (
-    <Dialog open={contact !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Replace {contact?.name}</DialogTitle>
-          <DialogDescription>
-            Whoever you pick takes their place on{" "}
-            {plural(count, "alert", "alerts")}.
-          </DialogDescription>
-        </DialogHeader>
-        <div
-          role="radiogroup"
-          aria-label="Replacement"
-          className="-mx-1 flex max-h-72 flex-col overflow-auto"
-        >
-          {others.map((c) => (
-            <label
-              key={c.id}
-              className="hover:bg-muted has-[:checked]:bg-primary/10 flex min-h-11 cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5"
-            >
-              <input
-                type="radio"
-                name="replacement"
-                className="accent-primary size-4"
-                checked={picked === c.id}
-                onChange={() => setPicked(c.id)}
-              />
-              <ContactMark contact={c} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm">{c.name}</span>
-                <span className="text-muted-foreground block truncate text-xs">
-                  {c.email}
-                </span>
-              </span>
-            </label>
-          ))}
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button disabled={!picked} onClick={() => picked && onReplace(picked)}>
-            Replace
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -2511,8 +3131,13 @@ export function AlertsWorkspace({
   const [alerts, setAlerts] = React.useState(initialAlerts);
   const [contacts, setContacts] = React.useState(initialContacts);
   const [section, setSection] = React.useState<Section>("alerts");
-  /** The person the Recipients view opens on, when a name was pressed. */
-  const [person, setPerson] = React.useState("");
+  /**
+   * Held here, not in the Recipients view, because two things outside it open
+   * its dialogs: Add recipient in the band, and a name pressed in the alerts
+   * list.
+   */
+  const [recipientDialog, setRecipientDialog] =
+    React.useState<RecipientDialogState>(null);
   const [view, setView] = React.useState<View>({ kind: "list" });
   const [drafts, setDrafts] = React.useState<Record<string, Alert>>({});
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -2679,10 +3304,18 @@ export function AlertsWorkspace({
               nav={navSlot}
               title="Alerts"
               actions={
-                <Button onClick={create}>
-                  <Plus data-icon="inline-start" />
-                  Create alert
-                </Button>
+                // The band's one action is the thing this view makes.
+                section === "recipients" ? (
+                  <Button onClick={() => setRecipientDialog({ kind: "add" })}>
+                    <Plus data-icon="inline-start" />
+                    Add recipient
+                  </Button>
+                ) : (
+                  <Button onClick={create}>
+                    <Plus data-icon="inline-start" />
+                    Create alert
+                  </Button>
+                )
               }
             />
             <div className="mx-auto flex min-h-[calc(100%-3.5rem)] w-full max-w-6xl flex-col gap-4 p-4 md:p-6">
@@ -2705,8 +3338,7 @@ export function AlertsWorkspace({
               <SectionTabs
                 value={section}
                 onChange={(next) => {
-                  // Arriving by the tab is arriving at the whole list.
-                  setPerson("");
+                  setRecipientDialog(null);
                   setSection(next);
                 }}
                 alerts={alerts.length}
@@ -2728,52 +3360,89 @@ export function AlertsWorkspace({
                       all.map((a) => (a.id === id ? { ...a, on: !a.on } : a)),
                     )
                   }
-                  onPerson={(name) => {
-                    setPerson(name);
+                  onPerson={(id) => {
+                    setRecipientDialog({ kind: "edit", id });
                     setSection("recipients");
                   }}
                 />
               ) : (
                 <RecipientList
-                  // A different person asked for is a different search.
-                  key={person}
-                  initialQuery={person}
                   contacts={contacts}
                   alerts={alerts}
+                  dialog={recipientDialog}
+                  onDialogChange={setRecipientDialog}
                   onOpenAlert={open}
-                  onReplace={(fromId, toId) => {
-                    setAlerts((all) =>
-                      all.map((a) =>
-                        a.recipientIds.includes(fromId)
-                          ? {
-                              ...a,
-                              recipientIds: [
-                                ...new Set(
-                                  a.recipientIds.map((id) =>
-                                    id === fromId ? toId : id,
-                                  ),
-                                ),
-                              ],
-                            }
-                          : a,
-                      ),
+                  onSave={(contact, alertIds) => {
+                    const existed = contactIndex.has(contact.id);
+                    setContacts((all) =>
+                      existed
+                        ? all.map((c) => (c.id === contact.id ? contact : c))
+                        : [contact, ...all],
                     );
-                    const from = contactIndex.get(fromId);
-                    const to = contactIndex.get(toId);
+                    // Alerts only: who a report rule tells is set on its
+                    // regulation, and is not this dialog's to change.
+                    setAlerts((all) =>
+                      all.map((a) => {
+                        if (a.kind !== "alert") return a;
+                        const wanted = alertIds.includes(a.id);
+                        const has = a.recipientIds.includes(contact.id);
+                        if (wanted === has) return a;
+                        return {
+                          ...a,
+                          recipientIds: wanted
+                            ? [...a.recipientIds, contact.id]
+                            : a.recipientIds.filter((r) => r !== contact.id),
+                        };
+                      }),
+                    );
                     setNotice(
-                      `${to?.name ?? "They"} took over from ${from?.name ?? "them"}`,
+                      `${contactLabel(contact)} ${existed ? "saved" : "added"}`,
                     );
                   }}
-                  onRemove={(id) => {
-                    const gone = contactIndex.get(id);
+                  onAddMany={(people, kind, operator, alertId) => {
+                    const made: Contact[] = people.map((person) => ({
+                      id: uid("c"),
+                      name: person.name,
+                      email: person.email,
+                      kind,
+                      operator,
+                      pending: kind === "member" ? true : undefined,
+                    }));
+                    setContacts((all) => [...made, ...all]);
+                    if (alertId)
+                      setAlerts((all) =>
+                        all.map((a) =>
+                          a.id === alertId
+                            ? {
+                                ...a,
+                                recipientIds: [
+                                  ...a.recipientIds,
+                                  ...made.map((c) => c.id),
+                                ],
+                              }
+                            : a,
+                        ),
+                      );
+                    setNotice(
+                      `${plural(made.length, "recipient", "recipients")} added`,
+                    );
+                  }}
+                  onDelete={(ids) => {
+                    const only = ids.length === 1 ? contactIndex.get(ids[0]!) : undefined;
                     setAlerts((all) =>
                       all.map((a) => ({
                         ...a,
-                        recipientIds: a.recipientIds.filter((r) => r !== id),
+                        recipientIds: a.recipientIds.filter(
+                          (r) => !ids.includes(r),
+                        ),
                       })),
                     );
-                    setContacts((all) => all.filter((c) => c.id !== id));
-                    setNotice(`${gone?.name ?? "Contact"} removed`);
+                    setContacts((all) => all.filter((c) => !ids.includes(c.id)));
+                    setNotice(
+                      only
+                        ? `${contactLabel(only)} removed`
+                        : `${plural(ids.length, "recipient", "recipients")} removed`,
+                    );
                   }}
                 />
               )}
