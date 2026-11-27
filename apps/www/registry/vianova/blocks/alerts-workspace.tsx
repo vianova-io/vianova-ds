@@ -3,60 +3,69 @@
 /**
  * The Alerts page.
  *
- * One page per scope, beside Regulations. An alert watches a no-parking rule
- * and sends an e-mail; it does not file anything and it has no lifecycle of
- * its own. That single sentence is the whole boundary between this page and
- * the report rules Jimmy ships on 10 Dec.
+ * One page per scope, beside Regulations. An alert watches something in the
+ * scope's data and sends an e-mail when it happens.
  *
- * The editor IS that sentence. "When a scooter from any operator stays in any
- * zone of Historic centre for more than 2 hours, e-mail Anja every hour" --
- * every part you can change is a word you can press. There is no form beside
- * it saying the same thing in fields, and so nothing that can disagree with
- * it. It is also the only layout in which a report rule can be shown honestly:
- * the same sentence, with nothing in it pressable.
+ * The page follows Katell's prototype of 26 Nov screen for screen: the list
+ * and Recipients, a Create dialog that asks first and suggests on the same
+ * screen, and an editor with the settings in a panel on the left and the
+ * e-mail on the right. What this file adds is the design system's parts in
+ * place of the prototype's own, and the decisions the prototype left open.
  *
- * Three decisions behind the shape, all from #munich-alerts:
+ * Decisions behind the shape, from the call of 26 Nov and #munich-alerts:
  *
- * - **An alert points at a RULE, not a regulation.** A multi-parking
- *   regulation holds a parking rule and a no-parking rule; you alert on the
- *   second. Keying on the regulation would make "No parking outside bays"
- *   unaddressable, and the one regulation Munich cares about is exactly that
- *   shape.
- * - **Recipients are the report contacts.** Jimmy's point 4 of 19 Nov: a
- *   separate list of addresses per alert puts the same people in two places,
- *   and the thing CS actually does all day is swap one person for another
- *   across everything. So the Recipients view edits that one list, and
- *   swapping someone is changing their address there: every alert follows.
+ * - **Ask and suggestions share one screen.** VIP's GenAI flow asks on one
+ *   page and suggests on another; the call named that as the thing to fix. A
+ *   suggestion puts its words in the box rather than acting behind your back,
+ *   so Generate is always the step that makes the draft. "Start from scratch"
+ *   is beside it for people who would rather set the numbers themselves.
+ * - **The summary is one sentence, and it is the alert.** Every field in the
+ *   panel changes a word of it, so what the page promises is read back in
+ *   plain language before anything is saved.
+ * - **Zones use the Regulations panel as it is.** Library, Draw and Import,
+ *   the same three tabs in the same place, so the two pages feel the same and
+ *   a zone drawn here lands in the one library.
+ * - **Hourly is said as hourly.** The data is checked once an hour, so "as
+ *   soon as it happens" would not be true. Jimmy's wording of 19 Nov, kept.
+ * - **A repeat is set the way a calendar event is.** Daily, weekly or monthly
+ *   from a short list, and a "Custom" dialog for every-N, several weekdays
+ *   and an end -- Gmail's recurrence, which Katell named as the benchmark.
+ * - **Recipients are one list.** A name from it, an operator's address, a
+ *   pasted list or another alert's people. Swapping someone is changing their
+ *   address once, in Recipients, and every alert follows.
  * - **The e-mail is the one we already send.** Not redesigned here. The
- *   preview is a frame around it, so what the page promises is what arrives.
+ *   preview is a frame around it, with how many vehicles it would list now.
+ * - **A no-parking alert starts on its rule.** The "Alerts" switch on a
+ *   no-parking rule, in Regulations, makes a row here marked Reported device.
+ *   What it watches stays the rule's; who hears about it and whether it is on
+ *   are handled here, like any other alert.
  *
  * Deliberately NOT here:
  *
- * - **No threshold builder.** No "battery below 20%", no "idle more than 3
- *   days". Those datasets exist and Jimmy confirmed they run, but v1 is
- *   no-parking only, and a builder with one data source in it would be a
- *   promise of nine more.
- * - **No report-rule editing.** Report rules are listed, badged and
- *   read-only; their switch lives on the regulation. One place to SEE
- *   everything that notifies people, without moving where it is set.
- * - **No Draw or Import in the zone step.** An alert adds no areas to
- *   anything -- it narrows to some of the rule's own zones. The zone picker's
- *   job is the opposite, so it is not reused here; only its thumbnail is.
- * - **No description lines.** The first version explained itself under every
- *   heading and every field, and read as a document about alerts rather than
- *   a place to set one. What a control does is now said by the control.
- * - **Nothing only the backend can be the truth about:** whether the hourly
- *   check found anything, whether an e-mail was delivered, what the daily cap
- *   really is. `dailyCap` below carries a placeholder and says so.
+ * - **No "regulation broken" or "data stopped" in What to watch.** The first
+ *   is the switch on the rule; the second is already the feed status e-mails.
+ *   Asking for either says where it lives instead of drafting something.
+ * - **No type icons in the list.** Katell asked; the name already says what
+ *   an alert watches, and a sixth column of marks would only be learned twice.
+ * - **No redesign of the e-mail.** See above.
+ * - **Nothing only the backend can be the truth about:** the sentence a real
+ *   model would draft, how many vehicles match right now, whether an e-mail
+ *   was delivered. `draftFromSentence` and `estimateMatches` stand in for the
+ *   first two and say so.
  */
 
 import * as React from "react";
 import {
   ArrowLeft,
+  ArrowUpRight,
   BellRing,
   Check,
   ChevronDown,
-  Mail,
+  ChevronRight,
+  ClipboardPaste,
+  Info,
+  Lightbulb,
+  Minus,
   Paperclip,
   Pencil,
   Plus,
@@ -65,14 +74,15 @@ import {
   Sparkles,
   Trash2,
   TriangleAlert,
+  Upload,
   UserCog,
   Users,
+  X,
 } from "lucide-react";
 
 import {
   Alert as AlertBanner,
   AlertAction,
-  AlertDescription,
   AlertTitle,
 } from "@/registry/vianova/ui/alert";
 import { Avatar, AvatarFallback } from "@/registry/vianova/ui/avatar";
@@ -104,7 +114,6 @@ import { Input } from "@/registry/vianova/ui/input";
 import {
   InputGroup,
   InputGroupAddon,
-  InputGroupButton,
   InputGroupInput,
 } from "@/registry/vianova/ui/input-group";
 import {
@@ -123,6 +132,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/registry/vianova/ui/select";
+import {
+  RadioGroup,
+  RadioGroupItem,
+} from "@/registry/vianova/ui/radio-group";
 import { Skeleton } from "@/registry/vianova/ui/skeleton";
 import { Switch } from "@/registry/vianova/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/registry/vianova/ui/tabs";
@@ -135,16 +148,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/registry/vianova/ui/table";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/registry/vianova/ui/tooltip";
+import { TooltipProvider } from "@/registry/vianova/ui/tooltip";
+import { ConfirmDialog } from "@/registry/vianova/patterns/confirm-dialog";
 import { InlineEdit } from "@/registry/vianova/patterns/inline-edit";
 import { PersonCell } from "@/registry/vianova/patterns/person-cell";
 import { RelativeTime } from "@/registry/vianova/patterns/relative-time";
-import { SaveBar } from "@/registry/vianova/patterns/save-bar";
 import { SelectionBar } from "@/registry/vianova/patterns/selection-bar";
 import {
   TableSettings,
@@ -155,9 +163,14 @@ import { StatusBadge } from "@/registry/vianova/patterns/status-badge";
 import { TableCard } from "@/registry/vianova/patterns/table-card";
 import { TagInput } from "@/registry/vianova/patterns/tag-input";
 import { ToolBand } from "@/registry/vianova/patterns/tool-band";
-import { SegmentedControl } from "@/registry/vianova/product/segmented-control";
 import { RuleTypeIcon } from "@/registry/vianova/product/rule-type-icon";
-import { ZoneThumbnail, type PickerZone } from "@/registry/vianova/product/zone-picker";
+import { ZoneDrawMap } from "@/registry/vianova/product/zone-draw-map";
+import {
+  ZonePickerPanel,
+  ZoneThumbnail,
+  type PickerZone,
+  type ZoneDrawTool,
+} from "@/registry/vianova/product/zone-picker";
 import {
   OPERATORS,
   SAMPLE_REGULATIONS,
@@ -191,35 +204,47 @@ const NOW = Date.parse(ALERTS_NOW);
 /* -------------------------------------------------------------------------- */
 
 /**
- * What sends the e-mail.
+ * When to send.
  *
  * `hourly` is as close to real time as the platform gets: the data is checked
- * once an hour, so "as soon as it happens" would be a lie and the label says
- * the hour out loud. The other three are one e-mail with the whole list, the
- * shape clients already receive today.
+ * once an hour and each vehicle is sent once, so the label says the hour out
+ * loud. `repeat` is one e-mail with the whole list, the shape clients already
+ * receive today.
  */
-export type SendMode = "hourly" | "daily" | "weekly" | "monthly";
+export type SendMode = "hourly" | "repeat";
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
+export type RepeatUnit = "day" | "week" | "month";
+
+/** How a repeat stops. Gmail's three: never, on a date, after a number. */
+export type ScheduleEnd =
+  | { kind: "never" }
+  | { kind: "on"; date: string }
+  | { kind: "after"; count: number };
+
 export type AlertSchedule = {
   mode: SendMode;
-  /** HH:mm, read in the scope's time zone. Summaries only. */
-  hour?: string;
-  /** Weekly only. */
-  weekday?: Weekday;
   /**
    * Hourly only: stop after this many e-mails in one day, resuming the next.
-   *
-   * PLACEHOLDER. The cap exists in Katell's prototype but its number was
-   * unreadable in the capture and no one has confirmed it. Written once, here,
-   * so changing it is one edit.
+   * Absent means no cap, which is how a new alert starts in Katell's
+   * prototype: the cap is a tick box, and it is not ticked.
    */
   dailyCap?: number;
+  /** Repeat only. Every `every` days, weeks or months. Defaults to 1. */
+  every?: number;
+  unit?: RepeatUnit;
+  /** Weekly: the days it goes out on. Empty reads as Monday. */
+  weekdays?: Weekday[];
+  /** Monthly: the day of the month, 1 to 28 so every month has it. */
+  monthDay?: number;
+  /** HH:mm, read in the scope's time zone. Repeat only. */
+  hour?: string;
+  ends?: ScheduleEnd;
 };
 
-/** The cap the editor starts a new alert with. See `dailyCap`. */
-const DEFAULT_DAILY_CAP = 10;
+/** The number the cap's field starts at once its box is ticked. Katell's 5. */
+const DEFAULT_DAILY_CAP = 5;
 
 export type RecipientKind = "member" | "operator";
 
@@ -251,9 +276,26 @@ export type Contact = {
 };
 
 /**
- * `report` rows are Jimmy's "Create reports" switch on a no-parking rule,
- * shown here so one page lists everything that notifies people. They are
- * read-only: the switch and the contacts both live on the regulation.
+ * What an alert watches.
+ *
+ * The five Jimmy confirmed run today (19 Nov), each one number against one
+ * measure, plus `no_parking`: a no-parking rule broken for some hours. That
+ * last one is never picked here. It is made by the Alerts switch on the rule,
+ * in Regulations, and arrives as a `report` row.
+ */
+export type WatchType =
+  | "battery"
+  | "idle"
+  | "available"
+  | "cap"
+  | "parked"
+  | "no_parking";
+
+/**
+ * `report` rows come from a no-parking rule's Alerts switch. Besides the
+ * e-mail they file a reported device, with its own lifecycle, which is why
+ * the list marks them. What they watch is the rule's and is changed there;
+ * their recipients and their switch are handled on this page.
  */
 export type AlertKind = "alert" | "report";
 
@@ -261,12 +303,13 @@ export type Alert = {
   id: string;
   kind: AlertKind;
   name: string;
-  /** The rule watched, and the regulation it belongs to. See the file header. */
-  regulationId: string;
-  ruleId: string;
-  /** Hours a breach must last to be worth an e-mail. Munich asked for 2. */
-  breachHours: number;
-  /** A subset of the rule's zones. Empty means every zone in the rule. */
+  watch: WatchType;
+  /** The number the watch compares against: a percentage, hours or vehicles. */
+  threshold: number;
+  /** `no_parking` only: the rule watched, and the regulation it belongs to. */
+  regulationId?: string;
+  ruleId?: string;
+  /** Empty means the whole scope. */
   zoneIds: string[];
   /** Empty means every type. */
   vehicles: Vehicle[];
@@ -282,6 +325,8 @@ export type Alert = {
   mine?: boolean;
   createdAt: string;
   lastSentAt?: string;
+  /** E-mails sent in the last seven days. Shown beside the switch. */
+  sentLastWeek?: number;
   on: boolean;
 };
 
@@ -342,89 +387,112 @@ export const SAMPLE_CONTACTS: Contact[] = [
 
 export const SAMPLE_ALERTS: Alert[] = [
   {
-    id: "al-historic-2h",
+    id: "al-battery",
     kind: "alert",
-    name: "Parked in the historic centre for 2 hours",
-    regulationId: "reg-no-parking-historic",
-    ruleId: "rule-npk",
-    breachHours: 2,
+    name: "Low battery scooters",
+    watch: "battery",
+    threshold: 15,
+    zoneIds: [],
+    vehicles: ["scooter"],
+    operators: [],
+    schedule: { mode: "hourly" },
+    recipientIds: ["c-anja", "c-thomas"],
+    extraEmails: [],
+    createdBy: "Anja Reiter",
+    createdAt: "2026-11-12T10:12:00Z",
+    lastSentAt: "2026-11-27T08:00:00Z",
+    sentLastWeek: 37,
+    on: true,
+  },
+  {
+    id: "al-idle",
+    kind: "alert",
+    name: "Idle for 72 hours",
+    watch: "idle",
+    threshold: 72,
     zoneIds: [],
     vehicles: [],
     operators: [],
-    schedule: { mode: "hourly", dailyCap: 10 },
-    recipientIds: ["c-anja", "c-bolt", "c-voi"],
-    extraEmails: [],
-    createdBy: "Anja Reiter",
-    createdAt: "2026-11-10T10:12:00Z",
-    lastSentAt: "2026-11-27T08:00:00Z",
-    on: true,
-  },
-  {
-    id: "al-bays-daily",
-    kind: "alert",
-    name: "Daily list · parked outside the bays",
-    regulationId: "reg-parking-baixa-chiado",
-    ruleId: "rule-no-parking-baixa",
-    breachHours: 2,
-    zoneIds: [],
-    vehicles: ["scooter", "moped"],
-    operators: [],
-    schedule: { mode: "daily", hour: "08:00" },
-    recipientIds: ["c-anja", "c-thomas"],
+    schedule: { mode: "repeat", unit: "day", every: 1, hour: "08:00" },
+    recipientIds: ["c-kvr", "c-anja", "c-thomas", "c-you"],
     extraEmails: ["verkehr@landkreis.de"],
     createdBy: "Thomas Brandl",
-    createdAt: "2026-11-12T14:30:00Z",
-    lastSentAt: "2026-11-26T07:00:00Z",
+    createdAt: "2026-11-14T14:30:00Z",
+    lastSentAt: "2026-11-27T07:00:00Z",
+    sentLastWeek: 7,
     on: true,
   },
   {
-    id: "al-weekly-council",
+    id: "al-council",
     kind: "alert",
     name: "Monday summary for the council",
-    regulationId: "reg-no-parking-historic",
-    ruleId: "rule-npk",
-    breachHours: 4,
+    watch: "cap",
+    threshold: 2000,
     zoneIds: [],
     vehicles: [],
     operators: ["Bolt", "Voi"],
-    schedule: { mode: "weekly", hour: "09:00", weekday: "mon" },
+    schedule: {
+      mode: "repeat",
+      unit: "week",
+      every: 1,
+      weekdays: ["mon"],
+      hour: "09:00",
+    },
     recipientIds: ["c-you", "c-kvr"],
     extraEmails: [],
     createdBy: "You",
     mine: true,
     createdAt: "2026-11-18T09:05:00Z",
-    lastSentAt: "2026-11-24T08:00:00Z",
+    lastSentAt: "2026-11-23T08:00:00Z",
+    sentLastWeek: 1,
     on: true,
   },
   {
-    id: "al-lime-off",
+    id: "al-bikes",
     kind: "alert",
-    name: "Lime · parked outside the bays",
-    regulationId: "reg-parking-baixa-chiado",
-    ruleId: "rule-no-parking-baixa",
-    breachHours: 2,
+    name: "Too few bikes",
+    watch: "available",
+    threshold: 5,
     zoneIds: [],
-    vehicles: [],
-    operators: ["Lime"],
-    schedule: { mode: "hourly", dailyCap: 10 },
-    recipientIds: ["c-lime"],
+    vehicles: ["bike"],
+    operators: [],
+    schedule: { mode: "hourly", dailyCap: 5 },
+    recipientIds: ["c-anja", "c-bolt"],
     extraEmails: [],
     createdBy: "Anja Reiter",
-    createdAt: "2026-10-30T11:45:00Z",
+    createdAt: "2026-11-17T11:45:00Z",
     on: false,
   },
+  {
+    id: "al-parked",
+    kind: "alert",
+    name: "Parked too long",
+    watch: "parked",
+    threshold: 24,
+    zoneIds: [],
+    vehicles: [],
+    operators: [],
+    schedule: { mode: "hourly" },
+    recipientIds: ["c-kvr", "c-lime", "c-bolt"],
+    extraEmails: [],
+    createdBy: "Vianova",
+    createdAt: "2026-10-30T11:45:00Z",
+    lastSentAt: "2026-11-26T16:42:00Z",
+    sentLastWeek: 9,
+    on: true,
+  },
   /*
-   * The report rule. One is enough to make the distinction legible: it reads
-   * like the others, carries a badge, and nothing about it can be changed from
-   * here.
+   * The one made by a rule. It reads like the others, carries a badge, and
+   * opens with the rule's part of it fixed: see `AlertKind`.
    */
   {
     id: "al-report-historic",
     kind: "report",
-    name: "Historic centre · files a report",
+    name: "No parking · Historic centre",
+    watch: "no_parking",
+    threshold: 2,
     regulationId: "reg-no-parking-historic",
     ruleId: "rule-npk",
-    breachHours: 2,
     zoneIds: [],
     vehicles: [],
     operators: [],
@@ -434,6 +502,7 @@ export const SAMPLE_ALERTS: Alert[] = [
     createdBy: "Vianova",
     createdAt: "2026-11-23T13:00:00Z",
     lastSentAt: "2026-11-27T08:00:00Z",
+    sentLastWeek: 12,
     on: true,
   },
 ];
@@ -463,6 +532,8 @@ const WEEKDAYS: Record<Weekday, string> = {
   sun: "Sunday",
 };
 
+const WEEK: Weekday[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
 /**
  * Hours a summary may be sent at.
  *
@@ -478,19 +549,164 @@ const HOURS = Array.from(
 /** The scope's own time zone. Every hour here is read in it, never in UTC. */
 const SCOPE_TIME_ZONE = "Munich time";
 
-/** The schedule as a list cell: short enough to never wrap. */
-export function scheduleLabel(schedule: AlertSchedule) {
+const plural = (n: number, one: string, many: string) =>
+  `${n} ${n === 1 ? one : many}`;
+
+/** "a", "a or b", "a, b or c" -- and the same with "and". */
+const listOf = (items: string[], joiner: "or" | "and") =>
+  items.length <= 1
+    ? (items[0] ?? "")
+    : `${items.slice(0, -1).join(", ")} ${joiner} ${items[items.length - 1]}`;
+
+const ordinal = (n: number) =>
+  `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th")}`;
+
+const capitalise = (text: string) =>
+  text.charAt(0).toUpperCase() + text.slice(1);
+
+/**
+ * Everything the page needs to know about one thing it can watch.
+ *
+ * Kept in the frontend on Jimmy's advice (19 Nov): the stream metadata gives
+ * a field its unit and label, but not a starting value, not "below" or "more
+ * than", and nothing at all for computed measures like idle time.
+ */
+type WatchSpec = {
+  /** In the What to watch list. */
+  label: string;
+  /** Over the number: "Battery below". */
+  compare: string;
+  unit: string;
+  initial: number;
+  step: number;
+  /** The e-mail table's third column. */
+  column: string;
+  /** Where the numbers come from, said under the picker. */
+  source: string;
+  /** What "right now" counts: vehicles, or operators for a fleet cap. */
+  counts: "vehicle" | "operator";
+};
+
+const WATCH: Record<WatchType, WatchSpec> = {
+  battery: {
+    label: "Low battery",
+    compare: "Battery below",
+    unit: "%",
+    initial: 20,
+    step: 5,
+    column: "Battery",
+    source: "live vehicle positions",
+    counts: "vehicle",
+  },
+  idle: {
+    label: "Idle vehicles",
+    compare: "Not moved for more than",
+    unit: "hours",
+    initial: 72,
+    step: 12,
+    column: "Idle",
+    source: "live vehicle positions",
+    counts: "vehicle",
+  },
+  available: {
+    label: "Too few available",
+    compare: "Fewer available than",
+    unit: "vehicles",
+    initial: 5,
+    step: 5,
+    column: "Available",
+    source: "fleet availability, every hour",
+    counts: "vehicle",
+  },
+  cap: {
+    label: "Above the cap",
+    compare: "More vehicles than",
+    unit: "vehicles",
+    initial: 2000,
+    step: 100,
+    column: "Fleet",
+    source: "fleet availability, every hour",
+    counts: "operator",
+  },
+  parked: {
+    label: "Parked too long",
+    compare: "Parked longer than",
+    unit: "hours",
+    initial: 24,
+    step: 1,
+    column: "Parked",
+    source: "live vehicle positions",
+    counts: "vehicle",
+  },
+  no_parking: {
+    label: "No-parking rule broken",
+    compare: "In the zone for more than",
+    unit: "hours",
+    initial: 2,
+    step: 1,
+    column: "In the zone",
+    source: "your regulations and live vehicle positions",
+    counts: "vehicle",
+  },
+};
+
+/** What can be picked here. `no_parking` is made on its rule; see `WatchType`. */
+export const PICKABLE_WATCHES: WatchType[] = [
+  "battery",
+  "idle",
+  "available",
+  "cap",
+  "parked",
+];
+
+/** "scooters", "scooters or mopeds", or just "vehicles". */
+const vehicleWords = (vehicles: Vehicle[]) =>
+  vehicles.length === 0
+    ? "vehicles"
+    : listOf(
+        vehicles.map(
+          (v) =>
+            `${VEHICLES.find((x) => x.value === v)?.label.toLowerCase() ?? v}s`,
+        ),
+        "or",
+      );
+
+/** The repeat as words: "every Monday at 09:00", "every 2 weeks on …". */
+function repeatPhrase(schedule: AlertSchedule) {
   const at = schedule.hour ?? "08:00";
-  switch (schedule.mode) {
-    case "hourly":
-      return "Every hour";
-    case "daily":
-      return `Daily · ${at}`;
-    case "weekly":
-      return `${WEEKDAYS[schedule.weekday ?? "mon"]}s · ${at}`;
-    case "monthly":
-      return `Monthly · ${at}`;
+  const every = Math.max(1, schedule.every ?? 1);
+  const unit = schedule.unit ?? "day";
+  let text: string;
+  if (unit === "week") {
+    const chosen = schedule.weekdays?.length ? schedule.weekdays : ["mon" as const];
+    const days = listOf(
+      WEEK.filter((d) => chosen.includes(d)).map((d) => WEEKDAYS[d]),
+      "and",
+    );
+    text =
+      every === 1 ? `every ${days} at ${at}` : `every ${every} weeks on ${days} at ${at}`;
+  } else if (unit === "month") {
+    const day = ordinal(schedule.monthDay ?? 1);
+    text =
+      every === 1
+        ? `on the ${day} of each month at ${at}`
+        : `every ${every} months on the ${day} at ${at}`;
+  } else {
+    text = every === 1 ? `every day at ${at}` : `every ${every} days at ${at}`;
   }
+  const ends = schedule.ends;
+  if (ends?.kind === "on" && ends.date) {
+    const date = new Intl.DateTimeFormat("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(`${ends.date}T00:00:00Z`));
+    text += `, until ${date}`;
+  } else if (ends?.kind === "after") {
+    text += `, ${plural(ends.count, "time", "times")}`;
+  }
+  return text;
 }
 
 /**
@@ -500,57 +716,125 @@ export function scheduleLabel(schedule: AlertSchedule) {
  * platform checks once an hour. Jimmy's wording of 19 Nov, kept.
  */
 function schedulePhrase(schedule: AlertSchedule) {
-  const at = schedule.hour ?? "08:00";
-  switch (schedule.mode) {
-    case "hourly":
-      return "every hour";
-    case "daily":
-      return `every day at ${at}`;
-    case "weekly":
-      return `every ${WEEKDAYS[schedule.weekday ?? "mon"]} at ${at}`;
-    case "monthly":
-      return `on the 1st of each month at ${at}`;
-  }
+  if (schedule.mode === "hourly")
+    return `every hour, new vehicles only${
+      schedule.dailyCap
+        ? `, at most ${plural(schedule.dailyCap, "e-mail", "e-mails")} a day`
+        : ""
+    }`;
+  return `${repeatPhrase(schedule)} ${SCOPE_TIME_ZONE}, with the full list`;
 }
 
-const plural = (n: number, one: string, many: string) =>
-  `${n} ${n === 1 ? one : many}`;
+/** The schedule as a section's summary: short, and never a sentence. */
+export function scheduleLabel(schedule: AlertSchedule) {
+  if (schedule.mode === "hourly")
+    return `Hourly, new vehicles only${schedule.dailyCap ? `, max ${schedule.dailyCap} a day` : ""}`;
+  return `${capitalise(repeatPhrase(schedule))}, ${SCOPE_TIME_ZONE}`;
+}
 
-/** "a", "a or b", "a, b or c". */
-const orList = (items: string[]) =>
-  items.length <= 1
-    ? (items[0] ?? "")
-    : `${items.slice(0, -1).join(", ")} or ${items[items.length - 1]}`;
+type RepeatPreset = "daily" | "weekly" | "monthly" | "custom";
 
-const vehiclePhrase = (vehicles: Vehicle[]) =>
-  vehicles.length === 0
-    ? "any vehicle"
-    : // The article belongs here, not in the list: "When scooter stays" is not
-      // a sentence, and the sentence is the thing being read.
-      `a ${orList(
-        vehicles.map(
-          (v) => VEHICLES.find((x) => x.value === v)?.label.toLowerCase() ?? v,
-        ),
-      )}`;
+/** Which line of the short list a repeat is, or `custom` when it is none. */
+function repeatPreset(schedule: AlertSchedule): RepeatPreset {
+  if ((schedule.every ?? 1) !== 1) return "custom";
+  if (schedule.ends && schedule.ends.kind !== "never") return "custom";
+  const unit = schedule.unit ?? "day";
+  if (unit === "day") return "daily";
+  if (unit === "week") return "weekly";
+  return (schedule.monthDay ?? 1) === 1 ? "monthly" : "custom";
+}
 
-const operatorPhrase = (operators: string[]) =>
-  operators.length === 0 ? "any operator" : orList(operators);
-
-const zonePhrase = (ids: string[], zones: Map<string, PickerZone>) =>
+const zoneWords = (ids: string[], zones: Map<string, PickerZone>) =>
   ids.length === 0
-    ? "any zone"
-    : ids.length === 1
-      ? (zones.get(ids[0]!)?.name ?? "1 zone")
+    ? "the whole scope"
+    : ids.length <= 2
+      ? listOf(
+          ids.map((id) => zones.get(id)?.name ?? "a zone"),
+          "and",
+        )
       : plural(ids.length, "zone", "zones");
 
-const recipientPhrase = (names: string[]) =>
-  names.length === 0
-    ? "nobody yet"
-    : names.length === 1
-      ? names[0]!
-      : names.length === 2
-        ? `${names[0]} and ${names[1]}`
-        : `${names[0]} and ${names.length - 1} others`;
+/**
+ * The alert as one sentence.
+ *
+ * Built from the same fields the panel edits, so it can never say something
+ * the settings do not. `ruleName` is the no-parking rule's, for the one kind
+ * that has a rule.
+ */
+function summarySentence(
+  alert: Alert,
+  zones: Map<string, PickerZone>,
+  ruleName?: string,
+) {
+  const who = alert.operators.length
+    ? `${listOf(alert.operators, "or")} `
+    : "";
+  const v = vehicleWords(alert.vehicles);
+  const n = alert.threshold;
+  const when = schedulePhrase(alert.schedule);
+  if (alert.watch === "no_parking")
+    return `${who}${v} break “${ruleName ?? "a no-parking rule"}” for more than ${plural(n, "hour", "hours")}, ${when}`;
+  const core: Record<Exclude<WatchType, "no_parking">, string> = {
+    battery: `${who}${v} fall below ${n} % battery`,
+    idle: `${who}${v} have not moved for more than ${plural(n, "hour", "hours")}`,
+    available: `fewer than ${n} ${who}${v} are available`,
+    cap: `${who ? `${who.trim()}'s ` : "an operator's "}fleet goes above ${n.toLocaleString("en-GB")} ${v}`,
+    parked: `${who}${v} stay parked more than ${plural(n, "hour", "hours")}`,
+  };
+  return `${core[alert.watch]} in ${zoneWords(alert.zoneIds, zones)}, ${when}`;
+}
+
+/**
+ * A name for an alert nobody has named yet.
+ *
+ * It follows the settings until the title is typed in, after which it is
+ * left alone. Most alerts are named by what they watch, so most never need
+ * the field at all.
+ */
+function autoName(alert: Alert, zones: Map<string, PickerZone>) {
+  const v = alert.vehicles.length ? `${vehicleWords(alert.vehicles)} ` : "";
+  const n = alert.threshold;
+  const op = alert.operators.length === 1 ? alert.operators[0]! : "Fleet";
+  const base: Record<WatchType, string> = {
+    battery: `Low battery ${v}`,
+    idle: `Idle ${v}for ${n} h`,
+    available: `Too few ${v || "vehicles"}`,
+    cap: `${op} above ${n.toLocaleString("en-GB")}`,
+    parked: `${v}parked over ${n} h`,
+    no_parking: "No-parking rule broken",
+  };
+  const where =
+    alert.zoneIds.length === 1
+      ? ` in ${zones.get(alert.zoneIds[0]!)?.name ?? "a zone"}`
+      : "";
+  return capitalise(`${base[alert.watch]}${where}`.replace(/\s+/g, " ").trim());
+}
+
+/**
+ * How many vehicles would set the alert off right now.
+ *
+ * A STAND-IN. The alert API already has a preview count (Paz's notifications
+ * app calls it), and this is where it goes. Until then the number only has to
+ * move the right way when a setting changes, so the page can be read as it
+ * will work.
+ */
+function estimateMatches(alert: Alert) {
+  if (alert.watch === "cap") return alert.threshold < 1900 ? 1 : 0;
+  const base = { battery: 37, idle: 12, available: 2, parked: 9, no_parking: 9 }[
+    alert.watch
+  ];
+  const initial = WATCH[alert.watch].initial;
+  const rising = alert.watch === "battery" || alert.watch === "available";
+  let n =
+    base *
+    (rising
+      ? alert.threshold / initial
+      : initial / Math.max(alert.threshold, 0.1));
+  if (alert.vehicles.length) n *= 0.55;
+  if (alert.operators.length) n *= 0.4;
+  if (alert.zoneIds.length) n *= Math.min(1, 0.25 * alert.zoneIds.length);
+  return Math.max(0, Math.round(n));
+}
 
 /**
  * The IANA name behind "Munich time". Every date on this page is formatted in
@@ -655,80 +939,351 @@ function SectionTabs({
 }
 
 /* -------------------------------------------------------------------------- */
-/* The sentence                                                               */
+/* Create                                                                     */
 /* -------------------------------------------------------------------------- */
 
 /**
- * One changeable part of the sentence.
+ * The suggestions, written the way a city manager talks.
  *
- * It reads as the words it stands for and opens the picker for them, so the
- * sentence is always the current state of the alert and never a summary of a
- * form somewhere else. `readOnly` drops the control and keeps the words, which
- * is how a report rule is shown: the same sentence, with nothing to press.
- *
- * The accessible name is the question and the answer -- "Vehicles: a scooter"
- * -- because out of the sentence's flow, "a scooter" alone names nothing.
+ * Katell's five. Each needs a kind of data, and a scope that lacks it never
+ * sees the suggestion (`watchable`), so nobody is offered an alert that cannot
+ * run. `patch` is what the sentence means, so pressing a suggestion and then
+ * Generate does not depend on the stand-in parser reading it back correctly.
  */
-function Slot({
-  title,
-  label,
-  empty,
-  readOnly,
-  className,
-  children,
-}: {
-  /** What is being chosen, for assistive tech: "Vehicles". */
-  title: string;
-  /** The words the sentence shows. */
-  label: string;
-  /** Nothing chosen where the alert needs something. Drawn as a gap to fill. */
-  empty?: boolean;
-  readOnly?: boolean;
-  /** The picker's width. */
-  className?: string;
-  children: (close: () => void) => React.ReactNode;
-}) {
-  const [open, setOpen] = React.useState(false);
+const SUGGESTIONS: { text: string; name: string; patch: Partial<Alert> }[] = [
+  {
+    text: "Tell me when scooters fall below 15 % battery, anywhere in the scope.",
+    name: "Low battery scooters",
+    patch: { watch: "battery", threshold: 15, vehicles: ["scooter"] },
+  },
+  {
+    text: "Tell me when vehicles have not moved for 72 hours. Send me one summary each morning.",
+    name: "Vehicles idle for days",
+    patch: {
+      watch: "idle",
+      threshold: 72,
+      schedule: { mode: "repeat", unit: "day", every: 1, hour: "08:00" },
+    },
+  },
+  {
+    text: "Tell me when there are fewer than 5 bikes available.",
+    name: "Too few bikes",
+    patch: { watch: "available", threshold: 5, vehicles: ["bike"] },
+  },
+  {
+    text: "Tell me when an operator puts more than 2,000 vehicles on the street.",
+    name: "An operator above its cap",
+    patch: { watch: "cap", threshold: 2000 },
+  },
+  {
+    text: "Tell me when vehicles stay parked more than 24 hours.",
+    name: "Vehicles parked too long",
+    patch: { watch: "parked", threshold: 24 },
+  },
+];
 
-  if (readOnly) {
-    return <span className="text-foreground font-medium">{label}</span>;
+/**
+ * A sentence, read into the settings it describes.
+ *
+ * A STAND-IN for the model behind VIA-1071. It recognises the words the
+ * suggestions use and nothing cleverer, which is enough to show the flow: you
+ * say it, you get a draft, you check the draft. The two things people will
+ * ask for that do not live here get an answer saying where they do live,
+ * rather than a draft of something else.
+ */
+function draftFromSentence(
+  text: string,
+  zones: PickerZone[],
+): { patch: Partial<Alert> } | { problem: string } {
+  const t = text.toLowerCase();
+  if (/no.?park|regulation|break/.test(t))
+    return {
+      problem:
+        "No-parking alerts are switched on from the rule itself, in Regulations.",
+    };
+  const watch: WatchType | null = /batter/.test(t)
+    ? "battery"
+    : /idle|not moved|hasn.t moved|haven.t moved/.test(t)
+      ? "idle"
+      : /few|available/.test(t)
+        ? "available"
+        : /\bcap\b|above|on the street/.test(t)
+          ? "cap"
+          : /park/.test(t)
+            ? "parked"
+            : null;
+  if (!watch)
+    return {
+      problem: /data|feed|silent/.test(t)
+        ? "Operator feed problems already come in the feed status e-mails."
+        : "Name what to watch: battery, idle vehicles, available vehicles, the fleet cap or vehicles parked too long.",
+    };
+
+  const patch: Partial<Alert> = { watch, threshold: WATCH[watch].initial };
+  const number = /\d[\d.,]*/.exec(t)?.[0].replace(/[.,]$/, "");
+  if (number) {
+    // "2,000" is two thousand; "2,5" is two and a half.
+    const value = /^\d{1,3}([.,]\d{3})+$/.test(number)
+      ? Number(number.replace(/[.,]/g, ""))
+      : Number(number.replace(",", "."));
+    if (Number.isFinite(value)) patch.threshold = value;
   }
+  patch.vehicles = VEHICLES.filter((v) =>
+    t.includes(v.label.toLowerCase()),
+  ).map((v) => v.value);
+  patch.operators = OPERATORS.filter((o) => t.includes(o.toLowerCase()));
+  patch.zoneIds = zones
+    .filter((z) => z.name.length > 3 && t.includes(z.name.toLowerCase()))
+    .map((z) => z.id);
+  if (/monthly|every month|once a month/.test(t))
+    patch.schedule = { mode: "repeat", unit: "month", every: 1, monthDay: 1, hour: "08:00" };
+  else if (/weekly|every week|once a week/.test(t))
+    patch.schedule = { mode: "repeat", unit: "week", every: 1, weekdays: ["mon"], hour: "08:00" };
+  else if (/daily|every day|once a day|each morning|every morning|summary/.test(t))
+    patch.schedule = { mode: "repeat", unit: "day", every: 1, hour: "08:00" };
+  return { patch };
+}
+
+/**
+ * Create alert: say it, or pick a sentence someone else already said.
+ *
+ * One dialog, so asking and the suggestions are on the same screen. Pressing
+ * a suggestion writes it into the box and stops there: the words are yours to
+ * change before Generate, and nothing is drafted until you press it.
+ */
+function CreateDialog({
+  open,
+  onOpenChange,
+  watchable,
+  zones,
+  onDraft,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  watchable: WatchType[];
+  zones: PickerZone[];
+  /** `name` is set when the draft came from a suggestion that has one. */
+  onDraft: (patch: Partial<Alert>, from: "sentence" | "scratch", name?: string) => void;
+}) {
+  const [text, setText] = React.useState("");
+  const [query, setQuery] = React.useState("");
+  const [reading, setReading] = React.useState(false);
+  const [problem, setProblem] = React.useState<string | null>(null);
+  const box = React.useRef<HTMLTextAreaElement>(null);
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const offered = SUGGESTIONS.filter(
+    (s) => s.patch.watch && watchable.includes(s.patch.watch),
+  );
+  const shown = offered.filter((s) =>
+    s.text.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+
+  const generate = () => {
+    const said = text.trim();
+    if (!said || reading) return;
+    setProblem(null);
+    setReading(true);
+    // Stands in for the request: long enough to see that something is being
+    // read, short enough not to be annoying in a demo.
+    timer.current = setTimeout(() => {
+      setReading(false);
+      const suggestion = offered.find((s) => s.text === said);
+      if (suggestion) {
+        onDraft(suggestion.patch, "sentence", suggestion.name);
+        return;
+      }
+      const read = draftFromSentence(said, zones);
+      if ("problem" in read) setProblem(read.problem);
+      else if (read.patch.watch && !watchable.includes(read.patch.watch))
+        setProblem("This scope has no data for that yet.");
+      else onDraft(read.patch, "sentence");
+    }, 750);
+  };
 
   return (
-    <Popover open={open} onOpenChange={(next) => setOpen(next)}>
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            aria-label={`${title}: ${label}`}
-            className={cn(
-              // inline-flex on the baseline, so a slot sits in the line of
-              // text like a word and wraps with it. The negative margin gives
-              // back the padding, or every slot would open a gap in the line.
-              // leading-snug is not cosmetic: a flex box is as tall as its
-              // line, and the sentence's own generous leading would make
-              // every slot a 46px slab.
-              "text-foreground bg-primary/10 hover:bg-primary/15 data-[popup-open]:bg-primary/20 -my-1 inline-flex max-w-full scroll-m-1 items-center gap-1 rounded-md border border-transparent px-1.5 py-1 align-baseline leading-snug font-medium transition-colors outline-none",
-              "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-3",
-              empty &&
-                "border-border text-muted-foreground hover:bg-muted border-dashed bg-transparent",
-            )}
-          >
-            <span className="truncate">{label}</span>
-            <ChevronDown
-              aria-hidden
-              className="text-muted-foreground size-[0.7em] shrink-0"
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Create alert</DialogTitle>
+          <DialogDescription>
+            Say what you want to hear about. You can change everything next.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form
+          className="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            generate();
+          }}
+        >
+          <div className="relative">
+            <Textarea
+              ref={box}
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                setProblem(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  generate();
+                }
+              }}
+              aria-label="Describe the alert"
+              aria-invalid={problem ? true : undefined}
+              placeholder="e.g. Tell me when Bolt scooters fall below 15 % battery."
+              // Room under the words for the button, which sits inside the
+              // box so the two read as one control.
+              className="min-h-28 resize-none pb-14"
             />
-          </button>
-        }
-      />
-      <PopoverContent
-        align="start"
-        className={cn("max-w-[calc(100vw-2rem)]", className)}
-      >
-        {children(() => setOpen(false))}
-      </PopoverContent>
-    </Popover>
+            <Button
+              type="submit"
+              disabled={!text.trim() || reading}
+              className="absolute right-2 bottom-2"
+            >
+              <Sparkles data-icon="inline-start" />
+              {reading ? "Generating…" : "Generate"}
+            </Button>
+          </div>
+          {problem ? (
+            <p role="alert" className="text-destructive text-sm">
+              {problem}
+            </p>
+          ) : null}
+        </form>
+
+        {offered.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            <p className="flex items-center gap-2 text-sm font-medium">
+              <Lightbulb aria-hidden className="text-muted-foreground size-4" />
+              Suggestions
+            </p>
+            <InputGroup>
+              <InputGroupAddon>
+                <Search />
+              </InputGroupAddon>
+              <InputGroupInput
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search suggestions"
+                aria-label="Search suggestions"
+              />
+            </InputGroup>
+            <ul className="flex flex-col gap-2">
+              {shown.map((s) => (
+                <li key={s.text}>
+                  <button
+                    type="button"
+                    data-slot="alert-suggestion"
+                    onClick={() => {
+                      setText(s.text);
+                      setProblem(null);
+                      box.current?.focus();
+                    }}
+                    className="hover:bg-muted focus-visible:border-ring focus-visible:ring-ring/50 flex min-h-11 w-full scroll-m-1 items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm outline-none focus-visible:ring-3"
+                  >
+                    <span className="min-w-0 flex-1">{s.text}</span>
+                    <ChevronRight
+                      aria-hidden
+                      className="text-muted-foreground size-4 shrink-0"
+                    />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {shown.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                No suggestion matches.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <DialogFooter className="sm:justify-between">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onDraft({}, "scratch")}
+          >
+            Start from scratch
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* The panel's parts                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One section of the panel: its name, what is set in it, and the fields.
+ *
+ * The summary on the right is why these fold at all. Closed, a section still
+ * says what it holds -- "whole scope", "Every Monday at 09:00" -- so the panel
+ * can be read top to bottom without opening anything.
+ */
+function PanelSection({
+  title,
+  summary,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  summary?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  const id = React.useId();
+  return (
+    <section data-slot="alert-section" className="not-last:border-b">
+      <h3>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={() => setOpen((v) => !v)}
+          // The ring is drawn inside: the sections share one rounded frame
+          // that clips, and a ring outside the row would lose its corners.
+          className="focus-visible:ring-ring flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset"
+        >
+          <span className="shrink-0">{title}</span>
+          <span className="text-muted-foreground min-w-0 flex-1 truncate text-right text-xs font-normal">
+            {summary}
+          </span>
+          <ChevronDown
+            aria-hidden
+            className={cn(
+              "text-muted-foreground size-4 shrink-0 transition-transform",
+              open && "rotate-180",
+            )}
+          />
+        </button>
+      </h3>
+      {open ? (
+        <div id={id} className="flex flex-col gap-3 px-3 pt-1 pb-3">
+          {children}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -757,155 +1312,738 @@ function PickRow({
 }
 
 /**
- * All of something, or a named few.
+ * All of something, or a named few, behind a button that says which.
  *
  * An empty list means "all", which is only safe if the control says so in
- * words -- so "any" is a row of its own at the top, ticked when nothing else
- * is, and ticking it is how you clear the rest.
+ * words -- so "all" is a row of its own at the top, ticked when nothing else
+ * is, and ticking it is how you clear the rest. Several can be ticked, which
+ * the prototype's single select could not do and "Bolt and Voi" needs.
  */
-function CheckPicker<T extends string>({
+function FilterPick<T extends string>({
+  label,
   all,
   options,
   chosen,
   onChange,
 }: {
+  /** What is being chosen, for assistive tech: "Vehicle types". */
+  label: string;
   all: string;
   options: readonly { value: T; label: string }[];
   chosen: T[];
   onChange: (next: T[]) => void;
 }) {
+  const text =
+    chosen.length === 0
+      ? all
+      : chosen
+          .map((v) => options.find((o) => o.value === v)?.label ?? v)
+          .join(", ");
   return (
-    <div className="-m-1 flex flex-col">
-      <PickRow
-        checked={chosen.length === 0}
-        onChange={() => onChange([])}
-        label={all}
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            aria-label={`${label}: ${text}`}
+            className="min-w-0 flex-1 basis-40 justify-between font-normal"
+          />
+        }
+      >
+        <span className="truncate">{text}</span>
+        <ChevronDown aria-hidden className="text-muted-foreground" />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64">
+        <div className="-m-1 flex flex-col">
+          <PickRow
+            checked={chosen.length === 0}
+            onChange={() => onChange([])}
+            label={all}
+          />
+          <div aria-hidden className="bg-border mx-2 my-1 h-px" />
+          {options.map((option) => (
+            <PickRow
+              key={option.value}
+              checked={chosen.includes(option.value)}
+              onChange={() => onChange(toggle(chosen, option.value))}
+              label={option.label}
+            />
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * The one number an alert turns on, with a step either side.
+ *
+ * The buttons move by the measure's own step -- 5 % of battery, 12 hours of
+ * idling -- because that is how the number is talked about; typing is there
+ * for anything between.
+ */
+function Stepper({
+  label,
+  value,
+  step,
+  unit,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  step: number;
+  unit: string;
+  onChange: (next: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        aria-label={`${label}: less`}
+        onClick={() => onChange(Math.max(0, value - step))}
+      >
+        <Minus />
+      </Button>
+      <Input
+        type="number"
+        min={0}
+        inputMode="decimal"
+        aria-label={label}
+        className="w-24 text-right tabular-nums"
+        value={value}
+        onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
       />
-      <div aria-hidden className="bg-border mx-2 my-1 h-px" />
-      {options.map((option) => (
-        <PickRow
-          key={option.value}
-          checked={chosen.includes(option.value)}
-          onChange={() => onChange(toggle(chosen, option.value))}
-          label={option.label}
-        />
-      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        aria-label={`${label}: more`}
+        onClick={() => onChange(value + step)}
+      >
+        <Plus />
+      </Button>
+      <span className="text-muted-foreground text-sm">{unit}</span>
     </div>
   );
 }
 
-const SEND_MODES: { value: SendMode; label: string }[] = [
-  { value: "hourly", label: "Hourly" },
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
-];
+/**
+ * The days a weekly repeat goes out on.
+ *
+ * Seven round toggles, as a calendar draws them. At least one stays pressed:
+ * a weekly e-mail on no day is not a schedule, and unpressing the last one
+ * would only leave the sentence above with nothing to say.
+ */
+function WeekdayToggles({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: Weekday[];
+  onChange: (next: Weekday[]) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div role="group" aria-label="Repeat on" className="flex flex-wrap gap-1.5">
+      {WEEK.map((day) => {
+        const on = value.includes(day);
+        return (
+          <button
+            key={day}
+            type="button"
+            disabled={disabled}
+            aria-pressed={on}
+            aria-label={WEEKDAYS[day]}
+            onClick={() => {
+              const next = toggle(value, day);
+              if (next.length > 0) onChange(next);
+            }}
+            className={cn(
+              "focus-visible:border-ring focus-visible:ring-ring/50 size-9 scroll-m-1 rounded-full border text-xs font-semibold outline-none focus-visible:ring-3 disabled:opacity-50",
+              on
+                ? "bg-primary border-primary text-primary-foreground"
+                : "bg-background hover:bg-muted",
+            )}
+          >
+            {WEEKDAYS[day].charAt(0)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const UNIT_WORDS: Record<RepeatUnit, [string, string]> = {
+  day: ["day", "days"],
+  week: ["week", "weeks"],
+  month: ["month", "months"],
+};
 
 /**
- * When to send, as four choices rather than a cron expression.
+ * A repeat the short list does not have.
  *
- * Native selects for the day and the hour: they sit inside a popover, and a
- * second popup opened from inside the first is one more layer to dismiss on a
- * tablet, where the system's own picker is also simply better.
+ * Gmail's "Custom recurrence", which Katell named as the benchmark: repeat
+ * every so many days, weeks or months, on which days, and until when. It is
+ * edited on a copy and only kept on Done, so opening it to look changes
+ * nothing.
  */
-function SchedulePicker({
+function RecurrenceDialog({
+  schedule,
+  onChange,
+  onClose,
+}: {
+  schedule: AlertSchedule;
+  onChange: (next: AlertSchedule) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = React.useState<AlertSchedule>({
+    ...schedule,
+    every: schedule.every ?? 1,
+    unit: schedule.unit ?? "week",
+    weekdays: schedule.weekdays?.length ? schedule.weekdays : ["mon"],
+    monthDay: schedule.monthDay ?? 1,
+    ends: schedule.ends ?? { kind: "never" },
+  });
+  const set = (next: Partial<AlertSchedule>) =>
+    setDraft((d) => ({ ...d, ...next }));
+  const unit = draft.unit ?? "week";
+  const every = draft.every ?? 1;
+  const ends = draft.ends ?? { kind: "never" };
+  // A month from the demo's today: far enough to be a real end, near enough
+  // to be believed.
+  const soon = new Date(NOW + 30 * 86_400_000).toISOString().slice(0, 10);
+
+  return (
+    <Dialog open onOpenChange={(next) => (next ? null : onClose())}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Custom repeat</DialogTitle>
+          <DialogDescription>
+            One e-mail with the full list, as often as you choose.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span>Repeat every</span>
+            <Input
+              type="number"
+              min={1}
+              max={12}
+              inputMode="numeric"
+              aria-label="Repeat every"
+              className="w-16 tabular-nums"
+              value={every}
+              onChange={(e) =>
+                set({
+                  every: Math.min(12, Math.max(1, Number(e.target.value) || 1)),
+                })
+              }
+            />
+            <NativeSelect
+              aria-label="Unit"
+              value={unit}
+              onChange={(e) => set({ unit: e.target.value as RepeatUnit })}
+            >
+              {(Object.keys(UNIT_WORDS) as RepeatUnit[]).map((u) => (
+                <NativeSelectOption key={u} value={u}>
+                  {UNIT_WORDS[u][every === 1 ? 0 : 1]}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+
+          {unit === "week" ? (
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-medium">Repeat on</span>
+              <WeekdayToggles
+                value={draft.weekdays ?? ["mon"]}
+                onChange={(weekdays) => set({ weekdays })}
+              />
+            </div>
+          ) : null}
+
+          {unit === "month" ? (
+            <label className="flex items-center gap-2 text-sm">
+              On day
+              <NativeSelect
+                aria-label="Day of the month"
+                value={String(draft.monthDay ?? 1)}
+                onChange={(e) => set({ monthDay: Number(e.target.value) })}
+              >
+                {/* 28 and no further, so every month has the day. */}
+                {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                  <NativeSelectOption key={d} value={String(d)}>
+                    {ordinal(d)}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </label>
+          ) : null}
+
+          <div className="flex flex-col gap-2">
+            <span id="alert-ends" className="text-sm font-medium">
+              Ends
+            </span>
+            <RadioGroup
+              aria-labelledby="alert-ends"
+              value={ends.kind}
+              onValueChange={(kind) =>
+                set({
+                  ends:
+                    kind === "on"
+                      ? { kind: "on", date: soon }
+                      : kind === "after"
+                        ? { kind: "after", count: 10 }
+                        : { kind: "never" },
+                })
+              }
+              className="gap-1"
+            >
+              <label className="flex min-h-11 items-center gap-2.5 text-sm">
+                <RadioGroupItem value="never" />
+                Never
+              </label>
+              <div className="flex min-h-11 flex-wrap items-center gap-2.5 text-sm">
+                <label className="flex w-20 items-center gap-2.5">
+                  <RadioGroupItem value="on" />
+                  On
+                </label>
+                <Input
+                  type="date"
+                  aria-label="End date"
+                  className="w-44"
+                  disabled={ends.kind !== "on"}
+                  value={ends.kind === "on" ? ends.date : soon}
+                  onChange={(e) =>
+                    set({ ends: { kind: "on", date: e.target.value } })
+                  }
+                />
+              </div>
+              <div className="flex min-h-11 flex-wrap items-center gap-2.5 text-sm">
+                <label className="flex w-20 items-center gap-2.5">
+                  <RadioGroupItem value="after" />
+                  After
+                </label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={365}
+                  inputMode="numeric"
+                  aria-label="Number of e-mails"
+                  className="w-20 tabular-nums"
+                  disabled={ends.kind !== "after"}
+                  value={ends.kind === "after" ? ends.count : 10}
+                  onChange={(e) =>
+                    set({
+                      ends: {
+                        kind: "after",
+                        count: Math.min(
+                          365,
+                          Math.max(1, Number(e.target.value) || 1),
+                        ),
+                      },
+                    })
+                  }
+                />
+                <span className="text-muted-foreground">e-mails</span>
+              </div>
+            </RadioGroup>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={() => {
+              onChange({
+                mode: "repeat",
+                hour: draft.hour ?? "08:00",
+                every,
+                unit,
+                weekdays: unit === "week" ? draft.weekdays : undefined,
+                monthDay: unit === "month" ? draft.monthDay : undefined,
+                ends,
+              });
+              onClose();
+            }}
+          >
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * One of the two ways to send, as a card with its own settings inside.
+ *
+ * The settings stay visible under the choice that is not picked, greyed, so
+ * choosing between the two is choosing between two things you can read --
+ * not between two labels whose consequences appear afterwards.
+ */
+function SendOption({
+  value,
+  selected,
+  title,
+  description,
+  children,
+}: {
+  value: SendMode;
+  selected: boolean;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      data-selected={selected ? "" : undefined}
+      className="data-[selected]:border-primary data-[selected]:bg-primary/5 flex flex-col gap-2.5 rounded-lg border p-3"
+    >
+      <label className="flex cursor-pointer items-start gap-2.5">
+        <RadioGroupItem value={value} className="mt-0.5" />
+        <span className="min-w-0">
+          <span className="block text-sm font-medium">{title}</span>
+          <span className="text-muted-foreground block text-xs">
+            {description}
+          </span>
+        </span>
+      </label>
+      <div className="flex flex-col gap-2 pl-6.5">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * When to send: Hourly, or Repeat.
+ *
+ * Native selects for the list and the hour: they sit in a narrow panel, and on
+ * a tablet the system's own picker is simply better than a popup of ours.
+ */
+function ScheduleFields({
   schedule,
   onChange,
 }: {
   schedule: AlertSchedule;
   onChange: (next: AlertSchedule) => void;
 }) {
+  const [custom, setCustom] = React.useState(false);
+  const repeat = schedule.mode === "repeat";
+  const preset = repeatPreset(schedule);
+  const capped = schedule.dailyCap != null;
+  /** The repeat the cards show while Hourly is picked: the one it would be. */
+  const asRepeat: AlertSchedule = repeat
+    ? schedule
+    : { mode: "repeat", unit: "day", every: 1, hour: schedule.hour ?? "08:00" };
+
   return (
-    <div className="flex flex-col gap-3">
-      <SegmentedControl
-        items={SEND_MODES}
+    <>
+      <RadioGroup
+        aria-label="Schedule"
         value={schedule.mode}
-        onValueChange={(v) => {
-          const mode = v as SendMode;
+        onValueChange={(mode) =>
           onChange(
             mode === "hourly"
-              ? { mode, dailyCap: schedule.dailyCap ?? DEFAULT_DAILY_CAP }
-              : {
-                  mode,
-                  hour: schedule.hour ?? "08:00",
-                  weekday:
-                    mode === "weekly" ? (schedule.weekday ?? "mon") : undefined,
-                },
-          );
-        }}
-        size="sm"
-        aria-label="How often to send"
-      />
-
-      {schedule.mode === "hourly" ? (
-        <label className="flex items-center gap-2 text-sm">
-          Stop after
-          <Input
-            type="number"
-            min={1}
-            max={24}
-            inputMode="numeric"
-            className="w-16 tabular-nums"
-            value={schedule.dailyCap ?? DEFAULT_DAILY_CAP}
-            onChange={(e) =>
-              onChange({
-                ...schedule,
-                dailyCap: Math.min(24, Math.max(1, Number(e.target.value) || 1)),
-              })
-            }
-          />
-          e-mails a day
-        </label>
-      ) : (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          {schedule.mode === "weekly" ? (
-            <NativeSelect
-              aria-label="Day of the week"
-              value={schedule.weekday ?? "mon"}
+              ? { mode: "hourly", hour: schedule.hour }
+              : asRepeat,
+          )
+        }
+      >
+        <SendOption
+          value="hourly"
+          selected={!repeat}
+          title="Hourly"
+          description="As soon as we have the data: checked every hour, each vehicle sent once."
+        >
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <label className="flex min-h-9 cursor-pointer items-center gap-2">
+              <Checkbox
+                checked={capped}
+                disabled={repeat}
+                onCheckedChange={(on) =>
+                  onChange({
+                    ...schedule,
+                    dailyCap: on ? DEFAULT_DAILY_CAP : undefined,
+                  })
+                }
+              />
+              Stop after
+            </label>
+            <Input
+              type="number"
+              min={1}
+              max={24}
+              inputMode="numeric"
+              aria-label="E-mails a day"
+              className="w-16 tabular-nums"
+              disabled={repeat || !capped}
+              value={schedule.dailyCap ?? DEFAULT_DAILY_CAP}
               onChange={(e) =>
-                onChange({ ...schedule, weekday: e.target.value as Weekday })
+                onChange({
+                  ...schedule,
+                  dailyCap: Math.min(24, Math.max(1, Number(e.target.value) || 1)),
+                })
               }
+            />
+            <span className="text-muted-foreground">e-mails a day</span>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            To avoid too many e-mails. It starts again the next day.
+          </p>
+        </SendOption>
+
+        <SendOption
+          value="repeat"
+          selected={repeat}
+          title="Repeat"
+          description="One e-mail with the full list of matching vehicles."
+        >
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <NativeSelect
+              aria-label="How often"
+              disabled={!repeat}
+              value={preset}
+              onChange={(e) => {
+                const next = e.target.value as RepeatPreset;
+                const hour = schedule.hour ?? "08:00";
+                if (next === "custom") setCustom(true);
+                else if (next === "daily")
+                  onChange({ mode: "repeat", unit: "day", every: 1, hour });
+                else if (next === "weekly")
+                  onChange({
+                    mode: "repeat",
+                    unit: "week",
+                    every: 1,
+                    weekdays: schedule.weekdays?.length
+                      ? schedule.weekdays
+                      : ["mon"],
+                    hour,
+                  });
+                else
+                  onChange({
+                    mode: "repeat",
+                    unit: "month",
+                    every: 1,
+                    monthDay: 1,
+                    hour,
+                  });
+              }}
             >
-              {(Object.keys(WEEKDAYS) as Weekday[]).map((d) => (
-                <NativeSelectOption key={d} value={d}>
-                  {WEEKDAYS[d]}
+              <NativeSelectOption value="daily">Daily</NativeSelectOption>
+              <NativeSelectOption value="weekly">Weekly</NativeSelectOption>
+              <NativeSelectOption value="monthly">
+                Monthly, on the 1st
+              </NativeSelectOption>
+              <NativeSelectOption value="custom">Custom…</NativeSelectOption>
+            </NativeSelect>
+            <span>at</span>
+            <NativeSelect
+              aria-label="Hour"
+              disabled={!repeat}
+              value={asRepeat.hour ?? "08:00"}
+              onChange={(e) => onChange({ ...schedule, hour: e.target.value })}
+            >
+              {HOURS.map((h) => (
+                <NativeSelectOption key={h} value={h}>
+                  {h}
                 </NativeSelectOption>
               ))}
             </NativeSelect>
+            {/* Which clock. The difference between an hour a client trusts and
+                the "UTC+1 (Europe/Brussels)" nobody understood on Streamlit. */}
+            <span className="text-muted-foreground">{SCOPE_TIME_ZONE}</span>
+          </div>
+
+          {repeat && preset === "weekly" ? (
+            <WeekdayToggles
+              value={schedule.weekdays?.length ? schedule.weekdays : ["mon"]}
+              onChange={(weekdays) => onChange({ ...schedule, weekdays })}
+            />
           ) : null}
-          {/* Monthly is the 1st and nothing else, because that is all the
-              backend offers. Said, rather than offered as a picker of one. */}
-          <span>{schedule.mode === "monthly" ? "On the 1st, at" : "at"}</span>
-          <NativeSelect
-            aria-label="Hour"
-            value={schedule.hour ?? "08:00"}
-            onChange={(e) => onChange({ ...schedule, hour: e.target.value })}
-          >
-            {HOURS.map((h) => (
-              <NativeSelectOption key={h} value={h}>
-                {h}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-          {/* Which clock. The difference between an hour a client trusts and
-              the "UTC+1 (Europe/Brussels)" nobody understood on Streamlit. */}
-          <span className="text-muted-foreground">{SCOPE_TIME_ZONE}</span>
+
+          {repeat && preset === "custom" ? (
+            <p className="flex flex-wrap items-center gap-x-2 text-sm">
+              <span>{capitalise(repeatPhrase(schedule))}</span>
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="h-auto p-0"
+                onClick={() => setCustom(true)}
+              >
+                Change
+              </Button>
+            </p>
+          ) : null}
+        </SendOption>
+      </RadioGroup>
+
+      {custom ? (
+        <RecurrenceDialog
+          schedule={asRepeat}
+          onChange={onChange}
+          onClose={() => setCustom(false)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+const isAddress = (text: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(text);
+
+/**
+ * A pasted list, sorted into addresses and everything else.
+ *
+ * Commas, semicolons, tabs and new lines all separate, and "Name <a@b.c>" is
+ * read for its address: that is what comes out of Outlook, Excel and a CSV
+ * export, which are the three places these lists actually come from.
+ */
+function sortAddresses(text: string) {
+  const ok: string[] = [];
+  const bad: string[] = [];
+  for (const piece of text.split(/[\n,;\t]+/)) {
+    const raw = piece.trim();
+    if (!raw) continue;
+    const address = (/<([^>]+)>/.exec(raw)?.[1] ?? raw)
+      .replace(/^"|"$/g, "")
+      .trim()
+      .toLowerCase();
+    // A CSV's header row is not a mistake to be fixed.
+    if (/^(e-?mail|name)$/.test(address)) continue;
+    if (!isAddress(address)) bad.push(raw);
+    else if (!ok.includes(address)) ok.push(address);
+  }
+  return { ok, bad };
+}
+
+/**
+ * Many addresses at once, onto this alert.
+ *
+ * The count is shown before anything is added -- how many are good, how many
+ * the alert already has, how many could not be read -- because a list of 120
+ * is exactly the size at which nobody checks by eye.
+ */
+function PasteEmailsDialog({
+  current,
+  onAdd,
+  onClose,
+}: {
+  /** Addresses already on the alert, lower-cased. */
+  current: string[];
+  onAdd: (addresses: string[]) => void;
+  onClose: () => void;
+}) {
+  const [text, setText] = React.useState("");
+  const { ok, bad } = sortAddresses(text);
+  const fresh = ok.filter((a) => !current.includes(a));
+  const already = ok.length - fresh.length;
+
+  return (
+    <Dialog open onOpenChange={(next) => (next ? null : onClose())}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Paste many e-mails</DialogTitle>
+          <DialogDescription>
+            Paste a list from Excel or Outlook, or import a CSV. Commas,
+            semicolons and new lines all work.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-3">
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            aria-label="E-mail addresses"
+            placeholder={"ops-munich@bolt.eu; fleet-de@bolt.eu\nBolt Munich <munich@bolt.eu>"}
+            className="min-h-32"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={<label />}
+              className="cursor-pointer"
+            >
+              <Upload data-icon="inline-start" />
+              Import a CSV
+              <input
+                type="file"
+                accept=".csv,.txt"
+                className="sr-only"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) void file.text().then(setText);
+                }}
+              />
+            </Button>
+            {text.trim() ? (
+              <p
+                role="status"
+                className="text-muted-foreground text-sm tabular-nums"
+              >
+                <span className="text-foreground">
+                  {plural(fresh.length, "new address", "new addresses")}
+                </span>
+                {already ? ` · ${already} already on this alert` : ""}
+                {bad.length ? (
+                  <span className="text-destructive">
+                    {" "}
+                    · {bad.length} not readable
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
+          </div>
+          {bad.length ? (
+            <p className="text-muted-foreground text-xs">
+              To fix: {bad.slice(0, 5).join(", ")}
+              {bad.length > 5 ? "…" : ""}
+            </p>
+          ) : null}
         </div>
-      )}
-    </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            disabled={fresh.length === 0}
+            onClick={() => {
+              onAdd(fresh);
+              onClose();
+            }}
+          >
+            {fresh.length
+              ? `Add ${fresh.length} to this alert`
+              : "Add to this alert"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 /**
  * Who gets it.
  *
- * One field for both kinds of recipient: a name from the scope's report
- * contacts, or a plain address for someone with no VIP account. While nothing
- * is typed, the list under the field is the other alerts -- copying one's
- * recipients is the common case, and it is one press here rather than a dialog
- * of its own.
+ * Four ways in, because the call of 26 Nov named all four as things CS does
+ * today by hand: type a name or an address and it completes from the scope's
+ * recipients; pick an operator's mailbox; copy the people of another alert;
+ * paste a whole list. They all end in the same chips, so however someone got
+ * here, taking them off again is one press.
  */
-function RecipientPicker({
+function RecipientFields({
   alert,
   contacts,
   others,
@@ -920,6 +2058,7 @@ function RecipientPicker({
   onManage: () => void;
 }) {
   const [draft, setDraft] = React.useState("");
+  const [pasting, setPasting] = React.useState(false);
 
   /** Contacts and typed addresses in one chip field, as one list of values. */
   const values = [...alert.recipientIds, ...alert.extraEmails];
@@ -929,6 +2068,16 @@ function RecipientPicker({
       recipientIds: next.filter(isContact),
       extraEmails: next.filter((v) => !isContact(v)),
     });
+  /** Adds addresses, as contacts where the list knows them. */
+  const addAddresses = (addresses: string[]) => {
+    const next = [...values];
+    for (const address of addresses) {
+      const known = contacts.find((c) => c.email.toLowerCase() === address);
+      const value = known?.id ?? address;
+      if (!next.includes(value)) next.push(value);
+    }
+    setValues(next);
+  };
 
   const q = draft.trim().toLowerCase();
   const matches = q
@@ -939,15 +2088,24 @@ function RecipientPicker({
         )
         .slice(0, 5)
     : [];
+  const operatorContacts = contacts.filter(
+    (c) => c.kind === "operator" && !alert.recipientIds.includes(c.id),
+  );
   const sources = others.filter(
     (a) => a.recipientIds.length + a.extraEmails.length > 0,
   );
-
-  const rowClass =
-    "hover:bg-muted focus-visible:ring-ring/50 flex min-h-11 w-full items-center gap-2.5 rounded-md px-2 text-left outline-none focus-visible:ring-3";
+  const taken = [
+    ...alert.extraEmails,
+    ...alert.recipientIds.map(
+      (id) => contacts.find((c) => c.id === id)?.email ?? "",
+    ),
+  ].map((a) => a.toLowerCase());
 
   return (
-    <div className="flex flex-col gap-2">
+    <>
+      <p className="text-muted-foreground text-xs">
+        Type a name or e-mail to add a member, or pick an operator.
+      </p>
       <TagInput
         value={values}
         onValueChange={setValues}
@@ -959,18 +2117,17 @@ function RecipientPicker({
         onDraftChange={setDraft}
         onDraftCommit={(text) => {
           const top = matches[0];
-          const typed = text.trim();
+          const typed = text.trim().toLowerCase();
           if (top) setValues([...values, top.id]);
           // A plain address is still allowed: not everyone who wants an alert
           // needs a VIP account.
-          else if (typed.includes("@") && !values.includes(typed))
-            setValues([...values, typed]);
+          else if (isAddress(typed)) addAddresses([typed]);
           else return;
           setDraft("");
         }}
         inputLabel="Add a recipient by name, e-mail or operator"
-        placeholder="Name, e-mail or operator"
-        maxVisible={6}
+        placeholder="Type a name or e-mail"
+        maxVisible={5}
       />
 
       {q ? (
@@ -984,7 +2141,7 @@ function RecipientPicker({
                   setValues([...values, contact.id]);
                   setDraft("");
                 }}
-                className={rowClass}
+                className="hover:bg-muted focus-visible:ring-ring flex min-h-11 w-full items-center gap-2.5 rounded-md px-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
               >
                 <ContactMark contact={contact} />
                 <span className="min-w-0 flex-1">
@@ -999,278 +2156,241 @@ function RecipientPicker({
             ))}
           </div>
         ) : (
-          <p className="text-muted-foreground px-1 text-xs">
-            {q.includes("@")
+          <p className="text-muted-foreground text-xs">
+            {isAddress(q)
               ? "Press Enter to add this address."
-              : "Nobody on the contacts list matches."}
+              : "Nobody on the recipients list matches."}
           </p>
         )
-      ) : sources.length > 0 ? (
-        <div className="-mx-1 flex flex-col">
-          <p className="text-muted-foreground px-2 py-1 text-xs">
-            Copy from another alert
-          </p>
-          {sources.map((source) => (
-            <button
-              key={source.id}
-              type="button"
-              onClick={() =>
-                onChange({
-                  recipientIds: [
-                    ...new Set([...alert.recipientIds, ...source.recipientIds]),
-                  ],
-                  extraEmails: [
-                    ...new Set([...alert.extraEmails, ...source.extraEmails]),
-                  ],
-                })
-              }
-              className={rowClass}
-            >
-              <span className="min-w-0 flex-1 truncate text-sm">
-                {source.name}
-              </span>
-              <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                {source.recipientIds.length + source.extraEmails.length}
-              </span>
-            </button>
-          ))}
-        </div>
       ) : null}
 
-      <div className="-mx-2.5 -mb-2.5 border-t px-1 py-1">
+      <div className="flex flex-wrap gap-2">
+        {/* Both reset to their first line once used: they are actions with a
+            list of targets, not settings that hold a value. */}
+        <NativeSelect
+          aria-label="Add an operator e-mail"
+          className="min-w-0 flex-1 basis-40"
+          value=""
+          disabled={operatorContacts.length === 0}
+          onChange={(e) => {
+            if (e.target.value) setValues([...values, e.target.value]);
+          }}
+        >
+          <NativeSelectOption value="">Add an operator e-mail</NativeSelectOption>
+          {operatorContacts.map((c) => (
+            <NativeSelectOption key={c.id} value={c.id}>
+              {c.operator} · {c.email}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+        <NativeSelect
+          aria-label="Copy recipients from another alert"
+          className="min-w-0 flex-1 basis-40"
+          value=""
+          disabled={sources.length === 0}
+          onChange={(e) => {
+            const source = sources.find((a) => a.id === e.target.value);
+            if (!source) return;
+            onChange({
+              recipientIds: [
+                ...new Set([...alert.recipientIds, ...source.recipientIds]),
+              ],
+              extraEmails: [
+                ...new Set([...alert.extraEmails, ...source.extraEmails]),
+              ],
+            });
+          }}
+        >
+          <NativeSelectOption value="">Copy from another alert</NativeSelectOption>
+          {sources.map((a) => (
+            <NativeSelectOption key={a.id} value={a.id}>
+              {a.name} ({a.recipientIds.length + a.extraEmails.length})
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </div>
+
+      <div className="-mx-1 flex flex-wrap gap-1">
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="w-full justify-start"
-          onClick={onManage}
+          onClick={() => setPasting(true)}
         >
+          <ClipboardPaste data-icon="inline-start" />
+          Paste many e-mails
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onManage}>
           <UserCog data-icon="inline-start" />
-          Manage contacts
+          Manage recipients
         </Button>
       </div>
-    </div>
-  );
-}
 
-/**
- * The suggestions, written the way a city manager talks.
- *
- * Paz's template gallery and the Streamlit list are mostly fee and billing
- * examples; these three are the Munich ones, and all three are no-parking,
- * because that is all v1 watches.
- */
-const SUGGESTIONS: { text: string; apply: (draft: Alert) => Alert }[] = [
-  {
-    text: "Tell me when a scooter sits in a no-parking zone for 2 hours",
-    apply: (d) => ({
-      ...d,
-      name: "Scooters parked 2 hours in a no-parking zone",
-      vehicles: ["scooter"],
-      operators: [],
-      breachHours: 2,
-      schedule: { mode: "hourly", dailyCap: DEFAULT_DAILY_CAP },
-    }),
-  },
-  {
-    text: "A daily list of everything parked where it should not be",
-    apply: (d) => ({
-      ...d,
-      name: "Daily list · parked where it should not be",
-      vehicles: [],
-      operators: [],
-      breachHours: 2,
-      schedule: { mode: "daily", hour: "08:00" },
-    }),
-  },
-  {
-    text: "Tell Bolt and Voi about their own vehicles, once a week",
-    apply: (d) => ({
-      ...d,
-      name: "Weekly summary for Bolt and Voi",
-      vehicles: [],
-      operators: ["Bolt", "Voi"],
-      breachHours: 2,
-      schedule: { mode: "weekly", hour: "09:00", weekday: "mon" },
-    }),
-  },
-];
-
-/**
- * Describing the alert instead of building it.
- *
- * On the same screen as the sentence it fills, which is the whole point:
- * today's GenAI flow in VIP asks on one page and suggests on another, and the
- * call of 26 Nov named that as the thing to fix. A suggestion puts its words
- * in the field rather than acting behind your back, so Generate is always the
- * step that changes the sentence.
- *
- * Under the sentence, not over it. Seven words to press is not much to fill
- * in, and typing a description of them is slower than pressing them -- so this
- * is an offer below the thing itself, and the thing is complete without it.
- */
-function AskRow({ onGenerate }: { onGenerate: (index: number) => void }) {
-  const [text, setText] = React.useState("");
-  const [reading, setReading] = React.useState(false);
-  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  React.useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
-
-  // Faked, as Jimmy's prototype fakes it: the real parsing is VIA-1071. The
-  // match is by the words the suggestion itself used, so the demo never
-  // pretends to understand a sentence nobody wrote.
-  const index = SUGGESTIONS.findIndex((s) => s.text === text.trim());
-  const run = () => {
-    if (index === -1 || reading) return;
-    setReading(true);
-    timer.current = setTimeout(() => {
-      setReading(false);
-      setText("");
-      onGenerate(index);
-    }, 600);
-  };
-
-  return (
-    <div className="space-y-2">
-      <InputGroup>
-        <InputGroupAddon>
-          <Sparkles />
-        </InputGroupAddon>
-        <InputGroupInput
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              run();
-            }
-          }}
-          placeholder="Or describe it in your own words"
-          aria-label="Describe the alert you want"
+      {pasting ? (
+        <PasteEmailsDialog
+          current={taken}
+          onAdd={addAddresses}
+          onClose={() => setPasting(false)}
         />
-        <InputGroupAddon align="inline-end">
-          <InputGroupButton
-            disabled={index === -1 || reading}
-            onClick={run}
-            // A greyed button with no reason reads as a bug, and in this
-            // prototype only the three sentences below can be read.
-            title={
-              index === -1
-                ? "In this prototype, only the suggestions below can be read"
-                : "Fill the sentence from this description"
-            }
-          >
-            {reading ? "Reading…" : "Generate"}
-          </InputGroupButton>
-        </InputGroupAddon>
-      </InputGroup>
-      <div className="flex flex-wrap gap-1.5">
-        {SUGGESTIONS.map((s) => (
-          <Button
-            key={s.text}
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-auto min-h-8 py-1 text-left font-normal whitespace-normal"
-            onClick={() => setText(s.text)}
-          >
-            {s.text}
-          </Button>
-        ))}
-      </div>
-    </div>
+      ) : null}
+    </>
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* E-mail preview                                                             */
-/* -------------------------------------------------------------------------- */
-
 /**
- * The e-mail that arrives.
+ * The e-mail a recipient will get.
  *
- * Deliberately the one the platform sends today, down to the attached
- * `records.csv` and the single line of body text. Jimmy's point 5 of 19 Nov:
- * either the preview shows the real e-mail, or redesigning the e-mail becomes
- * part of this scope. So this is a frame around it.
+ * Deliberately the one the platform sends today, down to its subject line,
+ * the attached `records.csv` and the single line of body text. Jimmy's point
+ * 5 of 19 Nov: either the preview shows the real e-mail, or redesigning the
+ * e-mail becomes part of this scope. So this is a frame around it, and the
+ * line above the frame is the one thing the e-mail cannot say about itself:
+ * what it would contain if it went out now.
  */
 function EmailPreview({
   alert,
-  recipients,
-  ruleName,
+  name,
+  scope,
+  to,
+  places,
 }: {
   alert: Alert;
-  recipients: string[];
-  ruleName: string;
+  name: string;
+  scope: string;
+  /** Addresses, in the order they were added. */
+  to: string[];
+  /** Zone names for the sample rows; the scope's own when none are chosen. */
+  places: string[];
 }) {
-  const subject =
-    alert.schedule.mode === "hourly"
-      ? `[Vianova] ${ruleName} — new cases`
-      : `[Vianova] ${ruleName} — ${alert.schedule.mode} summary`;
+  const spec = WATCH[alert.watch];
+  const count = estimateMatches(alert);
+  const thing = spec.counts === "operator" ? "operator" : "vehicle";
+  const n = alert.threshold;
+  const operators = alert.operators.length
+    ? alert.operators
+    : ["Bolt", "Lime", "Voi"];
+  const where = places.length
+    ? places
+    : ["Marienplatz", "Viktualienmarkt", "Sendlinger Straße"];
+  const value = (i: number) =>
+    ({
+      battery: `${Math.max(3, n - 4 - 3 * i)} %`,
+      idle: `${n + 6 + 5 * i} h`,
+      available: `${Math.max(0, n - 3)} available`,
+      cap: (n + 140).toLocaleString("en-GB"),
+      parked: `${n + 2 + i} h`,
+      no_parking: `${n + i} h`,
+    })[alert.watch];
 
   return (
     <section
       aria-label="E-mail preview"
-      className="bg-card overflow-hidden rounded-xl border"
+      data-slot="alert-email-preview"
+      className="mx-auto flex w-full max-w-xl flex-col gap-3"
     >
-      <p className="text-muted-foreground flex items-center gap-2 border-b px-4 py-2.5 text-xs font-medium">
-        <Mail aria-hidden className="size-3.5" />
-        What the recipient gets
+      <p className="text-muted-foreground text-sm">
+        {count > 0 ? (
+          <>
+            If it ran now, this e-mail would list{" "}
+            <b className="text-foreground font-medium tabular-nums">
+              {plural(count, thing, `${thing}s`)}
+            </b>
+            .
+          </>
+        ) : (
+          "Nothing would trigger it right now, so no e-mail would go out."
+        )}{" "}
+        This is the e-mail we send today.
       </p>
 
-      <dl className="divide-y text-xs">
-        {[
-          ["From", "Vianova"],
-          ["To", recipients.length ? recipients.join(", ") : "Nobody yet"],
-          ["Subject", subject],
-        ].map(([key, value]) => (
-          <div key={key} className="flex gap-3 px-4 py-2">
-            <dt className="text-muted-foreground w-14 shrink-0">{key}</dt>
-            <dd className="min-w-0 break-words">{value}</dd>
+      <div className="bg-card overflow-hidden rounded-xl border">
+        <dl className="divide-y text-xs">
+          {[
+            ["From", "Vianova"],
+            [
+              "To",
+              to.length === 0
+                ? "Nobody yet"
+                : to.length > 2
+                  ? `${to.slice(0, 2).join(", ")} and ${to.length - 2} more`
+                  : to.join(", "),
+            ],
+            ["Subject", `[Vianova] Alert was triggered: ${name}`],
+          ].map(([key, text]) => (
+            <div key={key} className="flex gap-3 px-4 py-2">
+              <dt className="text-muted-foreground w-20 shrink-0">{key}</dt>
+              <dd className="min-w-0 font-medium break-words">{text}</dd>
+            </div>
+          ))}
+          <div className="flex gap-3 px-4 py-2">
+            <dt className="text-muted-foreground w-20 shrink-0">Attachment</dt>
+            <dd className="flex min-w-0 items-center gap-1.5 font-medium">
+              <Paperclip aria-hidden className="text-muted-foreground size-3.5" />
+              records.csv
+            </dd>
           </div>
-        ))}
-      </dl>
+        </dl>
 
-      <div className="space-y-3 border-t p-4">
-        <p className="text-sm">
-          Please find the attached CSV with all the records.
-        </p>
-        <p className="flex items-center gap-2 text-xs font-medium">
-          <Paperclip aria-hidden className="text-muted-foreground size-3.5" />
-          records.csv
-        </p>
-        <div className="overflow-hidden rounded-md border">
-          <Table>
-            <caption className="sr-only">
-              The first rows of the attached CSV, as a sample.
-            </caption>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="h-8 text-xs">Vehicle</TableHead>
-                <TableHead className="h-8 text-xs">Operator</TableHead>
-                <TableHead className="h-8 text-xs">Where</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {[
-                ["BOLT-4471", "Bolt", "Marienplatz"],
-                ["VOI-8820", "Voi", "Viktualienmarkt"],
-                ["BOLT-1193", "Bolt", "Sendlinger Straße"],
-              ].map(([vehicle, operator, where]) => (
-                <TableRow key={vehicle} className="hover:bg-transparent">
-                  <TableCell className="py-1.5 text-xs tabular-nums">
-                    {vehicle}
-                  </TableCell>
-                  <TableCell className="py-1.5 text-xs">{operator}</TableCell>
-                  <TableCell className="py-1.5 text-xs">{where}</TableCell>
+        <div className="flex flex-col gap-3 border-t p-4">
+          <p className="text-lg font-bold tracking-tight">vianova</p>
+          <p className="text-sm">
+            <span className="font-semibold">{name}</span>
+            <span className="text-muted-foreground block">
+              Triggered in: {scope}
+            </span>
+          </p>
+          <p className="text-sm tabular-nums">
+            {plural(count, "record", "records")} triggered the alert.
+          </p>
+          <div className="overflow-hidden rounded-md border">
+            <Table>
+              <caption className="sr-only">
+                The first rows of the attached CSV, as a sample.
+              </caption>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="h-8 text-xs">Vehicle</TableHead>
+                  <TableHead className="h-8 text-xs">Operator</TableHead>
+                  <TableHead className="h-8 text-xs">{spec.column}</TableHead>
+                  <TableHead className="h-8 text-xs">Where</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {count === 0 ? (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell
+                      colSpan={4}
+                      className="text-muted-foreground py-1.5 text-xs"
+                    >
+                      No rows right now.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  ["BL-4821", "LI-0937", "DT-2210"]
+                    .slice(0, Math.min(3, count))
+                    .map((vehicle, i) => (
+                      <TableRow key={vehicle} className="hover:bg-transparent">
+                        <TableCell className="py-1.5 text-xs tabular-nums">
+                          {vehicle}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-xs">
+                          {operators[i % operators.length]}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-xs tabular-nums">
+                          {value(i)}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-xs">
+                          {where[i % where.length]}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            Please find the attached CSV with all the records.
+          </p>
         </div>
       </div>
     </section>
@@ -1281,38 +2401,80 @@ function EmailPreview({
 /* Editor                                                                     */
 /* -------------------------------------------------------------------------- */
 
+/** A GeoJSON file served beside the page, for Import's "Try a sample". */
+const SAMPLE_GEOJSON = `${BASE_PATH}/data/parking-bays-lisbon.geojson`;
+
 function AlertEditor({
   saved,
   initialDraft,
   isNew,
+  drafted,
+  scope,
   contacts,
   others,
   rules,
   zones,
+  zoneIndex,
   zonesLoading,
+  watchable,
   navSlot,
   onSave,
   onDelete,
   onClose,
   onManageRecipients,
+  onZonesCreated,
+  onOpenRegulation,
 }: {
   saved?: Alert;
   initialDraft: Alert;
   isNew: boolean;
+  /** The draft came from a sentence, so it says to check it. */
+  drafted: boolean;
+  scope: string;
   contacts: Contact[];
   /** Every other alert, to copy recipients from. */
   others: Alert[];
-  rules: { regulation: Regulation; rule: Rule }[];
-  zones: Map<string, PickerZone>;
+  rules: Map<string, { regulation: Regulation; rule: Rule }>;
+  zones: PickerZone[];
+  zoneIndex: Map<string, PickerZone>;
   zonesLoading: boolean;
+  watchable: WatchType[];
   navSlot?: React.ReactNode;
   onSave: (alert: Alert) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
   onManageRecipients: () => void;
+  /** Zones drawn or imported here, to be kept in the one library. */
+  onZonesCreated: (zones: PickerZone[]) => void;
+  onOpenRegulation?: (rule: { regulationId: string; ruleId: string }) => void;
 }) {
   const [draft, setDraft] = React.useState(initialDraft);
+  /** True until the title is typed in: the name follows the settings. */
+  const [autoNamed, setAutoNamed] = React.useState(
+    isNew && !initialDraft.name,
+  );
+  const [checkIt, setCheckIt] = React.useState(drafted);
   const [saving, setSaving] = React.useState(false);
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+
+  /* The zone step. The picker replaces the panel and the map replaces the
+     e-mail, exactly as in Regulations. The drawing session is held here, not
+     in the picker, because the shapes arrive from the map. */
+  const [picking, setPicking] = React.useState(false);
+  const [tool, setTool] = React.useState<ZoneDrawTool | null>(null);
+  const [drawn, setDrawn] = React.useState<PickerZone[]>([]);
+  const [focusId, setFocusId] = React.useState<string | null>(null);
+  const [candidates, setCandidates] = React.useState<PickerZone[]>([]);
+  const [preview, setPreview] = React.useState<PickerZone | null>(null);
+  const stopPicking = () => {
+    setPicking(false);
+    setTool(null);
+    setDrawn([]);
+    setFocusId(null);
+    setCandidates([]);
+    setPreview(null);
+  };
+
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(
     () => () => {
@@ -1321,33 +2483,34 @@ function AlertEditor({
     [],
   );
 
-  const baseline = React.useMemo(() => JSON.stringify(saved ?? null), [saved]);
-  // A new alert is unsaved from the start: there is nothing behind it to fall
-  // back to, and the bar should say so.
-  const dirty = isNew || JSON.stringify(draft) !== baseline;
-  // A report rule is set on its regulation. Here it is the same sentence with
-  // nothing in it to press.
-  const readOnly = draft.kind === "report";
-
   const update = (next: Partial<Alert>) => setDraft((d) => ({ ...d, ...next }));
 
-  const found = rules.find((r) => r.rule.id === draft.ruleId);
-  /** The rule's own zones. An alert narrows to a subset; it adds none. */
-  const ruleZones = (found?.rule.zoneIds ?? [])
-    .map((id) => zones.get(id))
+  /** Made by a rule: what it watches is the rule's, the rest is ours. */
+  const fromRule = draft.kind === "report";
+  const found = draft.ruleId ? rules.get(draft.ruleId) : undefined;
+  const spec = WATCH[draft.watch];
+  const name = autoNamed ? autoName(draft, zoneIndex) : draft.name;
+  const current: Alert = { ...draft, name };
+
+  const baseline = React.useMemo(() => JSON.stringify(saved ?? null), [saved]);
+  // A new alert is unsaved from the start: there is nothing behind it to fall
+  // back to.
+  const dirty = isNew || JSON.stringify(current) !== baseline;
+
+  /** A rule's alert covers the rule's zones; any other, the ones chosen. */
+  const zoneIds = fromRule ? (found?.rule.zoneIds ?? []) : draft.zoneIds;
+  const chosenZones = zoneIds
+    .map((id) => zoneIndex.get(id))
     .filter((z): z is PickerZone => Boolean(z));
 
   const chosenContacts = draft.recipientIds
     .map((id) => contacts.find((c) => c.id === id))
     .filter((c): c is Contact => Boolean(c));
-  const recipientNames = [
-    ...chosenContacts.map(contactLongLabel),
-    ...draft.extraEmails,
-  ];
-  const recipientEmails = [
+  const addresses = [
     ...chosenContacts.map((c) => c.email),
     ...draft.extraEmails,
   ];
+  const sentence = summarySentence(current, zoneIndex, found?.rule.name);
 
   const save = () => {
     setSaving(true);
@@ -1355,27 +2518,45 @@ function AlertEditor({
     // enough not to be annoying in a demo.
     timer.current = setTimeout(() => {
       setSaving(false);
-      onSave(draft);
+      onSave(current);
     }, 500);
   };
 
+  const vehicleSummary = `${
+    draft.vehicles.length ? vehicleWords(draft.vehicles) : "all types"
+  }, ${draft.operators.length ? draft.operators.join(", ") : "all operators"}`;
+
+  /** What the request would carry. Shown under Advanced, never edited. */
+  const query = JSON.stringify(
+    {
+      data_layer: {
+        battery: "vehicle_positions_realtime",
+        idle: "vehicle_positions_realtime",
+        available: "fleet_availability_hourly",
+        cap: "fleet_availability_hourly",
+        parked: "vehicle_positions_realtime",
+        no_parking: "regulation_infringements",
+      }[draft.watch],
+      filter: {
+        vehicle_type: draft.vehicles.length ? draft.vehicles : "any",
+        provider: draft.operators.length ? draft.operators : "any",
+      },
+      geo_features: zoneIds.length ? zoneIds : "zone_limits",
+      threshold:
+        draft.watch === "no_parking"
+          ? { rule: draft.ruleId, hours: draft.threshold }
+          : { measure: draft.watch, value: draft.threshold },
+      schedule: schedulePhrase(draft.schedule),
+      max_emails_per_day:
+        draft.schedule.mode === "hourly" ? (draft.schedule.dailyCap ?? null) : null,
+    },
+    null,
+    2,
+  );
+
   return (
-    <div className="flex min-h-full flex-col">
-      <ToolBand
-        nav={navSlot}
-        actions={
-          !isNew && !readOnly ? (
-            <Button
-              variant="ghost"
-              className="text-destructive hover:text-destructive"
-              onClick={() => onDelete(draft.id)}
-            >
-              <Trash2 data-icon="inline-start" />
-              Delete
-            </Button>
-          ) : null
-        }
-      >
+    <div className="flex min-h-full flex-col lg:h-full lg:min-h-0">
+      <ToolBand nav={navSlot}>
         <Button
           variant="outline"
           size="icon"
@@ -1387,278 +2568,428 @@ function AlertEditor({
         {/* The band's title, editable in place. An h2 like every other tool's,
             so the name of the alert is the name of the screen. */}
         <h2 className="min-w-0 text-base font-semibold tracking-tight">
-          {readOnly ? (
-            <span className="block truncate">{draft.name}</span>
-          ) : (
-            <InlineEdit
-              variant="title"
-              value={draft.name}
-              onValueChange={(name) => update({ name })}
-              placeholder="Untitled alert"
-              label="alert name"
-            />
-          )}
+          <InlineEdit
+            variant="title"
+            value={name}
+            onValueChange={(next) => {
+              setAutoNamed(false);
+              update({ name: next });
+            }}
+            placeholder="Untitled alert"
+            label="alert name"
+          />
         </h2>
       </ToolBand>
 
-      <div className="mx-auto grid w-full max-w-6xl flex-1 content-start gap-6 p-4 md:p-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-10">
-        <div className="space-y-6">
-          {readOnly ? (
-            <AlertBanner>
-              <BellRing />
-              <AlertTitle>This rule files a report</AlertTitle>
-              <AlertDescription>
-                It is switched on and changed on its regulation
-                {found ? `, ${found.regulation.name}` : ""}, in Regulations.
-              </AlertDescription>
-            </AlertBanner>
-          ) : null}
-
-          {/* The alert. leading is generous on purpose: every slot is a
-              control with its own padding, and a line of them needs the room a
-              line of words does not. */}
-          <p className="text-muted-foreground text-xl leading-[2.1] text-pretty md:text-2xl md:leading-[1.9]">
-            When{" "}
-            <Slot
-              title="Vehicles"
-              label={vehiclePhrase(draft.vehicles)}
-              readOnly={readOnly}
-              className="w-56"
-            >
-              {() => (
-                <CheckPicker
-                  all="Any vehicle"
-                  options={VEHICLES}
-                  chosen={draft.vehicles}
-                  onChange={(vehicles) => update({ vehicles })}
-                />
-              )}
-            </Slot>{" "}
-            from{" "}
-            <Slot
-              title="Operators"
-              label={operatorPhrase(draft.operators)}
-              readOnly={readOnly}
-              className="w-56"
-            >
-              {() => (
-                <CheckPicker
-                  all="Any operator"
-                  options={OPERATORS.map((o) => ({ value: o, label: o }))}
-                  chosen={draft.operators as (typeof OPERATORS)[number][]}
-                  onChange={(operators) => update({ operators: [...operators] })}
-                />
-              )}
-            </Slot>{" "}
-            stays in{" "}
-            <Slot
-              title="Zones"
-              label={zonePhrase(draft.zoneIds, zones)}
-              readOnly={readOnly}
-              className="w-72"
-            >
-              {() =>
-                zonesLoading ? (
-                  <div className="space-y-2">
-                    <Skeleton className="h-9 w-full" />
-                    <Skeleton className="h-9 w-full" />
-                  </div>
-                ) : ruleZones.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">
-                    This rule has no zones yet. Add them to it in Regulations.
-                  </p>
-                ) : (
-                  <div className="-m-1 flex max-h-72 flex-col overflow-y-auto">
-                    <PickRow
-                      checked={draft.zoneIds.length === 0}
-                      onChange={() => update({ zoneIds: [] })}
-                      label={`Any of the ${ruleZones.length} zones`}
-                    />
-                    <div aria-hidden className="bg-border mx-2 my-1 h-px" />
-                    {ruleZones.map((zone) => (
-                      <PickRow
-                        key={zone.id}
-                        checked={draft.zoneIds.includes(zone.id)}
-                        onChange={() =>
-                          update({ zoneIds: toggle(draft.zoneIds, zone.id) })
-                        }
-                        label={zone.name}
+      <div className="grid flex-1 lg:min-h-0 lg:grid-cols-[420px_minmax(0,1fr)]">
+        <div
+          data-slot="alert-panel"
+          className="flex min-h-0 min-w-0 flex-col lg:border-r"
+        >
+          {picking ? (
+            <ZonePickerPanel
+              zones={zones}
+              excludeIds={draft.zoneIds}
+              backLabel={name || "Alert"}
+              onBack={stopPicking}
+              urlSample={SAMPLE_GEOJSON}
+              onPreviewChange={setPreview}
+              onSelectionChange={setCandidates}
+              onAdd={(chosen) => {
+                // Drawn and imported shapes are new to the library; a zone
+                // that only lived in an alert is the thing Katell ruled out.
+                onZonesCreated(chosen.filter((z) => !zoneIndex.has(z.id)));
+                update({
+                  zoneIds: [
+                    ...new Set([...draft.zoneIds, ...chosen.map((z) => z.id)]),
+                  ],
+                });
+                stopPicking();
+              }}
+              session={{
+                tool,
+                drafts: drawn,
+                focusId,
+                onRename: (id, next) =>
+                  setDrawn((all) =>
+                    all.map((z) => (z.id === id ? { ...z, name: next } : z)),
+                  ),
+                onRemove: (id) =>
+                  setDrawn((all) => all.filter((z) => z.id !== id)),
+              }}
+              onDraw={setTool}
+            />
+          ) : (
+            <>
+              <div className="flex flex-1 flex-col gap-4 p-4 lg:min-h-0 lg:overflow-y-auto">
+                {checkIt ? (
+                  <AlertBanner>
+                    <Sparkles />
+                    <AlertTitle>Drafted from your sentence. Check it.</AlertTitle>
+                    <AlertAction>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => setCheckIt(false)}
                       >
-                        <ZoneThumbnail ring={zone.ring} size={24} />
-                      </PickRow>
-                    ))}
-                  </div>
-                )
-              }
-            </Slot>{" "}
-            of{" "}
-            <Slot
-              title="Rule"
-              label={found?.rule.name ?? "a rule"}
-              empty={!found}
-              readOnly={readOnly}
-              className="w-80"
-            >
-              {(close) => (
-                <div className="-m-1 flex flex-col">
-                  {rules.map(({ regulation, rule }) => (
-                    <button
-                      key={rule.id}
-                      type="button"
-                      onClick={() => {
-                        // A different rule has different zones, so a subset
-                        // chosen from the old one cannot be carried over.
-                        if (rule.id !== draft.ruleId)
-                          update({
-                            ruleId: rule.id,
-                            regulationId: regulation.id,
-                            zoneIds: [],
-                          });
-                        close();
-                      }}
-                      className="hover:bg-muted focus-visible:ring-ring/50 flex min-h-11 w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left outline-none focus-visible:ring-3"
-                    >
-                      <RuleTypeIcon type={rule.type} size="sm" />
+                        Dismiss
+                      </Button>
+                    </AlertAction>
+                  </AlertBanner>
+                ) : null}
+
+                {/* On or off, who made it, and whether it has been sending:
+                    the three things asked about an alert before its settings. */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {isNew ? (
+                    <>
+                      <Badge variant="outline">Draft</Badge>
+                      <span className="text-muted-foreground text-xs">
+                        by you
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <label className="flex min-h-9 cursor-pointer items-center gap-2 text-sm">
+                        <Switch
+                          checked={draft.on}
+                          onCheckedChange={(on) => update({ on })}
+                          aria-label="Alert on or off"
+                        />
+                        {draft.on ? "On" : "Off"}
+                      </label>
+                      <span className="text-muted-foreground text-xs">
+                        by {draft.createdBy} ·{" "}
+                        {draft.sentLastWeek
+                          ? `sent ${plural(draft.sentLastWeek, "time", "times")} in the last 7 days`
+                          : "not sent in the last 7 days"}
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                {fromRule ? (
+                  <div className="flex flex-col gap-3 rounded-lg border p-3">
+                    <div className="flex items-center gap-2.5">
+                      <RuleTypeIcon type="no_parking" size="sm" />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm">
-                          {rule.name}
+                        <span className="block truncate text-sm font-medium">
+                          {found?.rule.name ?? "A no-parking rule"}
                         </span>
                         <span className="text-muted-foreground block truncate text-xs">
-                          {regulation.name}
+                          {found?.regulation.name ?? "Regulations"}
                         </span>
                       </span>
-                      {rule.id === draft.ruleId ? (
-                        <Check aria-hidden className="text-primary size-4" />
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </Slot>{" "}
-            for more than{" "}
-            <Slot
-              title="Duration"
-              label={plural(draft.breachHours, "hour", "hours")}
-              readOnly={readOnly}
-              className="w-64"
-            >
-              {() => (
-                <div className="flex flex-col gap-3">
-                  <label className="flex items-center gap-2 text-sm">
-                    <Input
-                      type="number"
-                      min={1}
-                      max={72}
-                      inputMode="numeric"
-                      className="w-20 tabular-nums"
-                      value={draft.breachHours}
-                      onChange={(e) =>
-                        update({
-                          breachHours: Math.min(
-                            72,
-                            Math.max(1, Number(e.target.value) || 1),
-                          ),
-                        })
-                      }
-                    />
-                    {draft.breachHours === 1 ? "hour" : "hours"}
-                  </label>
-                  <div className="flex gap-1.5">
-                    {[1, 2, 4, 8, 24].map((n) => (
-                      <Button
-                        key={n}
-                        type="button"
-                        size="sm"
-                        variant={n === draft.breachHours ? "default" : "outline"}
-                        className="flex-1 tabular-nums"
-                        onClick={() => update({ breachHours: n })}
+                      <Badge
+                        variant="outline"
+                        className="border-info/30 bg-info/10 text-info shrink-0 text-[11px] font-normal"
                       >
-                        {n}
+                        Reported device
+                      </Badge>
+                    </div>
+                    <p className="text-muted-foreground text-sm">
+                      This alert comes from the rule. A vehicle in its zones
+                      for more than {plural(draft.threshold, "hour", "hours")}{" "}
+                      is reported to its operator, and the recipients below get
+                      the e-mail. What it watches is changed on the rule.
+                    </p>
+                    {onOpenRegulation && draft.regulationId && draft.ruleId ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="self-start"
+                        onClick={() =>
+                          onOpenRegulation({
+                            regulationId: draft.regulationId!,
+                            ruleId: draft.ruleId!,
+                          })
+                        }
+                      >
+                        Open the regulation
+                        <ArrowUpRight data-icon="inline-end" />
                       </Button>
-                    ))}
+                    ) : null}
                   </div>
+                ) : (
+                  <>
+                    <Field>
+                      <FieldLabel htmlFor="alert-watch">What to watch</FieldLabel>
+                      <NativeSelect
+                        id="alert-watch"
+                        className="w-full"
+                        value={draft.watch}
+                        onChange={(e) => {
+                          const watch = e.target.value as WatchType;
+                          // A different measure has a different scale: 20 is
+                          // a battery level, and nonsense as a fleet cap.
+                          update({ watch, threshold: WATCH[watch].initial });
+                        }}
+                      >
+                        {PICKABLE_WATCHES.filter(
+                          (w) => watchable.includes(w) || w === draft.watch,
+                        ).map((w) => (
+                          <NativeSelectOption key={w} value={w}>
+                            {WATCH[w].label}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                      <FieldDescription className="flex items-center gap-1.5">
+                        <Info aria-hidden className="size-3.5 shrink-0" />
+                        Uses {spec.source}.
+                      </FieldDescription>
+                    </Field>
+
+                    <Field>
+                      <FieldLabel>{spec.compare}</FieldLabel>
+                      <Stepper
+                        label={spec.compare}
+                        value={draft.threshold}
+                        step={spec.step}
+                        unit={spec.unit}
+                        onChange={(threshold) => update({ threshold })}
+                      />
+                    </Field>
+                  </>
+                )}
+
+                {/* The alert, read back. Every field below changes a word of
+                    it; see the file header. */}
+                <p
+                  data-slot="alert-summary"
+                  className="border-primary/40 bg-primary/5 rounded-lg border p-3 text-sm text-pretty"
+                >
+                  <span className="text-primary mb-0.5 block text-[11px] font-semibold tracking-wider uppercase">
+                    Summary
+                  </span>
+                  You&rsquo;ll get an e-mail when {sentence}.
+                </p>
+
+                <div className="rounded-lg border">
+                  <PanelSection
+                    title="Zones"
+                    summary={
+                      zoneIds.length
+                        ? plural(zoneIds.length, "zone", "zones")
+                        : "whole scope"
+                    }
+                    defaultOpen={!fromRule}
+                  >
+                    {zonesLoading ? (
+                      <Skeleton className="h-11 w-full" />
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-muted-foreground min-w-0 flex-1 text-xs">
+                            {fromRule
+                              ? "The rule's own zones. Change them on the rule."
+                              : zoneIds.length === 0
+                                ? "No zone: the alert covers the whole scope."
+                                : "Only vehicles inside these zones."}
+                          </p>
+                          {fromRule ? null : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPicking(true)}
+                            >
+                              <Plus data-icon="inline-start" />
+                              Add zones
+                            </Button>
+                          )}
+                        </div>
+                        {chosenZones.length > 0 ? (
+                          <ul className="flex flex-col gap-1.5">
+                            {chosenZones.map((zone) => (
+                              <li
+                                key={zone.id}
+                                className="flex min-h-11 items-center gap-2.5 rounded-md border py-1 pr-1 pl-2"
+                              >
+                                <ZoneThumbnail ring={zone.ring} size={24} />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-medium">
+                                    {zone.name}
+                                  </span>
+                                  {zone.tags.length ? (
+                                    <span className="text-muted-foreground block truncate text-xs">
+                                      {zone.tags.join(", ")}
+                                    </span>
+                                  ) : null}
+                                </span>
+                                {fromRule ? null : (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={`Remove ${zone.name}`}
+                                    onClick={() =>
+                                      update({
+                                        zoneIds: draft.zoneIds.filter(
+                                          (id) => id !== zone.id,
+                                        ),
+                                      })
+                                    }
+                                  >
+                                    <X />
+                                  </Button>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </>
+                    )}
+                  </PanelSection>
+
+                  {fromRule ? null : (
+                    <PanelSection title="Vehicles" summary={vehicleSummary}>
+                      <div className="flex flex-wrap gap-2">
+                        <FilterPick
+                          label="Vehicle types"
+                          all="All vehicle types"
+                          options={VEHICLES.map((v) => ({
+                            value: v.value,
+                            label: `${v.label}s`,
+                          }))}
+                          chosen={draft.vehicles}
+                          onChange={(vehicles) => update({ vehicles })}
+                        />
+                        <FilterPick
+                          label="Operators"
+                          all="All operators"
+                          options={OPERATORS.map((o) => ({ value: o, label: o }))}
+                          chosen={draft.operators as (typeof OPERATORS)[number][]}
+                          onChange={(operators) =>
+                            update({ operators: [...operators] })
+                          }
+                        />
+                      </div>
+                    </PanelSection>
+                  )}
+
+                  <PanelSection
+                    title="Schedule"
+                    summary={scheduleLabel(draft.schedule)}
+                    defaultOpen={!fromRule}
+                  >
+                    {fromRule ? (
+                      <p className="text-muted-foreground text-sm">
+                        Checked every hour, and each vehicle is reported once.
+                        A report has its own follow-up, so it is not held back
+                        for a summary.
+                      </p>
+                    ) : (
+                      <ScheduleFields
+                        schedule={draft.schedule}
+                        onChange={(schedule) => update({ schedule })}
+                      />
+                    )}
+                  </PanelSection>
+
+                  <PanelSection
+                    title="Recipients"
+                    summary={plural(addresses.length, "recipient", "recipients")}
+                    defaultOpen
+                  >
+                    <RecipientFields
+                      alert={draft}
+                      contacts={contacts}
+                      others={others}
+                      onChange={update}
+                      onManage={onManageRecipients}
+                    />
+                  </PanelSection>
+
+                  <PanelSection title="Advanced" summary="the query behind it">
+                    <pre className="bg-muted/50 overflow-x-auto rounded-md p-3 text-xs">
+                      {query}
+                    </pre>
+                  </PanelSection>
                 </div>
-              )}
-            </Slot>
-            , {readOnly ? "file a report and e-mail" : "e-mail"}{" "}
-            <Slot
-              title="Recipients"
-              label={recipientPhrase(recipientNames)}
-              empty={recipientNames.length === 0}
-              readOnly={readOnly}
-              className="w-96"
-            >
-              {(close) => (
-                <RecipientPicker
-                  alert={draft}
-                  contacts={contacts}
-                  others={others}
-                  onChange={update}
-                  onManage={() => {
-                    close();
-                    onManageRecipients();
-                  }}
-                />
-              )}
-            </Slot>{" "}
-            <Slot
-              title="Schedule"
-              label={schedulePhrase(draft.schedule)}
-              readOnly={readOnly}
-              className="w-80"
-            >
-              {() => (
-                <SchedulePicker
-                  schedule={draft.schedule}
-                  onChange={(schedule) => update({ schedule })}
-                />
-              )}
-            </Slot>
-            .
-          </p>
+              </div>
 
-          {/* The one thing the sentence cannot carry in its own words: what
-              "every hour" leaves out, and whose clock the hours are on. */}
-          {readOnly ? null : (
-            <p className="text-muted-foreground text-sm">
-              {draft.schedule.mode === "hourly"
-                ? `Only vehicles you have not been told about yet, and never more than ${plural(draft.schedule.dailyCap ?? DEFAULT_DAILY_CAP, "e-mail", "e-mails")} a day.`
-                : `One e-mail with the whole list. The hour is ${SCOPE_TIME_ZONE}.`}
-            </p>
+              <footer
+                data-slot="alert-save-bar"
+                className="bg-background flex flex-wrap items-center gap-2 border-t p-3"
+              >
+                {!isNew && !fromRule ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setConfirmDelete(true)}
+                  >
+                    <Trash2 data-icon="inline-start" />
+                    Delete
+                  </Button>
+                ) : null}
+                {addresses.length === 0 ? (
+                  <span
+                    id="alert-needs-recipient"
+                    className="text-muted-foreground text-xs"
+                  >
+                    Add a recipient to save.
+                  </span>
+                ) : null}
+                <span className="flex-1" />
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!dirty || saving || addresses.length === 0}
+                  aria-describedby={
+                    addresses.length === 0 ? "alert-needs-recipient" : undefined
+                  }
+                  onClick={save}
+                >
+                  {saving ? "Saving…" : isNew ? "Create alert" : "Save changes"}
+                </Button>
+              </footer>
+            </>
           )}
-
-          {isNew ? (
-            <AskRow
-              onGenerate={(i) => setDraft((d) => SUGGESTIONS[i]!.apply(d))}
-            />
-          ) : null}
         </div>
 
-        {/* Two elements, not one. A sticky GRID ITEM cannot travel: given
-            self-start it is only as tall as its content, and left to stretch
-            it already fills the row. The item takes the row's height and the
-            preview sticks inside it, under the band. */}
-        <div>
-          <div className="lg:sticky lg:top-20">
-            <EmailPreview
-              alert={draft}
-              recipients={recipientEmails}
-              ruleName={found?.rule.name ?? "a rule"}
+        {/* The e-mail, or the map while zones are being chosen: whichever the
+            panel beside it is about. */}
+        <div className="bg-muted/40 min-h-[26rem] min-w-0 border-t lg:min-h-0 lg:border-t-0">
+          {picking ? (
+            <ZoneDrawMap
+              className="h-full min-h-[26rem]"
+              zones={chosenZones}
+              candidates={candidates}
+              preview={preview}
+              tool={tool}
+              onToolChange={setTool}
+              onDrawn={(zone) => {
+                setDrawn((all) => [...all, zone]);
+                setFocusId(zone.id);
+              }}
             />
-          </div>
+          ) : (
+            <div className="h-full p-4 md:p-6 lg:overflow-y-auto">
+              <EmailPreview
+                alert={current}
+                name={name || "Untitled alert"}
+                scope={scope}
+                to={addresses}
+                places={chosenZones.map((z) => z.name)}
+              />
+            </div>
+          )}
         </div>
       </div>
 
-      {readOnly ? null : (
-        <SaveBar
-          dirty={dirty}
-          saving={saving}
-          onSave={save}
-          onDiscard={isNew ? undefined : () => setDraft(saved ?? initialDraft)}
-          saveLabel={isNew ? "Create alert" : "Save"}
-          message={isNew ? "Not created yet" : "Unsaved changes"}
-        />
-      )}
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete ${name || "this alert"}?`}
+        description="It stops sending e-mails, and it cannot be brought back."
+        confirmLabel="Delete alert"
+        destructive
+        onConfirm={() => onDelete(draft.id)}
+      />
     </div>
   );
 }
@@ -2088,8 +3419,8 @@ function AlertList({
            */}
           <Table inset className="min-w-[64rem] table-fixed">
             <caption className="sr-only">
-              Alerts in {scope}, newest first. Rules that file a report are
-              listed but set on their regulation.
+              Alerts in {scope}, newest first. An alert made by a no-parking
+              rule is marked Reported device.
             </caption>
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -2160,7 +3491,6 @@ function AlertList({
                     </TableRow>
                   ))
                 : visible.map((alert) => {
-                    const found = rules.get(alert.ruleId);
                     const report = alert.kind === "report";
                     const ticked = selected.includes(alert.id);
                     const by = author(alert.createdBy);
@@ -2179,7 +3509,7 @@ function AlertList({
                               }
                               aria-label={
                                 report
-                                  ? `${alert.name} is set on its regulation`
+                                  ? `${alert.name} is removed on its rule, in Regulations`
                                   : `Select ${alert.name}`
                               }
                               // Not decoration: Tab scrolls a focused row
@@ -2190,7 +3520,11 @@ function AlertList({
                           </TableCell>
                         ) : null}
                         <TableCell>
-                          <span className="flex min-w-0 items-center gap-2">
+                          {/* The badge goes under the name, not beside it: the
+                              column is the narrowest on a full table, and a
+                              badge on the same line left "No parking · Hist…"
+                              where the whole name fits. */}
+                          <span className="flex min-w-0 flex-col items-start gap-1">
                             <button
                               type="button"
                               onClick={() => onOpen(alert.id)}
@@ -2208,7 +3542,7 @@ function AlertList({
                                 variant="outline"
                                 className="border-info/30 bg-info/10 text-info shrink-0 text-[11px] font-normal"
                               >
-                                Files a report
+                                Reported device
                               </Badge>
                             ) : null}
                           </span>
@@ -2262,24 +3596,6 @@ function AlertList({
                               2.4px on the report badge. At the end of the row
                               the cell's inset is always there to paint on. */}
                           <div className="flex items-center justify-end">
-                          {report ? (
-                            <Tooltip>
-                              <TooltipTrigger
-                                render={
-                                  <span
-                                    tabIndex={0}
-                                    className="focus-visible:ring-ring inline-flex scroll-m-1 rounded focus-visible:ring-2 focus-visible:outline-none"
-                                  >
-                                    <StatusBadge tone="info">On</StatusBadge>
-                                  </span>
-                                }
-                              />
-                              <TooltipContent>
-                                Switched on its regulation
-                                {found ? `, ${found.regulation.name}` : ""}
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : (
                             <Switch
                               checked={alert.on}
                               onCheckedChange={() => onToggle(alert.id)}
@@ -2290,7 +3606,6 @@ function AlertList({
                               }
                               className="scroll-m-1"
                             />
-                          )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -2475,7 +3790,7 @@ function RecipientDialog({
   /** The recipient being changed, or nothing when adding one. */
   contact?: Contact;
   contacts: Contact[];
-  /** The alerts someone can be put on: never the rules that file a report. */
+  /** The alerts someone can be put on. */
   alerts: Alert[];
   onOpenChange: (open: boolean) => void;
   onSave: (contact: Contact, alertIds: string[]) => void;
@@ -2944,8 +4259,8 @@ function RecipientList({
   const allTicked = visible.length > 0 && selected.length === visible.length;
   const someTicked = selected.length > 0 && !allTicked;
 
-  /** Only alerts can be given or taken here; a report rule's people are its own. */
-  const editable = alerts.filter((a) => a.kind === "alert");
+  /** Every alert, a rule's included: who hears about it is handled here. */
+  const editable = alerts;
   const editing =
     dialog?.kind === "edit"
       ? contacts.find((c) => c.id === dialog.id)
@@ -3034,8 +4349,8 @@ function RecipientList({
         <TableCard>
           <Table inset className="min-w-[44rem] table-fixed">
             <caption className="sr-only">
-              Everyone on the scope&rsquo;s report contacts list, and the
-              alerts they get.
+              Everyone on the scope&rsquo;s recipients list, and the alerts
+              they get.
             </caption>
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -3216,23 +4531,30 @@ function RecipientList({
 
 type View =
   | { kind: "list" }
-  | { kind: "edit"; id: string; isNew: boolean };
+  | { kind: "edit"; id: string; isNew: boolean; drafted: boolean };
 
 export function AlertsWorkspace({
   className,
   alerts: initialAlerts = SAMPLE_ALERTS,
   contacts: initialContacts = SAMPLE_CONTACTS,
   regulations = SAMPLE_REGULATIONS,
+  watchable = PICKABLE_WATCHES,
   status = "ready",
   scope = "Munich",
   navSlot,
   onRetry,
   onSave,
+  onOpenRegulation,
 }: {
   className?: string;
   alerts?: Alert[];
   contacts?: Contact[];
   regulations?: Regulation[];
+  /**
+   * What this scope has the data to watch. A suggestion or a measure whose
+   * data the scope lacks is not offered, rather than offered and failing.
+   */
+  watchable?: WatchType[];
   status?: "ready" | "loading" | "error";
   /** Names the scope for assistive tech. The host's shell says it on screen. */
   scope?: string;
@@ -3246,6 +4568,11 @@ export function AlertsWorkspace({
   onRetry?: () => void;
   /** Called with the saved alert, after the workspace has kept it. */
   onSave?: (alert: Alert) => void;
+  /**
+   * Opens a rule in Regulations, from the alert that rule made. Left out, the
+   * alert still says where it comes from; it just cannot take you there.
+   */
+  onOpenRegulation?: (rule: { regulationId: string; ruleId: string }) => void;
 }) {
   const [alerts, setAlerts] = React.useState(initialAlerts);
   const [contacts, setContacts] = React.useState(initialContacts);
@@ -3258,6 +4585,9 @@ export function AlertsWorkspace({
   const [recipientDialog, setRecipientDialog] =
     React.useState<RecipientDialogState>(null);
   const [view, setView] = React.useState<View>({ kind: "list" });
+  /** The Create dialog, and a count that gives each opening a clean one. */
+  const [creating, setCreating] = React.useState(false);
+  const [createCount, setCreateCount] = React.useState(0);
   const [drafts, setDrafts] = React.useState<Record<string, Alert>>({});
   const [notice, setNotice] = React.useState<string | null>(null);
 
@@ -3293,34 +4623,49 @@ export function AlertsWorkspace({
   );
 
   const create = () => {
-    const first = rules[0];
+    setCreateCount((n) => n + 1);
+    setCreating(true);
+  };
+
+  /** A draft from the Create dialog: a sentence read into settings, or bare. */
+  const startDraft = (
+    patch: Partial<Alert>,
+    from: "sentence" | "scratch",
+    name?: string,
+  ) => {
     const id = uid("al");
+    const watch =
+      patch.watch ?? PICKABLE_WATCHES.find((w) => watchable.includes(w)) ?? "battery";
     const draft: Alert = {
       id,
       kind: "alert",
-      name: "",
-      regulationId: first?.regulation.id ?? "",
-      ruleId: first?.rule.id ?? "",
-      breachHours: 2,
+      // Empty on purpose: the editor names it from its settings until someone
+      // types a name. A suggestion brings its own.
+      name: name ?? "",
+      watch,
+      threshold: WATCH[watch].initial,
       zoneIds: [],
       vehicles: [],
       operators: [],
-      schedule: { mode: "hourly", dailyCap: DEFAULT_DAILY_CAP },
-      recipientIds: [],
+      schedule: { mode: "hourly" },
+      // The person making it hears about it, unless they say otherwise.
+      recipientIds: contacts.some((c) => c.id === "c-you") ? ["c-you"] : [],
       extraEmails: [],
       createdBy: "You",
       mine: true,
       createdAt: new Date().toISOString(),
       on: true,
+      ...patch,
     };
     setDrafts((d) => ({ ...d, [id]: draft }));
     setNotice(null);
-    setView({ kind: "edit", id, isNew: true });
+    setCreating(false);
+    setView({ kind: "edit", id, isNew: true, drafted: from === "sentence" });
   };
 
   const open = (id: string) => {
     setNotice(null);
-    setView({ kind: "edit", id, isNew: false });
+    setView({ kind: "edit", id, isNew: false, drafted: false });
   };
 
   const remove = (ids: string[]) => {
@@ -3354,14 +4699,23 @@ export function AlertsWorkspace({
               saved={saved}
               initialDraft={editing}
               isNew={view.isNew}
+              drafted={view.drafted}
+              scope={scope}
               contacts={contacts}
-              others={alerts.filter(
-                (a) => a.id !== view.id && a.kind === "alert",
-              )}
-              rules={rules}
-              zones={zoneIndex}
+              others={alerts.filter((a) => a.id !== view.id)}
+              rules={ruleIndex}
+              zones={zones}
+              zoneIndex={zoneIndex}
               zonesLoading={zonesLoading}
+              watchable={watchable}
               navSlot={navSlot}
+              onOpenRegulation={onOpenRegulation}
+              onZonesCreated={(made) =>
+                setZones((all) => [
+                  ...made.filter((z) => !all.some((x) => x.id === z.id)),
+                  ...all,
+                ])
+              }
               onManageRecipients={() => {
                 if (view.isNew) setDrafts(({ [view.id]: _, ...rest }) => rest);
                 setView({ kind: "list" });
@@ -3499,11 +4853,8 @@ export function AlertsWorkspace({
                         ? all.map((c) => (c.id === contact.id ? contact : c))
                         : [contact, ...all],
                     );
-                    // Alerts only: who a report rule tells is set on its
-                    // regulation, and is not this dialog's to change.
                     setAlerts((all) =>
                       all.map((a) => {
-                        if (a.kind !== "alert") return a;
                         const wanted = alertIds.includes(a.id);
                         const has = a.recipientIds.includes(contact.id);
                         if (wanted === has) return a;
@@ -3569,6 +4920,15 @@ export function AlertsWorkspace({
             </div>
           </>
         )}
+
+        <CreateDialog
+          key={createCount}
+          open={creating}
+          onOpenChange={setCreating}
+          watchable={watchable}
+          zones={zones}
+          onDraft={startDraft}
+        />
       </div>
     </TooltipProvider>
   );

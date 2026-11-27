@@ -530,6 +530,7 @@
         "@vianova/badge",
         "@vianova/button",
         "@vianova/checkbox",
+        "@vianova/confirm-dialog",
         "@vianova/dialog",
         "@vianova/empty",
         "@vianova/field",
@@ -539,11 +540,10 @@
         "@vianova/native-select",
         "@vianova/person-cell",
         "@vianova/popover",
+        "@vianova/radio-group",
         "@vianova/relative-time",
         "@vianova/rule-type-icon",
         "@vianova/sample-regulations",
-        "@vianova/save-bar",
-        "@vianova/segmented-control",
         "@vianova/select",
         "@vianova/selection-bar",
         "@vianova/skeleton",
@@ -558,6 +558,7 @@
         "@vianova/tool-band",
         "@vianova/tooltip",
         "@vianova/utils",
+        "@vianova/zone-draw-map",
         "@vianova/zone-picker"
       ],
       "files": [
@@ -879,6 +880,7 @@
         "@vianova/skeleton",
         "@vianova/slider-field",
         "@vianova/status-badge",
+        "@vianova/switch",
         "@vianova/table",
         "@vianova/table-card",
         "@vianova/table-settings",
@@ -3540,6 +3542,38 @@
       "files": [
         {
           "path": "registry/vianova/product/visualization-picker.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "zone-draw-map",
+      "type": "registry:ui",
+      "title": "Zone Draw Map",
+      "description": "Zone Draw Map — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "maplibre-gl"
+      ],
+      "registryDependencies": [
+        "@vianova/basemap-switcher",
+        "@vianova/basemaps",
+        "@vianova/category-style",
+        "@vianova/map-canvas",
+        "@vianova/map-controls",
+        "@vianova/map-draw-control",
+        "@vianova/use-category-shape-layer",
+        "@vianova/utils",
+        "@vianova/zone-picker"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/zone-draw-map.tsx",
           "type": "registry:ui"
         }
       ],
