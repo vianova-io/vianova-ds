@@ -1,51 +1,7 @@
-"use client";
-
 import * as React from "react";
-import { ListChecks } from "lucide-react";
 
 import { cn } from "@/registry/vianova/lib/utils";
 import { Button } from "@/registry/vianova/ui/button";
-import { Toggle } from "@/registry/vianova/ui/toggle";
-
-/**
- * The control that turns a list's tick boxes on and off.
- *
- * Bulk actions are something a list is occasionally used for and a column it
- * otherwise pays for on every row: forty pixels of boxes, on every line, for
- * the day somebody clears out eleven recipients. So the column is not there
- * until it is asked for. This sits at the end of the list's toolbar, the list
- * opens without it pressed, and pressing it is what brings the boxes in.
- *
- * A toggle and not a button, because it has a state the reader needs to see:
- * the boxes stay until it is released, and releasing it lets go of whatever
- * was ticked.
- */
-export function SelectionToggle({
-  pressed,
-  onPressedChange,
-  label = "Select several",
-  className,
-}: {
-  pressed: boolean;
-  onPressedChange: (pressed: boolean) => void;
-  /** Names the control. It has no visible text. */
-  label?: string;
-  className?: string;
-}) {
-  return (
-    <Toggle
-      variant="outline"
-      pressed={pressed}
-      onPressedChange={onPressedChange}
-      aria-label={label}
-      title={label}
-      data-slot="selection-toggle"
-      className={className}
-    >
-      <ListChecks />
-    </Toggle>
-  );
-}
 
 /**
  * What is ticked, and what can be done to all of it.
@@ -56,6 +12,8 @@ export function SelectionToggle({
  *
  * The actions are the caller's. Clear is the bar's own, because every list
  * has it and each one had spelled it differently.
+ *
+ * The tick boxes themselves are turned on from the list's `TableSettings`.
  */
 export function SelectionBar({
   count,

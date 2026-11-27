@@ -97,10 +97,13 @@ Last sent · On.
 - **On** is a switch for alert rows; for report rows it is a static badge with
   a tooltip naming the regulation where the switch lives.
 - Filter: search, and All / On / Off.
-- **Tick boxes are off until asked for.** A small toggle at the end of the
-  toolbar brings them in, with a bulk Delete; releasing it takes them away
-  again. An alert is switched off far more often than it is deleted, and the
-  switch is on the row. Every workspace list works this way.
+- **A settings menu at the end of the toolbar**, the same one every workspace
+  list has. It turns **Select rows** on (tick boxes, with a bulk Delete),
+  hides and shows **columns** (Name and On always stay), and switches
+  **dates** between ages and the day and time. A dot on the button says the
+  view is not as it opens; *Reset view* puts it back.
+- Tick boxes are off until asked for: an alert is switched off far more often
+  than it is deleted, and the switch is on the row.
 - Sorted newest first.
 
 **From the backend:** `lastSentAt` is the one field you flagged as uncertain on
@@ -210,7 +213,7 @@ recipient** in the band.
   button counts what will be added, and addresses already on the list are
   skipped and said to be.
 - **Bulk Delete matters most here**: people leave in groups. The tick boxes
-  are behind the same toolbar toggle as on the alerts list.
+  are behind *Select rows* in the same settings menu as on the alerts list.
 - A name in the alerts list's *Sent to* column, or in its *+ N more* dialog,
   opens that recipient here.
 

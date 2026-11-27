@@ -71,12 +71,19 @@ export function RelativeTime({
   iso,
   now,
   timeZone,
+  display = "relative",
   never = "Never",
   className,
   ...props
 }: Omit<React.ComponentProps<"time">, "children" | "dateTime"> & {
   /** ISO 8601. Absent, the cell says `never`. */
   iso?: string;
+  /**
+   * `exact` writes the day and time out instead of the age. For the reader
+   * who is auditing rather than scanning, and has said so in the list's
+   * settings.
+   */
+  display?: "relative" | "exact";
   /** The moment to count back from, in ms. Defaults to the reader's clock. */
   now?: number;
   /** IANA zone for the dates and the hover. Defaults to the reader's own. */
@@ -112,9 +119,11 @@ export function RelativeTime({
       className={cn("whitespace-nowrap", className)}
       {...props}
     >
-      {clock === undefined
-        ? dateFormat(zone).format(then)
-        : formatRelative(iso, clock, zone)}
+      {display === "exact"
+        ? exactFormat(zone).format(then)
+        : clock === undefined
+          ? dateFormat(zone).format(then)
+          : formatRelative(iso, clock, zone)}
     </time>
   );
 }

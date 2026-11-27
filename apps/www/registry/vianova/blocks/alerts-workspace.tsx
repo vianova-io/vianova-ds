@@ -145,10 +145,12 @@ import { InlineEdit } from "@/registry/vianova/patterns/inline-edit";
 import { PersonCell } from "@/registry/vianova/patterns/person-cell";
 import { RelativeTime } from "@/registry/vianova/patterns/relative-time";
 import { SaveBar } from "@/registry/vianova/patterns/save-bar";
+import { SelectionBar } from "@/registry/vianova/patterns/selection-bar";
 import {
-  SelectionBar,
-  SelectionToggle,
-} from "@/registry/vianova/patterns/selection-bar";
+  TableSettings,
+  useTableView,
+  type ViewColumn,
+} from "@/registry/vianova/patterns/table-settings";
 import { StatusBadge } from "@/registry/vianova/patterns/status-badge";
 import { TableCard } from "@/registry/vianova/patterns/table-card";
 import { TagInput } from "@/registry/vianova/patterns/tag-input";
@@ -1874,15 +1876,26 @@ function SentToDialog({
   );
 }
 
+/** What the alerts list can show. Name and On are what make it a list. */
+const ALERT_COLUMNS: ViewColumn[] = [
+  { id: "name", label: "Name", locked: true },
+  { id: "createdBy", label: "Created by" },
+  { id: "created", label: "Created" },
+  { id: "sentTo", label: "Sent to" },
+  { id: "lastSent", label: "Last sent" },
+  { id: "on", label: "On", locked: true },
+];
+
 /**
  * The list, on Katell's columns: Name, Created by, Created, Sent to, Last
  * sent, On.
  *
  * It opens with no tick boxes. An alert is switched off far more often than it
  * is deleted, the switch is already on the row, and so the first column is the
- * name's. The boxes and the bulk Delete come in when `SelectionToggle` at the
- * end of the toolbar is pressed, and go again when it is released -- the same
- * arrangement every list in the workspaces has.
+ * name's. The boxes and the bulk Delete come in from `TableSettings` at the
+ * end of the toolbar, which is also where columns are hidden and dates are
+ * switched between ages and clock times -- the same menu every list in the
+ * workspaces has.
  */
 function AlertList({
   alerts,
@@ -1914,8 +1927,13 @@ function AlertList({
   const [on, setOn] = React.useState<OnFilter>("all");
   /** The alert whose whole recipient list is open. */
   const [listing, setListing] = React.useState<string | null>(null);
-  const [selecting, setSelecting] = React.useState(false);
+  const view = useTableView(ALERT_COLUMNS, { selection: true, dates: true });
+  const selecting = view.selecting;
   const [selected, setSelected] = React.useState<string[]>([]);
+  // Tick boxes put away take their ticks with them.
+  React.useEffect(() => {
+    if (!selecting) setSelected([]);
+  }, [selecting]);
 
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -1985,14 +2003,7 @@ function AlertList({
             ))}
           </SelectContent>
         </Select>
-        <SelectionToggle
-          pressed={selecting}
-          onPressedChange={(next) => {
-            setSelecting(next);
-            if (!next) setSelected([]);
-          }}
-          label="Select several alerts"
-        />
+        <TableSettings {...view.settings} />
       </div>
 
       {selecting && selected.length > 0 ? (
@@ -2098,10 +2109,24 @@ function AlertList({
                   </TableHead>
                 ) : null}
                 <TableHead>Name</TableHead>
+                {view.shows("createdBy") ? (
                 <TableHead className="w-56">Created by</TableHead>
-                <TableHead className="w-28">Created</TableHead>
+                ) : null}
+                {view.shows("created") ? (
+                <TableHead
+                  // The column is fixed-width, and a day with a time is
+                  // wider than an age: at w-28 it ran into Sent to.
+                  className={view.dates === "exact" ? "w-40" : "w-28"}
+                >
+                  Created
+                </TableHead>
+                ) : null}
+                {view.shows("sentTo") ? (
                 <TableHead className="w-64">Sent to</TableHead>
-                <TableHead className="w-36">Last sent</TableHead>
+                ) : null}
+                {view.shows("lastSent") ? (
+                <TableHead className="w-40">Last sent</TableHead>
+                ) : null}
                 <TableHead className="w-20 text-right">On</TableHead>
               </TableRow>
             </TableHeader>
@@ -2188,6 +2213,7 @@ function AlertList({
                             ) : null}
                           </span>
                         </TableCell>
+                        {view.shows("createdBy") ? (
                         <TableCell>
                           <PersonCell
                             name={alert.createdBy}
@@ -2197,13 +2223,18 @@ function AlertList({
                             organisation={alert.createdBy === "Vianova"}
                           />
                         </TableCell>
+                        ) : null}
+                        {view.shows("created") ? (
                         <TableCell className="text-muted-foreground">
                           <RelativeTime
                             iso={alert.createdAt}
                             now={NOW}
                             timeZone={SCOPE_TZ}
+                            display={view.dates}
                           />
                         </TableCell>
+                        ) : null}
+                        {view.shows("sentTo") ? (
                         <TableCell>
                           <SentTo
                             people={peopleOf(alert, contacts)}
@@ -2211,14 +2242,18 @@ function AlertList({
                             onAll={() => setListing(alert.id)}
                           />
                         </TableCell>
+                        ) : null}
+                        {view.shows("lastSent") ? (
                         <TableCell>
                           <RelativeTime
                             iso={alert.lastSentAt}
                             now={NOW}
                             timeZone={SCOPE_TZ}
+                            display={view.dates}
                             never="Never sent"
                           />
                         </TableCell>
+                        ) : null}
                         <TableCell>
                           {/* Against the right edge, not under the left of
                               its header. Tab scrolls a control only just into
@@ -2834,6 +2869,11 @@ function PasteDialog({
   );
 }
 
+const RECIPIENT_COLUMNS: ViewColumn[] = [
+  { id: "recipient", label: "Recipient", locked: true },
+  { id: "alerts", label: "Gets these alerts" },
+];
+
 /**
  * The recipients, on Katell's columns: who, and which alerts they get.
  *
@@ -2847,7 +2887,7 @@ function PasteDialog({
  * off, not deleted, and one at a time; people leave in groups -- an operator
  * loses a contract, a team is reorganised -- and removing eleven addresses one
  * dialog at a time is the chore this tab exists to end. The boxes still wait
- * behind `SelectionToggle`, as they do on every list.
+ * behind `TableSettings`, as they do on every list.
  */
 function RecipientList({
   contacts,
@@ -2875,8 +2915,13 @@ function RecipientList({
 }) {
   const [query, setQuery] = React.useState("");
   const [kind, setKind] = React.useState<KindFilter>("all");
-  const [selecting, setSelecting] = React.useState(false);
+  const view = useTableView(RECIPIENT_COLUMNS, { selection: true });
+  const selecting = view.selecting;
   const [selected, setSelected] = React.useState<string[]>([]);
+  // Tick boxes put away take their ticks with them.
+  React.useEffect(() => {
+    if (!selecting) setSelected([]);
+  }, [selecting]);
 
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -2936,14 +2981,7 @@ function RecipientList({
             ))}
           </SelectContent>
         </Select>
-        <SelectionToggle
-          pressed={selecting}
-          onPressedChange={(next) => {
-            setSelecting(next);
-            if (!next) setSelected([]);
-          }}
-          label="Select several recipients"
-        />
+        <TableSettings {...view.settings} />
       </div>
 
       {selecting && selected.length > 0 ? (
@@ -3016,7 +3054,9 @@ function RecipientList({
                 </TableHead>
                 ) : null}
                 <TableHead className="w-[45%]">Recipient</TableHead>
+                {view.shows("alerts") ? (
                 <TableHead>Gets these alerts</TableHead>
+                ) : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -3094,6 +3134,7 @@ function RecipientList({
                         ) : null}
                       </span>
                     </TableCell>
+                    {view.shows("alerts") ? (
                     <TableCell className="whitespace-normal">
                       {theirs.length === 0 ? (
                         <span className="text-muted-foreground">none</span>
@@ -3113,6 +3154,7 @@ function RecipientList({
                         </span>
                       )}
                     </TableCell>
+                    ) : null}
                   </TableRow>
                 );
               })}

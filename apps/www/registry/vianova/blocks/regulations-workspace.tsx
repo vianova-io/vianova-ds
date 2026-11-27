@@ -180,6 +180,12 @@ import {
 } from "@/registry/vianova/lib/sample-regulations";
 import { RelativeTime } from "@/registry/vianova/patterns/relative-time";
 import { TableCard } from "@/registry/vianova/patterns/table-card";
+import {
+  TableSettings,
+  useTableView,
+  type DateDisplay,
+  type ViewColumn,
+} from "@/registry/vianova/patterns/table-settings";
 import { cn } from "@/registry/vianova/lib/utils";
 
 /* -------------------------------------------------------------------------- */
@@ -535,6 +541,18 @@ const filterCount = (f: Filters) =>
 const appliesTo = <T,>(chosen: T[], ruleList: T[]) =>
   chosen.length === 0 || ruleList.length === 0 || chosen.some((c) => ruleList.includes(c));
 
+/**
+ * No row selection among them: the list has nothing to do to several
+ * regulations at once, and tick boxes with no action behind them are a
+ * question the page cannot answer.
+ */
+const REGULATION_COLUMNS: ViewColumn[] = [
+  { id: "name", label: "Name", locked: true },
+  { id: "status", label: "Status" },
+  { id: "created", label: "Created" },
+  { id: "updated", label: "Last update" },
+];
+
 function RegulationList({
   regulations,
   status,
@@ -560,6 +578,7 @@ function RegulationList({
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("active");
   const [filters, setFilters] = React.useState<Filters>(NO_FILTERS);
   const [sort, setSort] = React.useState<SortDir>("desc");
+  const view = useTableView(REGULATION_COLUMNS, { dates: true });
 
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -634,6 +653,7 @@ function RegulationList({
           </SelectContent>
         </Select>
         <FiltersPopover value={filters} onChange={setFilters} count={active} />
+        <TableSettings {...view.settings} />
       </div>
 
       {status === "loading" ? (
@@ -699,7 +719,10 @@ function RegulationList({
               <TableRow className="bg-muted/50 hover:bg-muted/50">
                 <TableHead className="w-28">Rules</TableHead>
                 <TableHead>Name</TableHead>
+                {view.shows("status") ? (
                 <TableHead className="hidden sm:table-cell">Status</TableHead>
+                ) : null}
+                {view.shows("created") ? (
                 <TableHead className="hidden md:table-cell">
                   <button
                     type="button"
@@ -711,7 +734,10 @@ function RegulationList({
                     {sort === "desc" ? <ArrowDown className="size-3.5" /> : <ArrowUp className="size-3.5" />}
                   </button>
                 </TableHead>
+                ) : null}
+                {view.shows("updated") ? (
                 <TableHead className="hidden md:table-cell">Last update</TableHead>
+                ) : null}
                 <TableHead className="w-20">
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -722,6 +748,8 @@ function RegulationList({
                 <RegulationRow
                   key={reg.id}
                   reg={reg}
+                  shows={view.shows}
+                  dates={view.dates}
                   onOpen={() => onOpen(reg.id)}
                   onDownload={() => onDownload(reg)}
                 />
@@ -736,10 +764,15 @@ function RegulationList({
 
 function RegulationRow({
   reg,
+  shows,
+  dates,
   onOpen,
   onDownload,
 }: {
   reg: Regulation;
+  /** Whether a column is on screen, from the list's settings. */
+  shows: (column: string) => boolean;
+  dates: DateDisplay;
   onOpen: () => void;
   onDownload: () => void;
 }) {
@@ -781,18 +814,34 @@ function RegulationRow({
           </span>
         </span>
       </TableCell>
+      {shows("status") ? (
       <TableCell className="hidden sm:table-cell">
         <span className="flex flex-wrap items-center gap-1">
           <RegulationStatusBadge status={status} />
           {reg.visibility === "public" ? <VisibilityBadge visibility="public" /> : null}
         </span>
       </TableCell>
+      ) : null}
+      {shows("created") ? (
       <TableCell className="text-muted-foreground hidden whitespace-nowrap md:table-cell">
-        <RelativeTime iso={reg.createdAt} now={LIST_NOW} timeZone="UTC" />
+        <RelativeTime
+          iso={reg.createdAt}
+          now={LIST_NOW}
+          timeZone="UTC"
+          display={dates}
+        />
       </TableCell>
+      ) : null}
+      {shows("updated") ? (
       <TableCell className="text-muted-foreground hidden whitespace-nowrap md:table-cell">
-        <RelativeTime iso={reg.updatedAt} now={LIST_NOW} timeZone="UTC" />
+        <RelativeTime
+          iso={reg.updatedAt}
+          now={LIST_NOW}
+          timeZone="UTC"
+          display={dates}
+        />
       </TableCell>
+      ) : null}
       <TableCell>
         {/* Download alone. The ⋯ menu held Open and Download GeoJSON and
             nothing else: the name opens the regulation and this icon downloads

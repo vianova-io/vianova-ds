@@ -551,6 +551,7 @@
         "@vianova/switch",
         "@vianova/table",
         "@vianova/table-card",
+        "@vianova/table-settings",
         "@vianova/tabs",
         "@vianova/tag-input",
         "@vianova/textarea",
@@ -656,6 +657,7 @@
         "@vianova/skeleton",
         "@vianova/table",
         "@vianova/table-card",
+        "@vianova/table-settings",
         "@vianova/textarea",
         "@vianova/toggle-group",
         "@vianova/tooltip",
@@ -879,6 +881,7 @@
         "@vianova/status-badge",
         "@vianova/table",
         "@vianova/table-card",
+        "@vianova/table-settings",
         "@vianova/use-category-shape-layer",
         "@vianova/utils",
         "@vianova/zone-picker"
@@ -916,6 +919,7 @@
         "@vianova/skeleton",
         "@vianova/table",
         "@vianova/table-card",
+        "@vianova/table-settings",
         "@vianova/toggle",
         "@vianova/tooltip",
         "@vianova/utils"
@@ -4016,12 +4020,8 @@
       "categories": [
         "Patterns"
       ],
-      "dependencies": [
-        "lucide-react"
-      ],
       "registryDependencies": [
         "@vianova/button",
-        "@vianova/toggle",
         "@vianova/utils"
       ],
       "files": [
@@ -4153,6 +4153,32 @@
       "files": [
         {
           "path": "registry/vianova/patterns/table-card.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "table-settings",
+      "type": "registry:ui",
+      "title": "Table Settings",
+      "description": "Table Settings — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/button",
+        "@vianova/dropdown-menu",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/table-settings.tsx",
           "type": "registry:ui"
         }
       ],

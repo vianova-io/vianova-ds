@@ -99,10 +99,12 @@ import {
 } from "@/registry/vianova/ui/tooltip";
 import { PersonCell } from "@/registry/vianova/patterns/person-cell";
 import { RelativeTime } from "@/registry/vianova/patterns/relative-time";
+import { SelectionBar } from "@/registry/vianova/patterns/selection-bar";
 import {
-  SelectionBar,
-  SelectionToggle,
-} from "@/registry/vianova/patterns/selection-bar";
+  TableSettings,
+  useTableView,
+  type ViewColumn,
+} from "@/registry/vianova/patterns/table-settings";
 import { TableCard } from "@/registry/vianova/patterns/table-card";
 import { cn } from "@/registry/vianova/lib/utils";
 
@@ -474,6 +476,12 @@ function DownloadDialog({
 /*                                  Row bits                                  */
 /* -------------------------------------------------------------------------- */
 
+const REPORT_COLUMNS: ViewColumn[] = [
+  { id: "name", label: "Name", locked: true },
+  { id: "createdBy", label: "Created by" },
+  { id: "created", label: "Created" },
+];
+
 function RowSkeleton({ selecting }: { selecting: boolean }) {
   return (
     <TableRow>
@@ -585,8 +593,13 @@ export function ReportsWorkspace({
   const [territory, setTerritory] = React.useState("all");
   const [author, setAuthor] = React.useState("all");
   const [pinnedOnly, setPinnedOnly] = React.useState(false);
-  const [selecting, setSelecting] = React.useState(false);
+  const view = useTableView(REPORT_COLUMNS, { selection: true, dates: true });
+  const selecting = view.selecting;
   const [selected, setSelected] = React.useState<string[]>([]);
+  // Tick boxes put away take their ticks with them.
+  React.useEffect(() => {
+    if (!selecting) setSelected([]);
+  }, [selecting]);
   const [downloading, setDownloading] = React.useState<Report[] | null>(null);
   const [busy, setBusy] = React.useState<ReportFormat | null>(null);
   const [done, setDone] = React.useState<string | null>(null);
@@ -840,14 +853,7 @@ export function ReportsWorkspace({
               Pinned
             </Toggle>
 
-            <SelectionToggle
-              pressed={selecting}
-              onPressedChange={(next) => {
-                setSelecting(next);
-                if (!next) setSelected([]);
-              }}
-              label="Select several reports"
-            />
+            <TableSettings {...view.settings} />
 
             {filtering ? (
               <Button variant="ghost" size="sm" onClick={clearFilters}>
@@ -892,8 +898,8 @@ export function ReportsWorkspace({
             </Alert>
           ) : null}
 
-          {/* Tick boxes are asked for, with the toggle at the end of the
-              filters, and this bar is what they are for. It sits above the
+          {/* Tick boxes are asked for, from the settings menu at the end of
+              the filters, and this bar is what they are for. It sits above the
               table, so a tick never moves the row under the pointer. */}
           {selecting && selected.length > 0 ? (
             <SelectionBar
@@ -963,8 +969,12 @@ export function ReportsWorkspace({
                     </TableHead>
                     ) : null}
                     <TableHead>Name</TableHead>
+                    {view.shows("createdBy") ? (
                     <TableHead className="w-60">Created by</TableHead>
+                    ) : null}
+                    {view.shows("created") ? (
                     <TableHead className="w-28">Created</TableHead>
+                    ) : null}
                     <TableHead className="w-32 text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -979,7 +989,15 @@ export function ReportsWorkspace({
                     </>
                   ) : visible.length === 0 ? (
                     <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={selecting ? 5 : 4} className="p-0">
+                      <TableCell
+                        colSpan={
+                          2 +
+                          Number(selecting) +
+                          Number(view.shows("createdBy")) +
+                          Number(view.shows("created"))
+                        }
+                        className="p-0"
+                      >
                         {/* Two different empties. "Nothing matches" is a
                             filter problem with a way out; "no reports yet" is
                             a new scope waiting for the 1st. Showing the wrong
@@ -1098,6 +1116,7 @@ export function ReportsWorkspace({
                               </div>
                             </div>
                           </TableCell>
+                          {view.shows("createdBy") ? (
                           <TableCell className="align-top text-sm">
                             {/* Everyone in a scope sees every export in it,
                                 so the mark matters here: square for the
@@ -1109,9 +1128,16 @@ export function ReportsWorkspace({
                               organisation={report.createdBy === "Vianova"}
                             />
                           </TableCell>
+                          ) : null}
+                          {view.shows("created") ? (
                           <TableCell className="text-muted-foreground w-28 align-top text-sm">
-                            <RelativeTime iso={report.createdAt} now={NOW} />
+                            <RelativeTime
+                              iso={report.createdAt}
+                              now={NOW}
+                              display={view.dates}
+                            />
                           </TableCell>
+                          ) : null}
                           <TableCell className="w-32 align-top">
                             {/* Download and delete side by side, with the pin
                                 in the same group so a row has one set of

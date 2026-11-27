@@ -151,10 +151,12 @@ import {
 import { ConfirmDialog } from "@/registry/vianova/patterns/confirm-dialog";
 import { PersonCell } from "@/registry/vianova/patterns/person-cell";
 import { RelativeTime } from "@/registry/vianova/patterns/relative-time";
+import { SelectionBar } from "@/registry/vianova/patterns/selection-bar";
 import {
-  SelectionBar,
-  SelectionToggle,
-} from "@/registry/vianova/patterns/selection-bar";
+  TableSettings,
+  useTableView,
+  type ViewColumn,
+} from "@/registry/vianova/patterns/table-settings";
 import { TableCard } from "@/registry/vianova/patterns/table-card";
 import { InlineEdit } from "@/registry/vianova/patterns/inline-edit";
 import { ActivityHeatmap } from "@/registry/vianova/product/activity-heatmap";
@@ -4992,6 +4994,13 @@ function ReportView({
 /* List                                                                        */
 /* -------------------------------------------------------------------------- */
 
+const DASHBOARD_COLUMNS: ViewColumn[] = [
+  { id: "name", label: "Name", locked: true },
+  { id: "createdBy", label: "Created by" },
+  { id: "created", label: "Created" },
+  { id: "updated", label: "Last update" },
+];
+
 function ReportList({
   reports,
   status,
@@ -5012,8 +5021,16 @@ function ReportList({
   const [query, setQuery] = React.useState("");
   const [dir, setDir] = React.useState<"desc" | "asc">("desc");
   const [deleting, setDeleting] = React.useState<Report | null>(null);
-  const [selecting, setSelecting] = React.useState(false);
+  const view = useTableView(DASHBOARD_COLUMNS, {
+    selection: true,
+    dates: true,
+  });
+  const selecting = view.selecting;
   const [selected, setSelected] = React.useState<string[]>([]);
+  // Tick boxes put away take their ticks with them.
+  React.useEffect(() => {
+    if (!selecting) setSelected([]);
+  }, [selecting]);
   /** The ticked dashboards, waiting on the confirmation. */
   const [deletingMany, setDeletingMany] = React.useState(false);
 
@@ -5064,14 +5081,7 @@ function ReportList({
             aria-label="Search dashboards"
           />
         </InputGroup>
-        <SelectionToggle
-          pressed={selecting}
-          onPressedChange={(next) => {
-            setSelecting(next);
-            if (!next) setSelected([]);
-          }}
-          label="Select several dashboards"
-        />
+        <TableSettings {...view.settings} />
       </div>
 
       {selecting && selected.length > 0 ? (
@@ -5156,7 +5166,10 @@ function ReportList({
                   </TableHead>
                 ) : null}
                 <TableHead>Name</TableHead>
+                {view.shows("createdBy") ? (
                 <TableHead>Created by</TableHead>
+                ) : null}
+                {view.shows("created") ? (
                 <TableHead
                   aria-sort={dir === "desc" ? "descending" : "ascending"}
                 >
@@ -5175,7 +5188,10 @@ function ReportList({
                     )}
                   </button>
                 </TableHead>
+                ) : null}
+                {view.shows("updated") ? (
                 <TableHead>Last update</TableHead>
+                ) : null}
                 <TableHead className="w-24">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -5217,15 +5233,21 @@ function ReportList({
                       {r.title}
                     </button>
                   </TableCell>
+                  {view.shows("createdBy") ? (
                   <TableCell>
                     <PersonCell name={r.creator.name} email={r.creator.email} />
                   </TableCell>
+                  ) : null}
+                  {view.shows("created") ? (
                   <TableCell className="text-muted-foreground">
-                    <RelativeTime iso={r.createdAt} />
+                    <RelativeTime iso={r.createdAt} display={view.dates} />
                   </TableCell>
+                  ) : null}
+                  {view.shows("updated") ? (
                   <TableCell className="text-muted-foreground">
-                    <RelativeTime iso={r.updatedAt} />
+                    <RelativeTime iso={r.updatedAt} display={view.dates} />
                   </TableCell>
+                  ) : null}
                   <TableCell>
                     <span className="flex items-center gap-1">
                       <Button
