@@ -67,6 +67,11 @@ export const NON_MAP_BLOCKS: string[] = [
   // a detail view, because the product decision is download-only. The
   // "dataset" step would wait for a detail link that is deliberately absent.
   "reports-workspace",
+  // A list, a second list behind a tab, and an editor that is one sentence;
+  // no map anywhere. It IS in LIST_DETAIL_BLOCKS: a name opens the editor, so
+  // the responsive suite measures the sentence too -- the one view here made
+  // of inline controls that have to wrap rather than run off a phone.
+  "alerts-workspace",
 ];
 
 /**

@@ -75,15 +75,21 @@ opened the full picker. Flagged in §8.
 
 ## 4. The list
 
-Columns: **Name** · Sent to · When · Last sent · On.
+The tool's band carries its name and **Create alert**. Under it, two tabs with
+counts — **Alerts** and **Recipients** — the way Feeds draws *Your feeds* and
+*Catalogue*.
 
-- The name links into the editor. Under it, a derived one-line summary of the
-  rule, never stored and never editable: *"When a scooter or moped breaks No
-  parking outside bays for more than 2 hours, in any of its zones."*
-- **Sent to** shows the first recipient and `+N`, with the author under it.
+Columns: **Name** · Rule · Sent to · When · Last sent · On. One line per alert.
+
+- The name links into the editor.
+- **Rule** is the no-parking rule watched, with its type icon; the regulation
+  it belongs to is in the tooltip.
+- **Sent to** shows the first recipient and `+N`.
+- **When** is the short form: *Every hour*, *Daily · 08:00*, *Mondays · 09:00*,
+  *Monthly · 08:00*.
 - **On** is a switch for alert rows; for report rows it is a static badge with
   a tooltip naming the regulation where the switch lives.
-- Filter: search by name, and All / On / Off. Multi-select deletes, and report
+- Filter: search, and On and off / On / Off. Multi-select deletes, and report
   rows cannot be ticked — a Delete that silently skipped half the selection is
   worse than one that cannot select them.
 - Sorted newest first.
@@ -94,24 +100,47 @@ and should be dropped rather than left lying.
 
 ## 5. The editor
 
-One screen. Sections top to bottom, with the e-mail preview sticky beside them
-from `lg` up and below them under it.
+The editor **is a sentence**, and every part you can change is a word you can
+press:
 
-**The ask box** sits above the form, not on a page of its own — that two-page
-GenAI flow is the thing the 26 Nov call named as the bug. Suggestions are chips
-that fill the ask field; Generate then fills the form. It is deliberately the
-*second* path: four pickers is not much to fill in, and dictating a sentence to
-fill them is slower than filling them. In the block the parsing is faked, as in
-your own prototype; the real one is VIA-1071.
+> When **a scooter or moped** from **any operator** stays in **any zone** of
+> **No parking outside bays** for more than **2 hours**, e-mail **Anja Reiter
+> and 2 others** **every day at 08:00**.
 
-1. **What to watch** — the rule, and *only when it lasts longer than* N hours.
-2. **Where** — all of the rule's zones, or some.
-3. **Filters** — vehicles and operators, each "all" unless named.
-4. **When to send** — §6.
-5. **Recipients** — §7.
+Seven slots, each opening its own picker:
 
-Saving uses the house `SaveBar`: always present, says *All changes saved* when
-clean. A new alert is dirty from the start.
+| Slot | Field | Picker |
+|---|---|---|
+| a scooter or moped | `vehicles` | checklist, "Any vehicle" on top |
+| any operator | `operators` | checklist, "Any operator" on top |
+| any zone | `zoneIds` | the rule's zones with thumbnails |
+| No parking outside bays | `ruleId` | every no-parking rule, regulation named under it |
+| 2 hours | `breachHours` | a number, with 1 / 2 / 4 / 8 / 24 |
+| Anja Reiter and 2 others | `recipientIds` + `extraEmails` | §7 |
+| every day at 08:00 | `schedule` | §6 |
+
+There is no form beside the sentence saying the same thing in fields, so
+nothing can disagree with it. It is your layout B of 18 Nov, without the
+parsing step: the sentence is built, not typed and then read back.
+
+One line under it carries what the words cannot — for hourly, *"Only vehicles
+you have not been told about yet, and never more than 10 e-mails a day"*; for a
+summary, *"One e-mail with the whole list. The hour is Munich time."*
+
+**A report rule opens as the same sentence with nothing pressable**, ending
+*"…file a report and e-mail…"*, under a banner that says where it is set.
+
+**The ask field** sits under the sentence on a new alert, not on a page of its
+own — that two-page GenAI flow is the thing the 26 Nov call named as the bug.
+Suggestions are chips that fill the field; Generate then fills the sentence. It
+is deliberately the *second* path: seven words to press is not much, and
+describing them is slower than pressing them. In the block the parsing is
+faked, as in your own prototype; the real one is VIA-1071.
+
+The e-mail preview sits beside the sentence from `lg` up, and under it below.
+The alert's name is the band's title, edited in place. Saving uses the house
+`SaveBar`: always present, *All changes saved* when clean; a new alert is dirty
+from the start.
 
 ## 6. Schedule
 
@@ -142,10 +171,10 @@ Four modes, no cron ever shown:
 (Settings › Report contacts) — your point 4 of 19 Nov, taken as written. Plain
 e-mail addresses stay possible for ordinary alerts and live in `extraEmails`.
 
-The editor field is a chip input with type-ahead over contacts, plus:
-
-- **Copy from another alert** — from the 26 Nov call.
-- A typed address with an `@` becomes a plain recipient.
+The recipients slot opens a chip input with type-ahead over contacts. While
+nothing is typed, the list under it is the other alerts — **copy from another
+alert** (26 Nov call) is one press, not a dialog. A typed address with an `@`
+becomes a plain recipient.
 
 The Recipients tab exists for one job Katell named as the painful one: people
 change constantly, mostly at the operators, and today a swap is one alert at a
