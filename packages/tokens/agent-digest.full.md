@@ -6,9 +6,9 @@
 | | |
 |---|---|
 | Generated | 2026-11-27 |
-| DS repo | `1c238e1 (feat/compare-date-mockup)` |
-| Input | `dist/tokens.json`, sha256 `2afa819016a60382…` |
-| Observed | 76 semantic roles × 6 modes · 55 of 76 light roles are code-only · 99 tokens carry `a11yFix` |
+| DS repo | `206cc89 (feat/compare-date-mockup)` |
+| Input | `dist/tokens.json`, sha256 `e83915008c874eb4…` |
+| Observed | 84 semantic roles × 6 modes · 63 of 84 light roles are code-only · 99 tokens carry `a11yFix` |
 
 The four white-label themes, emitted **diff-only against `dark`** because they
 are re-accents rather than separate palettes — a dozen rows each, not 63.
@@ -22,7 +22,7 @@ contrast, so it no longer matches Figma.
 Colour values below are **resolved to hex**. The source is often `oklch()`; if you
 need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 
-## darkStone — differs from `dark` in 35 of 76 roles
+## darkStone — differs from `dark` in 35 of 84 roles
 
 | Role | dark | darkStone | P |
 |---|---|---|---|
@@ -62,7 +62,7 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `chart-categorical-6` | `#76a151` | `#78a94c` | C |
 | `chart-categorical-8` | `#0f91b2` | `#489bb6` | C |
 
-## darkSlate — differs from `dark` in 40 of 76 roles
+## darkSlate — differs from `dark` in 40 of 84 roles
 
 | Role | dark | darkSlate | P |
 |---|---|---|---|
@@ -107,7 +107,7 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `chart-categorical-6` | `#76a151` | `#78a94c` | C |
 | `chart-categorical-8` | `#0f91b2` | `#489bb6` | C |
 
-## fuchsia — differs from `dark` in 36 of 76 roles
+## fuchsia — differs from `dark` in 36 of 84 roles
 
 | Role | dark | fuchsia | P |
 |---|---|---|---|
@@ -148,7 +148,7 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `chart-categorical-6` | `#76a151` | `#78a94c` | C |
 | `chart-categorical-8` | `#0f91b2` | `#489bb6` | C |
 
-## gray — differs from `dark` in 43 of 76 roles
+## gray — differs from `dark` in 43 of 84 roles
 
 | Role | dark | gray | P |
 |---|---|---|---|

@@ -391,6 +391,69 @@ for (const mode of MODES) {
   });
 }
 
+/**
+ * Tool accents -- the active Tool's glyph in the nav rail.
+ *
+ * Held against `sidebar-accent`, NOT `background`: the Tile active treatment
+ * puts the glyph on the accent tile, and in the white-label themes that tile
+ * (stone-700, slate-700, gray-700) is markedly lighter than the page behind
+ * it. Testing against the page would pass values that are unreadable where
+ * they actually sit.
+ *
+ * 3:1, not 4.5:1, because nothing is written ON a Tool accent -- it IS the
+ * glyph, so WCAG 1.4.11 governs it and not 1.4.3.
+ */
+const TOOL_ACCENTS = Array.from({ length: 8 }, (_, i) => `tool-accent-${i + 1}`);
+
+for (const mode of MODES) {
+  test(`${mode}: every Tool accent clears 3:1 on the accent tile`, () => {
+    const t = themes[mode] as unknown as Record<string, string>;
+    const failures: string[] = [];
+    for (const name of TOOL_ACCENTS) {
+      const ratio = wcagContrast(t[name]!, t["sidebar-accent"]!);
+      if (ratio < 3)
+        failures.push(`  ${name}: ${ratio.toFixed(2)}:1 on sidebar-accent (need 3)`);
+    }
+    assert.equal(failures.length, 0, `\n${failures.join("\n")}\n`);
+  });
+
+  test(`${mode}: Tool accents stay separable under both CVD models`, () => {
+    const t = themes[mode] as unknown as Record<string, string>;
+    const failures: string[] = [];
+    for (let i = 0; i < TOOL_ACCENTS.length; i++) {
+      for (let j = i + 1; j < TOOL_ACCENTS.length; j++) {
+        const a = t[TOOL_ACCENTS[i]!]!;
+        const b = t[TOOL_ACCENTS[j]!]!;
+        const cvd = deficiencyGap(a, b);
+        // 8 is the floor the shipped categorical set achieves; holding Tool
+        // accents to the same bar keeps one standard in the system.
+        if (cvd < 8)
+          failures.push(
+            `  ${TOOL_ACCENTS[i]} vs ${TOOL_ACCENTS[j]}: colour-deficient dE2000 ${cvd.toFixed(1)} (need 8)`,
+          );
+      }
+    }
+    assert.equal(failures.length, 0, `\n${failures.join("\n")}\n`);
+  });
+
+  /**
+   * A Tool is a category, never a state. Red is the one hue that reads as
+   * "something is wrong" wherever it appears, so no Tool may land on it.
+   * `warning`, `success` and `info` are deliberately not checked here: those
+   * live on badges and alerts, never as a rail glyph.
+   */
+  test(`${mode}: no Tool accent can be mistaken for destructive`, () => {
+    const t = themes[mode] as unknown as Record<string, string>;
+    const failures: string[] = [];
+    for (const name of TOOL_ACCENTS) {
+      const gap = deltaE(t[name]!, t["destructive-ink"]!);
+      if (gap < 15)
+        failures.push(`  ${name}: dE2000 ${gap.toFixed(1)} from destructive-ink (need 15)`);
+    }
+    assert.equal(failures.length, 0, `\n${failures.join("\n")}\n`);
+  });
+}
+
 /** The first stop is the product primary, and that is a promise, not a default. */
 test("categorical stop 1 is the product primary", () => {
   const t = themes.light as unknown as Record<string, string>;

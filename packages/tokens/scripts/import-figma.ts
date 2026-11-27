@@ -178,13 +178,69 @@ const CATEGORICAL: Record<string, string[]> = {
   gray: ["#217e76", "#2f67f0", "#dc7702", "#e00d78", "#9758b4", "#78a94c", "#dd2824", "#489bb6"],
 };
 
+/**
+ * Tool accents: the colour one Tool takes in the nav rail, spent only while
+ * that Tool is the active one. A product with 60 Tools in a marketplace
+ * cycles these, so they repeat -- which costs nothing, because the Tile
+ * treatment colours only the ACTIVE item and two Tools sharing a hue are
+ * never on screen in colour at the same time.
+ *
+ * Why these are not `chart-categorical-*`, which is the set everyone reaches
+ * for first: those eight were derived to separate from EACH OTHER as marks on
+ * a plot, never to be read against a surface, and several fall under 3:1 on
+ * the light accent tile. These are derived against the tile instead.
+ *
+ * Derived, not drawn, under four constraints at once:
+ *   - >= 3:1 on `sidebar-accent` in all six themes. The binding tile is NOT
+ *     the dark theme's zinc-800 but the white-label themes' 700-step tiles
+ *     (#44403c, #334155, #374151), which are lighter.
+ *   - every entry inside one narrow contrast band, so no Tool's glyph reads
+ *     heavier or fainter than another's.
+ *   - CIEDE2000 >= 8.5 between any two, under normal vision and under BOTH a
+ *     Machado and a Vienot simulation of deuteranopia and protanopia -- the
+ *     floor the shipped categorical set itself achieves. Both models, because
+ *     the first pass of these optimised Machado alone and shipped three pairs
+ *     that Vienot put at 7.4-7.9; the suite caught them.
+ *   - >= 15 from `destructive`. Red is the one hue that reads as "something
+ *     is wrong" wherever it lands, and a Tool is a category, not a state.
+ *     `warning`, `success` and `info` are deliberately NOT excluded: those
+ *     roles live on badges, toasts and alerts, never as a rail glyph, so the
+ *     collision is theoretical. Teal is held only 8 off `primary-ink`, far
+ *     enough that a teal Tool is not identical to one with no colour set.
+ *
+ * Anchored across the wheel rather than left free: a solver maximising
+ * separation alone returns metrically fine sets with no blue in them and two
+ * entries on one hue. A palette people have to name out loud needs to span
+ * the spectrum, so each entry is pinned near its anchor and tuned inside it.
+ *
+ * Like CATEGORICAL, they live HERE and not in extensions.tokens.json, which
+ * this script rewrites from scratch on every run.
+ *
+ * Ink only. Nothing is written on a Tool accent -- the tile underneath it is
+ * neutral -- so these are held to 3:1 as a graphic, never to 4.5:1 as a fill.
+ */
+const TOOL_ACCENTS: [name: string, light: string, dark: string][] = [
+  ["orange", "#8f4100", "#ffa673"],
+  ["gold", "#927400", "#c09d2e"],
+  ["green", "#006a35", "#83e2a1"],
+  ["teal", "#00664f", "#1fb48f"],
+  ["sky", "#006169", "#00aebb"],
+  ["blue", "#5e72c5", "#a8bcff"],
+  ["violet", "#614ca0", "#a391eb"],
+  ["magenta", "#b0588c", "#ffbadf"],
+];
+
 /** Token descriptions that survive into the DTCG source. */
-const DESCRIPTIONS: Record<string, string> = Object.fromEntries(
-  CATEGORICAL_HUES.map((hue, i) => [
+const DESCRIPTIONS: Record<string, string> = Object.fromEntries([
+  ...CATEGORICAL_HUES.map((hue, i) => [
     `chart-categorical-${i + 1}`,
     `Categorical series ${i + 1} (${hue}).`,
   ]),
-);
+  ...TOOL_ACCENTS.map(([name], i) => [
+    `tool-accent-${i + 1}`,
+    `Tool accent ${i + 1} (${name}) -- the active Tool's glyph in the nav rail. Ink only.`,
+  ]),
+]);
 
 const CHARTS: Record<string, string[]> = {
   light: ["emerald.600", "fuchsia.500", "amber.600", "sky.800", "rose.800"],
@@ -319,6 +375,12 @@ for (const mode of MODES) {
     ),
     ...Object.fromEntries(
       CATEGORICAL[mode]!.map((hex, i) => [`chart-categorical-${i + 1}`, hex]),
+    ),
+    ...Object.fromEntries(
+      TOOL_ACCENTS.map(([, light, dark], i) => [
+        `tool-accent-${i + 1}`,
+        lite ? light : dark,
+      ]),
     ),
   };
 }

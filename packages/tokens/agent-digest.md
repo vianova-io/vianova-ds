@@ -6,9 +6,9 @@
 | | |
 |---|---|
 | Generated | 2026-11-27 |
-| DS repo | `1c238e1 (feat/compare-date-mockup)` |
-| Input | `dist/tokens.json`, sha256 `2afa819016a60382…` |
-| Observed | 76 semantic roles × 6 modes · 55 of 76 light roles are code-only · 99 tokens carry `a11yFix` |
+| DS repo | `206cc89 (feat/compare-date-mockup)` |
+| Input | `dist/tokens.json`, sha256 `e83915008c874eb4…` |
+| Observed | 84 semantic roles × 6 modes · 63 of 84 light roles are code-only · 99 tokens carry `a11yFix` |
 
 Light and dark, which is what nearly every task needs. The four white-label
 themes and the primitive index are in `agent-digest.full.md`.
@@ -101,6 +101,14 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `chart-categorical-6` | `--chart-categorical-6` | `#76a151` | `#76a151` | C | — |
 | `chart-categorical-7` | `--chart-categorical-7` | `#dd2824` | `#dd2824` | C | — |
 | `chart-categorical-8` | `--chart-categorical-8` | `#0f91b2` | `#0f91b2` | C | — |
+| `tool-accent-1` | `--tool-accent-1` | `#8f4100` | `#ffa673` | C | — |
+| `tool-accent-2` | `--tool-accent-2` | `#927400` | `#c09d2e` | C | — |
+| `tool-accent-3` | `--tool-accent-3` | `#006a35` | `#83e2a1` | C | — |
+| `tool-accent-4` | `--tool-accent-4` | `#00664f` | `#1fb48f` | C | — |
+| `tool-accent-5` | `--tool-accent-5` | `#006169` | `#00aebb` | C | — |
+| `tool-accent-6` | `--tool-accent-6` | `#5e72c5` | `#a8bcff` | C | — |
+| `tool-accent-7` | `--tool-accent-7` | `#614ca0` | `#a391eb` | C | — |
+| `tool-accent-8` | `--tool-accent-8` | `#b0588c` | `#ffbadf` | C | — |
 
 ## Foundations
 
