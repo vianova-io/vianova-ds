@@ -79,19 +79,23 @@ The tool's band carries its name and **Create alert**. Under it, two tabs with
 counts — **Alerts** and **Recipients** — the way Feeds draws *Your feeds* and
 *Catalogue*.
 
-Columns: **Name** · Rule · Sent to · When · Last sent · On. One line per alert.
+Columns, as in Katell's prototype: **Name** · Created by · Date · Sent to ·
+Last sent · On. One line per alert.
 
 - The name links into the editor.
-- **Rule** is the no-parking rule watched, with its type icon; the regulation
-  it belongs to is in the tooltip.
-- **Sent to** shows the first recipient and `+N`.
-- **When** is the short form: *Every hour*, *Daily · 08:00*, *Mondays · 09:00*,
-  *Monthly · 08:00*.
+- **Date** is when the alert was created: *12 Nov 2026*.
+- **Sent to** shows the names themselves while there are one or two, then the
+  first name and a **+ N more** chip. A name opens Recipients on that person;
+  the chip opens the whole list for that alert, with *Open the alert* in its
+  footer. An address with no VIP account is shown as text, not a link.
+- **Last sent** is a day and a time on the scope's clock: *Today 10:00*,
+  *Yesterday 17:42*, *14 Nov 09:30*, or *Never sent*.
 - **On** is a switch for alert rows; for report rows it is a static badge with
   a tooltip naming the regulation where the switch lives.
-- Filter: search, and On and off / On / Off. Multi-select deletes, and report
-  rows cannot be ticked — a Delete that silently skipped half the selection is
-  worse than one that cannot select them.
+- Filter: search, and All / On / Off.
+- **No tick boxes and no bulk actions.** An alert is switched off far more
+  often than it is deleted, and the switch is on the row; Delete is in the
+  editor.
 - Sorted newest first.
 
 **From the backend:** `lastSentAt` is the one field you flagged as uncertain on

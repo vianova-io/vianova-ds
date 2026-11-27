@@ -66,7 +66,6 @@ import {
   TriangleAlert,
   UserCog,
   Users,
-  X,
 } from "lucide-react";
 
 import {
@@ -343,7 +342,7 @@ export const SAMPLE_ALERTS: Alert[] = [
     extraEmails: ["verkehr@landkreis.de"],
     createdBy: "Thomas Brandl",
     createdAt: "2026-11-12T14:30:00Z",
-    lastSentAt: "2026-11-27T07:00:00Z",
+    lastSentAt: "2026-11-26T07:00:00Z",
     on: true,
   },
   {
@@ -521,19 +520,50 @@ const recipientPhrase = (names: string[]) =>
         ? `${names[0]} and ${names[1]}`
         : `${names[0]} and ${names.length - 1} others`;
 
+/**
+ * The IANA name behind "Munich time". Every date on this page is formatted in
+ * it rather than in the reader's zone, for the reason the hours are: an alert
+ * sent at 09:00 in Munich was sent at 09:00, whoever is looking and from where.
+ * It also makes the server and the browser print the same string.
+ */
+const SCOPE_TZ = "Europe/Berlin";
+
+const dayKeyFmt = new Intl.DateTimeFormat("en-CA", { timeZone: SCOPE_TZ });
+const timeFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: SCOPE_TZ,
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+const dayFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: SCOPE_TZ,
+  day: "numeric",
+  month: "short",
+});
+const dateFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: SCOPE_TZ,
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+/** "12 Nov 2026". */
+const formatDate = (iso: string) => dateFmt.format(Date.parse(iso));
+
+/**
+ * "Today 10:00", "Yesterday 17:42", "14 Nov 09:30" -- or nothing, for an alert
+ * that has never sent. A day and a time rather than "3 h ago": the question
+ * someone brings to this column is "did this morning's one go out", and an
+ * hour on a clock answers it where an age has to be subtracted first.
+ */
 function formatSent(iso: string | undefined, now = NOW) {
-  if (!iso) return "Never";
+  if (!iso) return null;
   const then = Date.parse(iso);
-  const hours = Math.round((now - then) / 3_600_000);
-  if (hours < 1) return "Just now";
-  if (hours < 24) return `${hours} h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 7) return `${days} d ago`;
-  return new Date(then).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const time = timeFmt.format(then);
+  const day = dayKeyFmt.format(then);
+  if (day === dayKeyFmt.format(now)) return `Today ${time}`;
+  if (day === dayKeyFmt.format(now - 86_400_000)) return `Yesterday ${time}`;
+  return `${dayFmt.format(then)} ${time}`;
 }
 
 /** "Anja Reiter" -> "AR", "Vianova" -> "V". */
@@ -1665,11 +1695,221 @@ function AlertEditor({
 type OnFilter = "all" | "on" | "off";
 
 const ON_FILTERS: Record<OnFilter, string> = {
-  all: "On and off",
+  all: "All",
   on: "On",
   off: "Off",
 };
 
+/** Someone an alert goes to, as the list shows them. */
+type Person = {
+  key: string;
+  /** A contact's name, or the address itself for one with no VIP account. */
+  label: string;
+  email: string;
+  /** Only a contact has a row in Recipients to go to. */
+  contact: boolean;
+};
+
+function peopleOf(alert: Alert, contacts: Map<string, Contact>): Person[] {
+  return [
+    ...alert.recipientIds.flatMap((id) => {
+      const c = contacts.get(id);
+      return c
+        ? [{ key: c.id, label: c.name, email: c.email, contact: true }]
+        : [];
+    }),
+    ...alert.extraEmails.map((email) => ({
+      key: email,
+      label: email,
+      email,
+      contact: false,
+    })),
+  ];
+}
+
+/** A recipient's name as a way into Recipients; a plain address as text. */
+function PersonLink({
+  person,
+  onPerson,
+}: {
+  person: Person;
+  onPerson: (name: string) => void;
+}) {
+  if (!person.contact) {
+    return <span className="max-w-full truncate">{person.label}</span>;
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onPerson(person.label)}
+      // The ring paints outside the box, so nothing around a name may clip:
+      // the name truncates itself rather than being cut by its cell.
+      className="text-primary focus-visible:ring-ring max-w-full scroll-m-1 truncate rounded underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
+    >
+      {person.label}
+    </button>
+  );
+}
+
+/**
+ * Who an alert goes to, as Katell's list draws it: the names themselves while
+ * there are one or two, then the first name and "+ N more".
+ *
+ * Names, not a count. "3 recipients" says how many and nothing else, and the
+ * question this column answers is "does Stefan get this one" -- which a name
+ * answers at a glance and a number never does. The chip opens the rest.
+ */
+function SentTo({
+  people,
+  onPerson,
+  onAll,
+}: {
+  people: Person[];
+  onPerson: (name: string) => void;
+  onAll: () => void;
+}) {
+  if (people.length === 0) {
+    return <span className="text-muted-foreground">Nobody yet</span>;
+  }
+  const shown = people.length <= 2 ? people : people.slice(0, 1);
+  const rest = people.length - shown.length;
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      {shown.map((person, i) => (
+        <React.Fragment key={person.key}>
+          {i > 0 ? (
+            <span aria-hidden className="text-muted-foreground -ml-1.5">
+              ,
+            </span>
+          ) : null}
+          <PersonLink person={person} onPerson={onPerson} />
+        </React.Fragment>
+      ))}
+      {rest > 0 ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          className="shrink-0 scroll-m-1 rounded-full font-normal"
+          aria-label={`${plural(rest, "more recipient", "more recipients")}, show everyone`}
+          onClick={onAll}
+        >
+          + {rest} more
+        </Button>
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * Everyone an alert goes to.
+ *
+ * Behind "+ N more", because a Munich alert can have 121 recipients and a
+ * table cell cannot. Each name is the same way into Recipients it is in the
+ * row, and Open the alert is there for the other thing you might have come to
+ * do: change who is on it.
+ */
+function SentToDialog({
+  alert,
+  people,
+  onOpenChange,
+  onOpenAlert,
+  onPerson,
+}: {
+  alert: Alert | null;
+  people: Person[];
+  onOpenChange: (open: boolean) => void;
+  onOpenAlert: (id: string) => void;
+  onPerson: (name: string) => void;
+}) {
+  const [query, setQuery] = React.useState("");
+  // A different alert is a different list: nothing typed for one may be
+  // carried into the next.
+  React.useEffect(() => setQuery(""), [alert?.id]);
+
+  const q = query.trim().toLowerCase();
+  const visible = q
+    ? people.filter((p) => `${p.label} ${p.email}`.toLowerCase().includes(q))
+    : people;
+
+  return (
+    <Dialog open={alert !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{alert?.name}</DialogTitle>
+          <DialogDescription>
+            {plural(people.length, "person gets", "people get")} this alert.
+          </DialogDescription>
+        </DialogHeader>
+        {/* Worth a field only once the list is longer than the eye takes in. */}
+        {people.length > 8 ? (
+          <InputGroup>
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+            <InputGroupInput
+              placeholder="Search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Search this alert's recipients"
+            />
+          </InputGroup>
+        ) : null}
+        <div className="-mx-1 flex max-h-72 flex-col overflow-auto">
+          {visible.length === 0 ? (
+            <p className="text-muted-foreground px-2 py-3 text-sm">
+              Nobody matches.
+            </p>
+          ) : (
+            visible.map((person) =>
+              person.contact ? (
+                <button
+                  key={person.key}
+                  type="button"
+                  onClick={() => onPerson(person.label)}
+                  className="hover:bg-muted focus-visible:ring-ring/50 flex min-h-11 w-full flex-col justify-center rounded-md px-2 py-1.5 text-left outline-none focus-visible:ring-3"
+                >
+                  <span className="truncate text-sm">{person.label}</span>
+                  <span className="text-muted-foreground truncate text-xs">
+                    {person.email}
+                  </span>
+                </button>
+              ) : (
+                <p
+                  key={person.key}
+                  className="flex min-h-11 items-center truncate px-2 text-sm"
+                >
+                  {person.label}
+                </p>
+              ),
+            )
+          )}
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (alert) onOpenAlert(alert.id);
+            }}
+          >
+            Open the alert
+          </Button>
+          <Button onClick={() => onOpenChange(false)}>Done</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * The list, on Katell's columns: Name, Created by, Date, Sent to, Last sent,
+ * On.
+ *
+ * No tick boxes and no bulk bar. An alert is switched off far more often than
+ * it is deleted, the switch is already on the row, and deleting one is a thing
+ * you do having opened it and looked -- so Delete lives in the editor, and the
+ * table gives its first column back to the name.
+ */
 function AlertList({
   alerts,
   contacts,
@@ -1680,7 +1920,7 @@ function AlertList({
   onCreate,
   onOpen,
   onToggle,
-  onDelete,
+  onPerson,
 }: {
   alerts: Alert[];
   contacts: Map<string, Contact>;
@@ -1691,31 +1931,23 @@ function AlertList({
   onCreate: () => void;
   onOpen: (id: string) => void;
   onToggle: (id: string) => void;
-  onDelete: (ids: string[]) => void;
+  /** Opens Recipients on one person. */
+  onPerson: (name: string) => void;
 }) {
   const [query, setQuery] = React.useState("");
   const [on, setOn] = React.useState<OnFilter>("all");
-  const [selected, setSelected] = React.useState<string[]>([]);
+  /** The alert whose whole recipient list is open. */
+  const [listing, setListing] = React.useState<string | null>(null);
 
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
     return alerts
       .filter((a) => (on === "all" ? true : on === "on" ? a.on : !a.on))
       .filter(
-        (a) =>
-          !q ||
-          `${a.name} ${rules.get(a.ruleId)?.rule.name ?? ""}`
-            .toLowerCase()
-            .includes(q),
+        (a) => !q || `${a.name} ${a.createdBy}`.toLowerCase().includes(q),
       )
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  }, [alerts, on, query, rules]);
-
-  // An alert filtered out from under a tick must not stay ticked, or the
-  // toolbar would delete something the user can no longer see.
-  React.useEffect(() => {
-    setSelected((cur) => cur.filter((id) => visible.some((a) => a.id === id)));
-  }, [visible]);
+  }, [alerts, on, query]);
 
   const filtering = query.trim() !== "" || on !== "all";
   const clearFilters = () => {
@@ -1723,21 +1955,7 @@ function AlertList({
     setOn("all");
   };
 
-  // Report rules cannot be deleted from here, so they are never part of a
-  // batch: a Delete that silently skipped half the ticks would be worse than
-  // one that cannot tick them.
-  const deletable = visible.filter((a) => a.kind === "alert");
-  const allTicked =
-    deletable.length > 0 && selected.length === deletable.length;
-  const someTicked = selected.length > 0 && !allTicked;
-
-  const sentTo = (alert: Alert) => {
-    const named = alert.recipientIds.length + alert.extraEmails.length;
-    if (named === 0) return "Nobody yet";
-    const first =
-      contacts.get(alert.recipientIds[0] ?? "")?.name ?? alert.extraEmails[0];
-    return named === 1 ? (first ?? "1 recipient") : `${first} +${named - 1}`;
-  };
+  const listed = listing ? alerts.find((a) => a.id === listing) : undefined;
 
   return (
     <>
@@ -1758,7 +1976,7 @@ function AlertList({
           value={on}
           onValueChange={(v) => setOn((v ?? "all") as OnFilter)}
         >
-          <SelectTrigger className="w-36" aria-label="On or off">
+          <SelectTrigger className="w-24" aria-label="On or off">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1770,31 +1988,6 @@ function AlertList({
           </SelectContent>
         </Select>
       </div>
-
-      {selected.length > 0 ? (
-        <div className="bg-muted/50 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2">
-          <p aria-live="polite" className="text-sm">
-            <span className="font-medium">{selected.length}</span> selected
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                onDelete(selected);
-                setSelected([]);
-              }}
-            >
-              <Trash2 data-icon="inline-start" />
-              Delete
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
-              <X data-icon="inline-start" />
-              Clear
-            </Button>
-          </div>
-        </div>
-      ) : null}
 
       {status === "error" ? (
         <Empty className="min-h-fit flex-auto border">
@@ -1831,8 +2024,7 @@ function AlertList({
             </EmptyTitle>
             {filtering ? null : (
               <EmptyDescription>
-                An alert watches a no-parking rule and e-mails the people who
-                need to know.
+                Each one sends an e-mail when something happens in your data.
               </EmptyDescription>
             )}
           </EmptyHeader>
@@ -1867,25 +2059,12 @@ function AlertList({
               listed but set on their regulation.
             </caption>
             <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-12">
-                  <Checkbox
-                    checked={allTicked}
-                    indeterminate={someTicked}
-                    onCheckedChange={() =>
-                      setSelected(allTicked ? [] : deletable.map((a) => a.id))
-                    }
-                    disabled={status === "loading" || deletable.length === 0}
-                    aria-label={
-                      allTicked ? "Clear selection" : "Select every alert"
-                    }
-                  />
-                </TableHead>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
                 <TableHead>Name</TableHead>
-                <TableHead className="w-52">Rule</TableHead>
-                <TableHead className="w-44">Sent to</TableHead>
-                <TableHead className="w-36">When</TableHead>
-                <TableHead className="w-28">Last sent</TableHead>
+                <TableHead className="w-40">Created by</TableHead>
+                <TableHead className="w-32">Date</TableHead>
+                <TableHead className="w-72">Sent to</TableHead>
+                <TableHead className="w-36">Last sent</TableHead>
                 <TableHead className="w-20 text-right">On</TableHead>
               </TableRow>
             </TableHeader>
@@ -1894,22 +2073,19 @@ function AlertList({
                 ? Array.from({ length: 5 }, (_, i) => (
                     <TableRow key={i} className="hover:bg-transparent">
                       <TableCell>
-                        <Skeleton className="size-4 rounded-[4px]" />
-                      </TableCell>
-                      <TableCell>
                         <Skeleton className="h-4 w-3/4" />
                       </TableCell>
                       <TableCell>
-                        <Skeleton className="h-4 w-32" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-28" />
+                        <Skeleton className="h-4 w-24" />
                       </TableCell>
                       <TableCell>
                         <Skeleton className="h-4 w-20" />
                       </TableCell>
                       <TableCell>
-                        <Skeleton className="h-4 w-14" />
+                        <Skeleton className="h-4 w-40" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-20" />
                       </TableCell>
                       <TableCell>
                         <Skeleton className="ml-auto h-5 w-8 rounded-full" />
@@ -1917,32 +2093,11 @@ function AlertList({
                     </TableRow>
                   ))
                 : visible.map((alert) => {
-                    const ticked = selected.includes(alert.id);
                     const found = rules.get(alert.ruleId);
                     const report = alert.kind === "report";
+                    const sent = formatSent(alert.lastSentAt);
                     return (
-                      <TableRow
-                        key={alert.id}
-                        data-state={ticked ? "selected" : undefined}
-                      >
-                        <TableCell>
-                          <Checkbox
-                            checked={ticked}
-                            disabled={report}
-                            onCheckedChange={() =>
-                              setSelected((cur) => toggle(cur, alert.id))
-                            }
-                            aria-label={
-                              report
-                                ? `${alert.name} is set on its regulation`
-                                : `Select ${alert.name}`
-                            }
-                            // Not decoration: Tab scrolls a focused row flush
-                            // with the workspace's edge, and the ring paints
-                            // outside the box, so it would be cut.
-                            className="scroll-my-1"
-                          />
-                        </TableCell>
+                      <TableRow key={alert.id}>
                         <TableCell>
                           <span className="flex min-w-0 items-center gap-2">
                             <button
@@ -1968,64 +2123,64 @@ function AlertList({
                           </span>
                         </TableCell>
                         <TableCell>
-                          <span
-                            className="flex min-w-0 items-center gap-2"
-                            title={
-                              found
-                                ? `${found.regulation.name} · ${found.rule.name}`
-                                : undefined
-                            }
-                          >
-                            {found ? (
-                              <RuleTypeIcon type={found.rule.type} size="sm" />
-                            ) : null}
-                            <span className="text-muted-foreground truncate">
-                              {found?.rule.name ?? "Deleted rule"}
-                            </span>
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="block truncate">{sentTo(alert)}</span>
-                        </TableCell>
-                        <TableCell>
                           <span className="block truncate">
-                            {scheduleLabel(alert.schedule)}
+                            {alert.createdBy}
                           </span>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {formatSent(alert.lastSentAt)}
+                          {formatDate(alert.createdAt)}
                         </TableCell>
                         <TableCell>
+                          <SentTo
+                            people={peopleOf(alert, contacts)}
+                            onPerson={onPerson}
+                            onAll={() => setListing(alert.id)}
+                          />
+                        </TableCell>
+                        <TableCell
+                          className={
+                            sent ? "font-medium" : "text-muted-foreground"
+                          }
+                        >
+                          {sent ?? "Never sent"}
+                        </TableCell>
+                        <TableCell>
+                          {/* Against the right edge, not under the left of
+                              its header. Tab scrolls a control only just into
+                              view, and in the last column that leaves its ring
+                              cut by the table's own scroll edge -- measured at
+                              2.4px on the report badge. At the end of the row
+                              the cell's inset is always there to paint on. */}
                           <div className="flex items-center justify-end">
-                            {report ? (
-                              <Tooltip>
-                                <TooltipTrigger
-                                  render={
-                                    <span
-                                      tabIndex={0}
-                                      className="focus-visible:ring-ring inline-flex scroll-m-1 rounded focus-visible:ring-2 focus-visible:outline-none"
-                                    >
-                                      <StatusBadge tone="info">On</StatusBadge>
-                                    </span>
-                                  }
-                                />
-                                <TooltipContent>
-                                  Switched on its regulation
-                                  {found ? `, ${found.regulation.name}` : ""}
-                                </TooltipContent>
-                              </Tooltip>
-                            ) : (
-                              <Switch
-                                checked={alert.on}
-                                onCheckedChange={() => onToggle(alert.id)}
-                                aria-label={
-                                  alert.on
-                                    ? `Turn off ${alert.name}`
-                                    : `Turn on ${alert.name}`
+                          {report ? (
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <span
+                                    tabIndex={0}
+                                    className="focus-visible:ring-ring inline-flex scroll-m-1 rounded focus-visible:ring-2 focus-visible:outline-none"
+                                  >
+                                    <StatusBadge tone="info">On</StatusBadge>
+                                  </span>
                                 }
-                                className="scroll-m-1"
                               />
-                            )}
+                              <TooltipContent>
+                                Switched on its regulation
+                                {found ? `, ${found.regulation.name}` : ""}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <Switch
+                              checked={alert.on}
+                              onCheckedChange={() => onToggle(alert.id)}
+                              aria-label={
+                                alert.on
+                                  ? `Turn off ${alert.name}`
+                                  : `Turn on ${alert.name}`
+                              }
+                              className="scroll-m-1"
+                            />
+                          )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -2041,9 +2196,25 @@ function AlertList({
           {visible.length === alerts.length
             ? plural(alerts.length, "alert", "alerts")
             : `${visible.length} of ${plural(alerts.length, "alert", "alerts")}`}{" "}
-          · hours are {SCOPE_TIME_ZONE}
+          · times are {SCOPE_TIME_ZONE}
         </p>
       ) : null}
+
+      <SentToDialog
+        alert={listed ?? null}
+        people={listed ? peopleOf(listed, contacts) : []}
+        onOpenChange={(open) => {
+          if (!open) setListing(null);
+        }}
+        onOpenAlert={(id) => {
+          setListing(null);
+          onOpen(id);
+        }}
+        onPerson={(name) => {
+          setListing(null);
+          onPerson(name);
+        }}
+      />
     </>
   );
 }
@@ -2067,17 +2238,20 @@ function AlertList({
 function RecipientList({
   contacts,
   alerts,
+  initialQuery = "",
   onReplace,
   onRemove,
   onOpenAlert,
 }: {
   contacts: Contact[];
   alerts: Alert[];
+  /** What the search opens holding -- a name pressed in the alerts list. */
+  initialQuery?: string;
   onReplace: (fromId: string, toId: string) => void;
   onRemove: (id: string) => void;
   onOpenAlert: (id: string) => void;
 }) {
-  const [query, setQuery] = React.useState("");
+  const [query, setQuery] = React.useState(initialQuery);
   const [replacing, setReplacing] = React.useState<Contact | null>(null);
 
   const alertsFor = React.useCallback(
@@ -2337,6 +2511,8 @@ export function AlertsWorkspace({
   const [alerts, setAlerts] = React.useState(initialAlerts);
   const [contacts, setContacts] = React.useState(initialContacts);
   const [section, setSection] = React.useState<Section>("alerts");
+  /** The person the Recipients view opens on, when a name was pressed. */
+  const [person, setPerson] = React.useState("");
   const [view, setView] = React.useState<View>({ kind: "list" });
   const [drafts, setDrafts] = React.useState<Record<string, Alert>>({});
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -2528,7 +2704,11 @@ export function AlertsWorkspace({
 
               <SectionTabs
                 value={section}
-                onChange={setSection}
+                onChange={(next) => {
+                  // Arriving by the tab is arriving at the whole list.
+                  setPerson("");
+                  setSection(next);
+                }}
                 alerts={alerts.length}
                 recipients={contacts.length}
               />
@@ -2548,10 +2728,16 @@ export function AlertsWorkspace({
                       all.map((a) => (a.id === id ? { ...a, on: !a.on } : a)),
                     )
                   }
-                  onDelete={remove}
+                  onPerson={(name) => {
+                    setPerson(name);
+                    setSection("recipients");
+                  }}
                 />
               ) : (
                 <RecipientList
+                  // A different person asked for is a different search.
+                  key={person}
+                  initialQuery={person}
                   contacts={contacts}
                   alerts={alerts}
                   onOpenAlert={open}
