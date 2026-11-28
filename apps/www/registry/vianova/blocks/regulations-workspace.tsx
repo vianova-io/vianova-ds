@@ -416,10 +416,14 @@ export function RegulationsWorkspace({
   /** Looks up places for the map's search field. Omitted, there is none. */
   geocode?: Geocode;
   /**
-   * Whether this scope has the Alerts tool. Without it a no-parking rule has
-   * no Alerts switch and the list has no Alerts badge: neither is drawn at
-   * all, rather than drawn and disabled, because a scope that does not have
-   * the tool has nowhere to send someone who asks what the switch would do.
+   * Whether this scope has BOTH the Alerts tool and the Reported devices
+   * tool. The switch makes an alert and files a reported device, so it needs
+   * a page to list the first and a page to follow up the second (call of 26
+   * Nov). Without both, a no-parking rule has no Alerts switch and the list
+   * has no Alerts badge: neither is drawn at all, rather than drawn and
+   * disabled, because a scope that does not have the tools has nowhere to
+   * send someone who asks what the switch would do. The host works it out;
+   * the block cannot see which tools a scope has.
    */
   alerts?: boolean;
   onRetry?: () => void;
