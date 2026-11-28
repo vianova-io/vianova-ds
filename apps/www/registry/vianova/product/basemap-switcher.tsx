@@ -165,7 +165,7 @@ export function BasemapSwitcher({
                   className={cn(
                     "relative size-14 cursor-pointer rounded-[4px] transition-opacity",
                     "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-                    selected ? "ring-2 ring-primary" : "ring-1 ring-border",
+                    selected ? "ring-2 ring-primary-ink" : "ring-1 ring-border",
                     !selected && "opacity-85 hover:opacity-100",
                   )}
                 >

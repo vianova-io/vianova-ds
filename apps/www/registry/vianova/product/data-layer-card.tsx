@@ -52,6 +52,7 @@ import { cn } from "@/registry/vianova/lib/utils";
 export function DataLayerCard({
   name,
   meta,
+  metaCompare,
   metaIcon,
   legend,
   visualization,
@@ -78,6 +79,15 @@ export function DataLayerCard({
   name: string;
   /** Date range and measure, e.g. "Jan 1 – Dec 31, 2024 · Count distinct trip id". */
   meta?: string;
+  /**
+   * A second meta line, for the period this layer is compared against.
+   *
+   * Its own line rather than appended to `meta`, because two periods and a
+   * row count on one line race for the same width and the count loses. VIP
+   * writes it "Compared to ...", and it is absent whenever nothing is being
+   * compared.
+   */
+  metaCompare?: string;
   /** Glyph for the measure the meta line describes, e.g. `<Hash />` for a count. */
   metaIcon?: React.ReactNode;
   /**
@@ -241,10 +251,15 @@ export function DataLayerCard({
       </div>
 
       {meta ? (
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground [&_svg]:size-3.5">
-          {metaIcon}
-          {meta}
-        </p>
+        <>
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground [&_svg]:size-3.5">
+            {metaIcon}
+            {meta}
+          </p>
+          {metaCompare ? (
+            <p className="text-xs text-muted-foreground">{metaCompare}</p>
+          ) : null}
+        </>
       ) : null}
 
       {legendNode === null ? null : onColorize ? (

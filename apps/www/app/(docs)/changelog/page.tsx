@@ -36,9 +36,9 @@ function readChangelog(): { entries: Entry[]; repo: string | null; partial?: boo
 
 /** Conventional-commit types worth surfacing, with how they should read. */
 const TYPES: Record<string, { label: string; className: string }> = {
-  feat: { label: "Feature", className: "bg-success/15 text-success border-success/25" },
-  fix: { label: "Fix", className: "bg-destructive/10 text-destructive border-destructive/25" },
-  perf: { label: "Performance", className: "bg-info/15 text-info border-info/25" },
+  feat: { label: "Feature", className: "bg-success-ink/15 text-success-ink border-success-ink/25" },
+  fix: { label: "Fix", className: "bg-destructive-ink/10 text-destructive-ink border-destructive-ink/25" },
+  perf: { label: "Performance", className: "bg-info-ink/15 text-info-ink border-info-ink/25" },
   refactor: { label: "Refactor", className: "" },
   docs: { label: "Docs", className: "" },
   style: { label: "Style", className: "" },

@@ -47,7 +47,7 @@ export function ColorStopList({
           onPointerDown={() => onSelect?.(i)}
           className={cn(
             "flex items-center gap-2 rounded-md p-1",
-            selectedIndex === i && "bg-accent ring-1 ring-primary",
+            selectedIndex === i && "bg-accent ring-1 ring-primary-ink",
           )}
         >
           <Input

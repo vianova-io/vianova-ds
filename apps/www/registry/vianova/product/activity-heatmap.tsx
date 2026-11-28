@@ -55,6 +55,8 @@ export function ActivityHeatmap({
   counts,
   formatCount = (n) => n.toLocaleString("en-GB"),
   countUnit,
+  ramp = "sequential",
+  fill = false,
   className,
   ...props
 }: React.ComponentProps<"div"> & {
@@ -69,9 +71,51 @@ export function ActivityHeatmap({
   formatCount?: (count: number) => string;
   /** e.g. "trips". Only used when `counts` is given. */
   countUnit?: React.ReactNode;
+  /**
+   * What the colour means, which decides the ramp.
+   *
+   * `sequential` (the default) reads `values` as 0-1 magnitudes against the
+   * active map scheme. Right whenever more colour means more of something.
+   *
+   * `diverging` reads them as -1 to 1 SIGNED values, where zero is no change.
+   * Added for period-over-period comparison, which is the case a sequential
+   * ramp gets actively wrong: scaled 0-1, every fall in the grid lands at the
+   * pale end next to the genuinely small numbers, so a collapse and a quiet
+   * hour look alike. Here the midpoint is the surface itself, so no change is
+   * literally nothing, and the two directions are two hues.
+   */
+  ramp?: "sequential" | "diverging";
+  /**
+   * Grow the rows to fill the height the grid is given, instead of drawing
+   * them at a fixed 14px.
+   *
+   * A heatmap has no natural height -- seven rows of anything is as valid as
+   * seven rows of 14px -- so in a card whose height the reader sets, the fixed
+   * size leaves whatever is left over empty. Cells keep 14px as a floor, so a
+   * grid squeezed below that overflows its container rather than thinning to
+   * hairlines; give it a scrolling parent.
+   */
+  fill?: boolean;
 }) {
   const stopFor = (v: number) =>
     Math.min(100, Math.max(0, Math.round((v * 100) / 10) * 10));
+
+  /**
+   * The DS's own "Brown-Teal" diverging pair (`lib/color-ramp.ts`), flagged
+   * colour-blind safe there. Red-Blue is the other one and the more common
+   * convention, but red already means `critical` in the status palette, and
+   * spending it on an arithmetic sign both misleads here and devalues it
+   * there.
+   *
+   * The midpoint is `var(--card)` rather than the palette's own `#f5f5f5`, so
+   * "no change" is the surface the grid sits on and the result is correct in
+   * both themes without a second set of values.
+   */
+  const fillFor = (v: number) => {
+    if (ramp !== "diverging") return `var(--map-ramp-${stopFor(v)})`;
+    const mix = Math.min(100, Math.round(Math.abs(v) * 100));
+    return `color-mix(in oklab, ${v >= 0 ? "#01665e" : "#8c510a"} ${mix}%, var(--card))`;
+  };
 
   const gridRef = React.useRef<HTMLDivElement>(null);
   const [hover, setHover] = React.useState<
@@ -104,18 +148,29 @@ export function ActivityHeatmap({
   const label = (cell: ActivityHeatmapCell) =>
     [cell.row, cell.column].filter(Boolean).join(" ");
 
-  const readout = (cell: ActivityHeatmapCell) =>
-    cell.count !== undefined
-      ? formatCount(cell.count)
-      : `${Math.round(cell.value * 100)}%`;
+  const readout = (cell: ActivityHeatmapCell) => {
+    if (cell.count !== undefined) return formatCount(cell.count);
+    const pct = Math.round(cell.value * 100);
+    // A signed ramp needs a signed readout: "28%" on a cell that FELL is a
+    // plain misreport, and the sign is the whole point of the view.
+    return ramp === "diverging" && pct > 0 ? `+${pct}%` : `${pct}%`;
+  };
 
   const unitFor = (cell: ActivityHeatmapCell) =>
-    cell.count !== undefined ? countUnit : "of peak";
+    cell.count !== undefined
+      ? countUnit
+      : ramp === "diverging"
+        ? "of the largest change"
+        : "of peak";
 
   return (
     <div
       data-slot="activity-heatmap"
-      className={cn("relative space-y-1", className)}
+      className={cn(
+        "relative",
+        fill ? "flex h-full min-h-0 flex-col gap-1" : "space-y-1",
+        className,
+      )}
       ref={gridRef}
       onPointerLeave={() => setHover(null)}
       onPointerMove={(event) => {
@@ -137,11 +192,14 @@ export function ActivityHeatmap({
       {...props}
     >
       {rows.map((row, r) => (
-        <div key={row} className="flex items-center gap-2">
+        <div
+          key={row}
+          className={cn("flex items-center gap-2", fill && "min-h-3.5 flex-1")}
+        >
           <span className="w-14 shrink-0 truncate text-[10px] text-muted-foreground">
             {row}
           </span>
-          <div className="flex flex-1 gap-px">
+          <div className={cn("flex flex-1 gap-px", fill && "h-full")}>
             {(values[r] ?? []).map((v, c) => {
               const cell = describe(r, c);
               return (
@@ -152,11 +210,12 @@ export function ActivityHeatmap({
                     unitFor(cell) ? ` ${unitFor(cell)}` : ""
                   }`}
                   className={cn(
-                    "h-3.5 flex-1 rounded-[1px]",
+                    "flex-1 rounded-[1px]",
+                    fill ? "h-full" : "h-3.5",
                     hover?.rowIndex === r && hover?.columnIndex === c &&
                       "outline outline-1 outline-offset-1 outline-foreground/40",
                   )}
-                  style={{ background: `var(--map-ramp-${stopFor(v)})` }}
+                  style={{ background: fillFor(v) }}
                 />
               );
             })}

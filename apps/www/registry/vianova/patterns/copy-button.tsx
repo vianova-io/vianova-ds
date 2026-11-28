@@ -63,7 +63,7 @@ export function CopyButton({
         }}
         {...props}
       >
-        {copied ? <CheckIcon className="text-success" /> : <CopyIcon />}
+        {copied ? <CheckIcon className="text-success-ink" /> : <CopyIcon />}
         {size !== "icon" ? <span>{copied ? copiedLabel : label}</span> : null}
       </Button>
       <span aria-live="polite" className="sr-only">

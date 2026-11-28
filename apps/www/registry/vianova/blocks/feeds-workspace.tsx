@@ -942,7 +942,7 @@ function RequestDialog({
                 })}
               </div>
               {endpoints.length === 0 ? (
-                <FieldDescription className="text-destructive">
+                <FieldDescription className="text-destructive-ink">
                   Choose at least one endpoint.
                 </FieldDescription>
               ) : null}

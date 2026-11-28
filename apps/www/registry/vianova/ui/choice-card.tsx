@@ -172,7 +172,7 @@ function ChoiceCard({
         <span
           aria-hidden
           data-slot="choice-card-icon"
-          className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-data-checked/choice-card:bg-primary/10 group-data-checked/choice-card:text-primary [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4"
+          className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-data-checked/choice-card:bg-primary-ink/10 group-data-checked/choice-card:text-primary-ink [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4"
         >
           {icon}
         </span>
@@ -242,7 +242,7 @@ function ChoiceCard({
       className={cn(
         CARD_BASE,
         "not-data-checked:not-data-disabled:hover:bg-muted/50",
-        "data-checked:border-primary data-checked:bg-primary/5 dark:data-checked:bg-primary/10",
+        "data-checked:border-primary-ink data-checked:bg-primary-ink/5 dark:data-checked:bg-primary-ink/10",
         "data-disabled:cursor-not-allowed data-disabled:opacity-60",
         className,
       )}

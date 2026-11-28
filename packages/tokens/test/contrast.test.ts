@@ -45,14 +45,34 @@ const TEXT_PAIRS: Array<[fg: string, bg: string]> = [
   ["secondary-foreground", "secondary"],
   ["muted-foreground", "muted"],
   ["muted-foreground", "background"],
-  // Used as text by variant="link" and anything with text-primary. Omitting it
-  // is why a 3.63:1 link button reached the browser unnoticed.
-  ["primary", "background"],
+  // `["primary", "background"]` used to sit here, pinning the FILL at 4.5:1 as
+  // if it were text -- which it was, because one token did both jobs. It is
+  // gone, and deliberately: a fill is held to `primary-foreground on primary`
+  // above, and the text bar moved to `primary-ink` below, where it belongs.
+  // Asserting both of a single token is what forced the near-black foregrounds
+  // in the first place; see the note above `extensions` in import-figma.ts.
   ["accent-foreground", "accent"],
   ["destructive-foreground", "destructive"],
   ["success-foreground", "success"],
   ["warning-foreground", "warning"],
   ["info-foreground", "info"],
+  // The ink half of each role that has one: `text-primary`, `text-destructive`,
+  // `text-success`, `text-info` and their `border-*`/`ring-*` siblings.
+  //
+  // Checked on `card` as well as `background`, and that is not belt-and-braces:
+  // in every dark theme the card is LIGHTER than the page, so ink that passes
+  // on the page can still fail inside every dialog and popover. The old
+  // `["primary", "background"]` pair caught only half of that, and only for
+  // primary -- `text-destructive` has 60 uses and was never checked at all,
+  // which is how red-900 on `#292524` sat at 1.3:1 in three themes.
+  ["primary-ink", "background"],
+  ["primary-ink", "card"],
+  ["destructive-ink", "background"],
+  ["destructive-ink", "card"],
+  ["success-ink", "background"],
+  ["success-ink", "card"],
+  ["info-ink", "background"],
+  ["info-ink", "card"],
   ["sidebar-foreground", "sidebar"],
   ["sidebar-primary-foreground", "sidebar-primary"],
   ["sidebar-accent-foreground", "sidebar-accent"],
@@ -366,6 +386,69 @@ for (const mode of MODES) {
       // 3:1 is the WCAG 1.4.11 bar for a graphical object, which is what a
       // Sankey node or a map dot is.
       if (ratio < 3) failures.push(`  ${name}: ${ratio.toFixed(2)}:1 on background (need 3)`);
+    }
+    assert.equal(failures.length, 0, `\n${failures.join("\n")}\n`);
+  });
+}
+
+/**
+ * Tool accents -- the active Tool's glyph in the nav rail.
+ *
+ * Held against `sidebar-accent`, NOT `background`: the Tile active treatment
+ * puts the glyph on the accent tile, and in the white-label themes that tile
+ * (stone-700, slate-700, gray-700) is markedly lighter than the page behind
+ * it. Testing against the page would pass values that are unreadable where
+ * they actually sit.
+ *
+ * 3:1, not 4.5:1, because nothing is written ON a Tool accent -- it IS the
+ * glyph, so WCAG 1.4.11 governs it and not 1.4.3.
+ */
+const TOOL_ACCENTS = Array.from({ length: 8 }, (_, i) => `tool-accent-${i + 1}`);
+
+for (const mode of MODES) {
+  test(`${mode}: every Tool accent clears 3:1 on the accent tile`, () => {
+    const t = themes[mode] as unknown as Record<string, string>;
+    const failures: string[] = [];
+    for (const name of TOOL_ACCENTS) {
+      const ratio = wcagContrast(t[name]!, t["sidebar-accent"]!);
+      if (ratio < 3)
+        failures.push(`  ${name}: ${ratio.toFixed(2)}:1 on sidebar-accent (need 3)`);
+    }
+    assert.equal(failures.length, 0, `\n${failures.join("\n")}\n`);
+  });
+
+  test(`${mode}: Tool accents stay separable under both CVD models`, () => {
+    const t = themes[mode] as unknown as Record<string, string>;
+    const failures: string[] = [];
+    for (let i = 0; i < TOOL_ACCENTS.length; i++) {
+      for (let j = i + 1; j < TOOL_ACCENTS.length; j++) {
+        const a = t[TOOL_ACCENTS[i]!]!;
+        const b = t[TOOL_ACCENTS[j]!]!;
+        const cvd = deficiencyGap(a, b);
+        // 8 is the floor the shipped categorical set achieves; holding Tool
+        // accents to the same bar keeps one standard in the system.
+        if (cvd < 8)
+          failures.push(
+            `  ${TOOL_ACCENTS[i]} vs ${TOOL_ACCENTS[j]}: colour-deficient dE2000 ${cvd.toFixed(1)} (need 8)`,
+          );
+      }
+    }
+    assert.equal(failures.length, 0, `\n${failures.join("\n")}\n`);
+  });
+
+  /**
+   * A Tool is a category, never a state. Red is the one hue that reads as
+   * "something is wrong" wherever it appears, so no Tool may land on it.
+   * `warning`, `success` and `info` are deliberately not checked here: those
+   * live on badges and alerts, never as a rail glyph.
+   */
+  test(`${mode}: no Tool accent can be mistaken for destructive`, () => {
+    const t = themes[mode] as unknown as Record<string, string>;
+    const failures: string[] = [];
+    for (const name of TOOL_ACCENTS) {
+      const gap = deltaE(t[name]!, t["destructive-ink"]!);
+      if (gap < 15)
+        failures.push(`  ${name}: dE2000 ${gap.toFixed(1)} from destructive-ink (need 15)`);
     }
     assert.equal(failures.length, 0, `\n${failures.join("\n")}\n`);
   });

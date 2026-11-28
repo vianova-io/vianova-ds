@@ -490,7 +490,7 @@ export default function FoundationsPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <code className="text-xs">{logo.file}</code>
                   {"primary" in logo && logo.primary ? (
-                    <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                    <span className="rounded bg-primary-ink/15 px-1.5 py-0.5 text-[10px] font-medium text-primary-ink">
                       PRIMARY
                     </span>
                   ) : null}
@@ -528,7 +528,7 @@ export default function FoundationsPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <code className="text-xs">{symbol.file}</code>
                     {"primarySymbol" in symbol && symbol.primarySymbol ? (
-                      <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                      <span className="rounded bg-primary-ink/15 px-1.5 py-0.5 text-[10px] font-medium text-primary-ink">
                         PRIMARY
                       </span>
                     ) : null}
@@ -1135,7 +1135,7 @@ export default function FoundationsPage() {
             return (
               <div key={name} className="space-y-1.5">
                 <div
-                  className="size-20 border-2 border-primary bg-primary/10"
+                  className="size-20 border-2 border-primary-ink bg-primary-ink/10"
                   style={{ borderRadius: t.value }}
                 />
                 <p className="text-xs text-muted-foreground">

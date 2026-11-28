@@ -75,6 +75,8 @@ const trip = (over: Partial<Trip>): Trip => ({
   distanceM: 2000,
   lon: -9.14,
   lat: 38.72,
+  endLon: -9.13,
+  endLat: 38.71,
   ...over,
 });
 

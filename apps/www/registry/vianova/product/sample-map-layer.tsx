@@ -10,6 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/registry/vianova/ui/popover";
+import { Separator } from "@/registry/vianova/ui/separator";
 import { Skeleton } from "@/registry/vianova/ui/skeleton";
 import {
   ColorizePanel,
@@ -21,6 +22,13 @@ import { FilterBuilder } from "@/registry/vianova/product/filter-builder";
 import { FilterFacets } from "@/registry/vianova/product/filter-facets";
 import { LegendCategorical } from "@/registry/vianova/product/legend-categorical";
 import { LegendRamp } from "@/registry/vianova/product/legend-ramp";
+import {
+  compareBlockedReason,
+  formatTemporal,
+  withinTemporal,
+  type TemporalFilter,
+} from "@/registry/vianova/lib/compare";
+import { DateComparePanel } from "@/registry/vianova/product/date-compare-panel";
 import {
   PanelStep,
   PanelStepBody,
@@ -126,6 +134,15 @@ const plain = new Intl.NumberFormat("en");
  * visualisations and silently does nothing for five of them is worse than one
  * that says which two apply and why.
  */
+/**
+ * Why a feed that claims to be an events log still cannot be cut into
+ * periods: nobody said which column holds the time. Distinct from the
+ * snapshot and static reasons, which are about what the rows MEAN -- this one
+ * is a gap in the feed's description, and it is fixable.
+ */
+const NO_DATE_COLUMN =
+  "This layer has no date column declared, so there is no period to read it over.";
+
 const UNAVAILABLE: Record<"point" | "area", readonly VisualizationTypeId[]> = {
   point: ["clusters", "grid", "heatmap", "lines", "zones", "trips"],
   area: ["points", "clusters", "grid", "heatmap", "lines", "trips"],
@@ -184,6 +201,36 @@ export function SampleMapLayer({
    */
   sizeControl?: "shipped" | "panel";
 }) {
+  /**
+   * The period this layer is read over, and what it is read against.
+   *
+   * Per layer rather than per workspace, which is the decision the block
+   * already made for filters, colour and size: a map holds feeds that do not
+   * share a calendar -- an events log beside a static zone set -- and one
+   * date control over all of them would have to be disabled by whichever
+   * layer could not use it.
+   *
+   * The comparison starts EMPTY, as VIP's does. Turning compare on adds a
+   * field reading "Pick a date" rather than a period nobody chose.
+   */
+  const [temporal, setTemporal] = React.useState<TemporalFilter>(() => ({
+    period: feed.dateRange
+      ? { start: feed.dateRange[0], end: feed.dateRange[1] }
+      : // Only a feed with no declared range falls through here, and every
+        // such feed is one the panel refuses to put a picker on -- so this is
+        // a placeholder to satisfy the type, not a period anyone is shown. It
+        // matches the sample month so that a feed which later declares a date
+        // column lands somewhere its data exists.
+        { start: "2026-09-01", end: "2026-09-30" },
+  }));
+  const [comparing, setComparing] = React.useState(false);
+  const [compareFilter, setCompareFilter] = React.useState<
+    TemporalFilter | undefined
+  >(undefined);
+  const blockedReason = compareBlockedReason(feed.temporal);
+  /** Only an events feed has rows to cut into periods at all. */
+  const datedBy = feed.temporal === "events" ? feed.dateColumn : undefined;
+
   const [sample, setSample] = React.useState<ParsedSample | null>(null);
   const [failed, setFailed] = React.useState(false);
   const [filter, setFilter] = React.useState<FilterGroup>(() =>
@@ -207,7 +254,9 @@ export function SampleMapLayer({
    * render at the same anchor, one on top of the other. One state makes
    * "never both" structural rather than something every handler remembers.
    */
-  const [chain, setChain] = React.useState<"colorize" | "size" | null>(null);
+  const [chain, setChain] = React.useState<
+    "colorize" | "size" | null
+  >(null);
   const colorizeOpen = chain === "colorize";
   const sizeOpen = chain === "size";
   const setColorizeOpen = React.useCallback(
@@ -399,13 +448,48 @@ export function SampleMapLayer({
   );
 
   /** The rows a filter leaves, as records, which is what everything else reads. */
-  const rows = React.useMemo(() => {
+  /** Every row as an object, before any filter. */
+  const allRows = React.useMemo(() => {
     if (!sample) return [];
-    const all = sample.rows.map((row) =>
+    return sample.rows.map((row) =>
       Object.fromEntries(sample.header.map((h, i) => [h, row[i] ?? ""])),
     );
-    return all.filter((row) => predicate(row));
-  }, [predicate, sample]);
+  }, [sample]);
+
+  /**
+   * The date cut, kept separate from the condition filter.
+   *
+   * A layer with no date column is unaffected: a static zone set is not
+   * "outside the period", it simply has no period, and silently emptying it
+   * because it has no timestamps would be the worst possible reading.
+   */
+  const inWindow = React.useCallback(
+    (row: Record<string, string>, f: TemporalFilter) =>
+      !datedBy || withinTemporal(row[datedBy] ?? "", f),
+    [datedBy],
+  );
+
+  const rows = React.useMemo(
+    () => allRows.filter((row) => predicate(row) && inWindow(row, temporal)),
+    [allRows, predicate, inWindow, temporal],
+  );
+
+  /** The same rows read over the comparison period, once one is chosen. */
+  const previousRows = React.useMemo(
+    () =>
+      comparing && !blockedReason && datedBy && compareFilter
+        ? allRows.filter((row) => predicate(row) && inWindow(row, compareFilter))
+        : [],
+    [
+      allRows,
+      predicate,
+      inWindow,
+      compareFilter,
+      comparing,
+      blockedReason,
+      datedBy,
+    ],
+  );
 
   const keep = React.useCallback(
     (row: Record<string, string>) => predicate(row),
@@ -696,10 +780,34 @@ export function SampleMapLayer({
     );
   }, [edges]);
 
+  /**
+   * What the card says about time.
+   *
+   * VIP writes the comparison on a SECOND line, "Compared to ...", rather
+   * than joining the two with "vs". Two periods on one line race the row
+   * count for the same width and the count loses; on two lines each reads at
+   * a glance, and the second line is absent whenever there is nothing to
+   * compare.
+   */
+  const periodLabel = React.useMemo(() => {
+    if (!datedBy) return null;
+    return formatTemporal(temporal);
+  }, [datedBy, temporal]);
+
+  const comparedLabel = React.useMemo(() => {
+    if (!datedBy || blockedReason || !comparing || !compareFilter) return null;
+    return `Compared to ${formatTemporal(compareFilter)}`;
+  }, [datedBy, blockedReason, comparing, compareFilter]);
+
   const meta = failed
     ? `Data unavailable — ${feed.file} did not load`
     : sample
-      ? `${plain.format(rows.length)} of ${plain.format(sample.rows.length)} · ${feed.rowRepresents}`
+      ? [
+          periodLabel,
+          `${plain.format(rows.length)} of ${plain.format(sample.rows.length)} · ${feed.rowRepresents}`,
+        ]
+          .filter(Boolean)
+          .join(" · ")
       : visible
         ? "Loading…"
         : feed.rowRepresents;
@@ -736,6 +844,7 @@ export function SampleMapLayer({
         name={feed.title}
         onRemove={onRemove}
         meta={meta}
+        metaCompare={comparedLabel ?? undefined}
         // Expanded follows visibility: a layer that is off is a name and an
         // eye, and turning it on is what asks for its controls. Ten expanded
         // cards would be 2,000px of panel for layers nobody switched on. The
@@ -755,8 +864,13 @@ export function SampleMapLayer({
         }
         colorizeOpen={colorizeOpen}
         colorizeTriggerId={colorizeTriggerId}
+        // Only an events feed can be cut into periods, but the panel still
+        // opens for the others: it is where the reason lives, and a meta line
+        // that does nothing when clicked teaches nothing.
         filters={Boolean(sample)}
-        filterCount={conditions || undefined}
+        // VIP counts the date among the layer's filters, so "Filters 5"
+        // means five including it.
+        filterCount={conditions + (datedBy ? 1 : 0) || undefined}
         filtersAction={
           <Popover>
             <PopoverTrigger
@@ -788,12 +902,37 @@ export function SampleMapLayer({
         }
         filtersContent={
           sample ? (
-            <FilterFacets
-              fields={filterFields.filter((f) => f.type === "enum")}
-              value={filter}
-              onValueChange={setFilter}
-              valueIcon={(_field, value) => operatorBadge(value)}
-            />
+            <div className="space-y-3">
+              {/* First inside Filters, which is where VIP puts it. A date is
+                  a filter -- it cuts rows out of the layer exactly as a value
+                  filter does -- and giving it a panel of its own was the one
+                  structural thing the earlier version had wrong. */}
+              <DateComparePanel
+                showHeader={false}
+                className="w-auto rounded-none border-0 bg-transparent p-0 shadow-none"
+                filter={temporal}
+                onFilterChange={setTemporal}
+                comparing={comparing}
+                onComparingChange={setComparing}
+                compareFilter={compareFilter}
+                onCompareFilterChange={setCompareFilter}
+                blockedReason={datedBy ? null : (blockedReason ?? NO_DATE_COLUMN)}
+                compareEmpty={
+                  comparing &&
+                  !blockedReason &&
+                  compareFilter != null &&
+                  previousRows.length === 0
+                }
+                noun={feed.title.toLowerCase()}
+              />
+              <Separator />
+              <FilterFacets
+                fields={filterFields.filter((f) => f.type === "enum")}
+                value={filter}
+                onValueChange={setFilter}
+                valueIcon={(_field, value) => operatorBadge(value)}
+              />
+            </div>
           ) : null
         }
       >
@@ -924,6 +1063,7 @@ export function SampleMapLayer({
           />
         </PanelStep>
       ) : null}
+
     </>
   );
 }

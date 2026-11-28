@@ -1063,7 +1063,7 @@ export function ReportsWorkspace({
                               {report.pinned ? (
                                 <Pin
                                   aria-hidden
-                                  className="text-primary mt-0.5 size-3.5 shrink-0 fill-current"
+                                  className="text-primary-ink mt-0.5 size-3.5 shrink-0 fill-current"
                                 />
                               ) : null}
                               <div className="min-w-0">
@@ -1082,7 +1082,7 @@ export function ReportsWorkspace({
                                   // the table scrolls sideways too, and Tab
                                   // would otherwise park the button flush
                                   // against that edge with its ring outside.
-                                  className="hover:text-primary focus-visible:ring-ring block max-w-full scroll-m-1 truncate rounded text-left text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
+                                  className="hover:text-primary-ink focus-visible:ring-ring block max-w-full scroll-m-1 truncate rounded text-left text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
                                 >
                                   {report.name}
                                 </button>
@@ -1096,7 +1096,7 @@ export function ReportsWorkspace({
 
                                     Tinted with --info, the same trio the
                                     regulations row gives Public
-                                    (`border-info/30 bg-info/10 text-info`):
+                                    (`border-info-ink/30 bg-info-ink/10 text-info-ink`):
                                     reused rather than re-chosen, because that
                                     combination is already known to pass AA as
                                     text in both themes. */}
@@ -1104,7 +1104,7 @@ export function ReportsWorkspace({
                                   {report.kind === "monthly" ? (
                                     <Badge
                                       variant="outline"
-                                      className="border-info/30 bg-info/10 text-info shrink-0 text-[11px] font-normal"
+                                      className="border-info-ink/30 bg-info-ink/10 text-info-ink shrink-0 text-[11px] font-normal"
                                     >
                                       Monthly
                                     </Badge>
@@ -1163,7 +1163,7 @@ export function ReportsWorkspace({
                                 <IconAction
                                   label={`Delete ${report.name}`}
                                   onClick={() => remove([report.id])}
-                                  className="hover:text-destructive"
+                                  className="hover:text-destructive-ink"
                                 >
                                   <Trash2 className="size-4" />
                                 </IconAction>

@@ -7,6 +7,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   Calendar,
+  CalendarRange,
   ChartColumn,
   ChartColumnStacked,
   ChartLine,
@@ -26,10 +27,12 @@ import {
   Hash,
   ListFilter,
   ListOrdered,
+  Minus,
   MoreHorizontal,
   Pentagon,
   Plus,
   Search,
+  Spline,
   Table2,
   Trash2,
   TriangleAlert,
@@ -166,6 +169,7 @@ import {
   type MarkdownEditorHandle,
 } from "@/registry/vianova/product/markdown-editor";
 import {
+  CATEGORY_PALETTE,
   STYLE_STORAGE_KEY,
   readStyleSet,
   resolveStyles,
@@ -184,6 +188,7 @@ import {
   measure,
   previousPeriod,
   readTrips,
+  weekHourCounts,
   weekHourGrid,
   type EventFilter,
   type Metric as TripMetric,
@@ -196,6 +201,21 @@ import {
   type Infringement,
   type InfringementMetric,
 } from "@/registry/vianova/lib/infringement-report";
+import {
+  BATTERY_BANDS,
+  FLEET_EVENT_LABELS,
+  measureFleet,
+  readFleetEvents,
+  type FleetEvent,
+  type FleetMetric,
+} from "@/registry/vianova/lib/fleet-report";
+import { SegmentedControl } from "@/registry/vianova/product/segmented-control";
+import { SankeyFlow } from "@/registry/vianova/product/sankey-flow";
+import {
+  LISBON_DISTRICTS,
+  OUTSIDE,
+  districtLocator,
+} from "@/registry/vianova/lib/districts";
 import {
   GRID_COLUMNS,
   firstFit,
@@ -226,8 +246,8 @@ declare const process: { env: Record<string, string | undefined> };
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
-type DatasetId = "trips" | "infringements";
-type AnyEvent = Trip | Infringement;
+type DatasetId = "trips" | "infringements" | "events";
+type AnyEvent = Trip | Infringement | FleetEvent;
 
 /** A column a dataset can be filtered by: its values come from the feed. */
 type DatasetField = {
@@ -237,6 +257,26 @@ type DatasetField = {
   short?: string;
   /** The CSV column, whose values (in the feed's own order) are offered. */
   column: string;
+  /**
+   * The values and their order, for a derived field whose order carries
+   * meaning. Without this a derived field is offered in the order the feed
+   * happens to mention each value first, which is right for places and
+   * operators and wrong for anything that runs low to high.
+   */
+  values?: string[];
+  /**
+   * What colour means across this field's values.
+   *
+   * `identity` (the default) hands each value a hue off the categorical
+   * palette: they are different things, and nothing is between them.
+   * `ordinal` steps along the sequential ramp in `values` order, for a field
+   * whose values are one scale cut into bands. Battery is the case: three
+   * unrelated hues say "teal, blue and orange events", when what the reader
+   * is looking at is low, middling and high.
+   *
+   * It needs `values`, since the order is the scale.
+   */
+  ramp?: "identity" | "ordinal";
   of: (e: AnyEvent) => string;
 };
 
@@ -251,6 +291,14 @@ type DatasetDef = {
   noun: string;
   url: string;
   read: (parsed: { header: string[]; rows: string[][] }) => AnyEvent[];
+  /**
+   * A pass over the events once they are read, for anything the reader
+   * cannot know. Trips use it to turn the two ends of a route into district
+   * names: `readTrips` parses a CSV and has no business knowing about
+   * Lisbon, and doing it here means it happens once per load rather than
+   * once per widget that asks.
+   */
+  enrich?: (events: AnyEvent[]) => void;
   fields: DatasetField[];
 };
 
@@ -266,12 +314,95 @@ const VEHICLE_FIELD: DatasetField = {
   column: "vehicle_type",
   of: (e) => e.vehicle,
 };
+/**
+ * Where a trip started, as a district.
+ *
+ * Derived, not a column: `column` names one the feed does not have, so the
+ * loader falls back to the values it finds on the events themselves. Filled
+ * in by the trips dataset's `enrich`.
+ */
+const ORIGIN_FIELD: DatasetField = {
+  key: "origin",
+  label: "Origin district",
+  short: "Origin",
+  column: "origin_district",
+  of: (e) => ("origin" in e ? (e.origin ?? "") : ""),
+};
+const DESTINATION_FIELD: DatasetField = {
+  key: "destination",
+  label: "Destination district",
+  short: "Destination",
+  column: "destination_district",
+  of: (e) => ("destination" in e ? (e.destination ?? "") : ""),
+};
+
+/** Where a fleet event happened. Derived, like a trip's origin. */
+const EVENT_DISTRICT_FIELD: DatasetField = {
+  key: "district",
+  label: "District",
+  column: "district",
+  of: (e) => ("district" in e ? (e.district ?? "") : ""),
+};
+/**
+ * Ten categories, which is the point of having this dataset in the picker:
+ * it is where a donut stops working and a bar list keeps working.
+ */
+const EVENT_TYPE_FIELD: DatasetField = {
+  key: "type",
+  label: "Event type",
+  short: "Event",
+  // Not `event_type`: the reader turns the feed's `trip_start` into "Trip
+  // start", so the values a filter offers have to come from the labels, not
+  // from the raw column.
+  column: "event_type_label",
+  values: FLEET_EVENT_LABELS,
+  of: (e) => ("type" in e ? e.type : ""),
+};
+/** Three ordered bands, so one breakdown on the board runs low to high. */
+const BATTERY_FIELD: DatasetField = {
+  key: "battery",
+  label: "Battery level",
+  short: "Battery",
+  column: "battery_band",
+  values: BATTERY_BANDS,
+  ramp: "ordinal",
+  of: (e) => ("batteryBand" in e ? e.batteryBand : ""),
+};
+
+/** Turns both ends of every route into a district name, once per load. */
+const locateDistricts = (events: AnyEvent[]) => {
+  const at = districtLocator(LISBON_DISTRICTS);
+  for (const e of events) {
+    if (!("endLon" in e)) continue;
+    e.origin = at(e.lon, e.lat) ?? OUTSIDE;
+    e.destination = at(e.endLon, e.endLat) ?? OUTSIDE;
+  }
+};
+
+/** The same, for a feed whose rows happened at one place rather than two. */
+const locatePoints = (events: AnyEvent[]) => {
+  const at = districtLocator(LISBON_DISTRICTS);
+  for (const e of events) {
+    if (!("batteryBand" in e)) continue;
+    e.district = at(e.lon, e.lat) ?? OUTSIDE;
+  }
+};
 
 /**
- * The report's two sample feeds, both fetched from the site rather than put in
- * the JavaScript payload. The trips are the ones the data hub ships; the
- * infringements share their operators, zones and month, so one report can set
- * them side by side and filter both by the same date, time and zone.
+ * The report's three sample feeds, all fetched from the site rather than put
+ * in the JavaScript payload. The trips are the ones the data hub ships; the
+ * infringements and the fleet events share their operators, zones and month,
+ * so one report can set them side by side and filter all three by the same
+ * date, time and zone.
+ *
+ * Three rather than two because one feed cannot show what the charts do with
+ * different data. Trips have two ends, so they are the only feed a flow chart
+ * can read; infringements have a status, so they are the only one with a
+ * category that is a state; fleet events have ten types and a percentage, so
+ * they are where a breakdown runs out of slices and a measure stops being a
+ * count. A fourth feed ships -- `mds-vehicles-lisbon.csv` -- and is not here:
+ * it is a snapshot of the fleet at one instant, so under a date range and a
+ * previous period it would show everything once and nothing before.
  */
 const DATASETS: Record<DatasetId, DatasetDef> = {
   trips: {
@@ -282,7 +413,25 @@ const DATASETS: Record<DatasetId, DatasetDef> = {
     noun: "trips",
     url: `${BASE_PATH}/data/mds-trips-lisbon.csv`,
     read: readTrips,
-    fields: [OPERATOR_FIELD, VEHICLE_FIELD],
+    enrich: locateDistricts,
+    fields: [OPERATOR_FIELD, VEHICLE_FIELD, ORIGIN_FIELD, DESTINATION_FIELD],
+  },
+  events: {
+    id: "events",
+    storageId: "sample-mds-lisbon",
+    label: "Lisbon MDS fleet events",
+    short: "Events",
+    noun: "events",
+    url: `${BASE_PATH}/data/mds-events-lisbon.csv`,
+    read: readFleetEvents,
+    enrich: locatePoints,
+    fields: [
+      OPERATOR_FIELD,
+      VEHICLE_FIELD,
+      EVENT_TYPE_FIELD,
+      BATTERY_FIELD,
+      EVENT_DISTRICT_FIELD,
+    ],
   },
   infringements: {
     id: "infringements",
@@ -473,7 +622,7 @@ function appliedFilters(f: Filters, only?: DatasetId | null): AppliedFilter[] {
   return out;
 }
 
-type Metric = TripMetric | InfringementMetric;
+type Metric = TripMetric | InfringementMetric | FleetMetric;
 
 const METRICS: Record<
   Metric,
@@ -493,6 +642,9 @@ const METRICS: Record<
   fines: { label: "Fines issued", unit: "€", digits: 0, count: true },
   resolution: { label: "Median time to resolve", unit: "min", digits: 0 },
   devices: { label: "Vehicles cited", digits: 0, count: true },
+  events: { label: "Number of events", digits: 0, count: true },
+  fleetDevices: { label: "Vehicles involved", digits: 0, count: true },
+  battery: { label: "Median battery level", unit: "%", digits: 0 },
 };
 
 const TRIP_METRICS = new Set<Metric>([
@@ -502,14 +654,18 @@ const TRIP_METRICS = new Set<Metric>([
   "duration",
 ]);
 
+const FLEET_METRICS = new Set<Metric>(["events", "fleetDevices", "battery"]);
+
 /** One number for a set of rows, whichever dataset they came from. */
 const measureEvents = (events: AnyEvent[], metric: Metric) =>
   TRIP_METRICS.has(metric)
     ? measure(events as Trip[], metric as TripMetric)
-    : measureInfringements(
-        events as Infringement[],
-        metric as InfringementMetric,
-      );
+    : FLEET_METRICS.has(metric)
+      ? measureFleet(events as FleetEvent[], metric as FleetMetric)
+      : measureInfringements(
+          events as Infringement[],
+          metric as InfringementMetric,
+        );
 
 /* -------------------------------------------------------------------------- */
 /* Widgets                                                                     */
@@ -519,10 +675,16 @@ type SeriesStyle = "line" | "bar" | "table";
 /** "#" shows values, "%" each value's share, "#%" values with their share. */
 type Display = "value" | "percent" | "both";
 
-/** What a widget draws, before it has a place on the canvas. */
 /** What a barlist or donut counts its rows by: a key of its dataset's fields. */
-type Breakdown = "operator" | "vehicle" | "type" | "status";
+type Breakdown =
+  | "operator"
+  | "vehicle"
+  | "type"
+  | "status"
+  | "battery"
+  | "district";
 
+/** What a widget draws, before it has a place on the canvas. */
 type WidgetSpec =
   | {
       kind: "series";
@@ -539,6 +701,7 @@ type WidgetSpec =
   | { kind: "barlist"; title: string; dataset?: DatasetId; by?: Breakdown }
   | { kind: "donut"; title: string; dataset?: DatasetId; by?: Breakdown }
   | { kind: "matrix"; title: string; dataset?: DatasetId }
+  | { kind: "sankey"; title: string; dataset?: DatasetId }
   /** The trips' daily numbers, side by side. */
   | { kind: "summary"; title: string; dataset?: DatasetId }
   /** Its heading is the first line of the Markdown, so it has no title of its own. */
@@ -549,7 +712,15 @@ export type Widget = WidgetSpec & { id: string; layout: Rect };
 
 /** What a widget looks like, which is how the library files it. */
 type ChartType =
-  "line" | "bar" | "table" | "kpi" | "barlist" | "donut" | "matrix" | "text";
+  | "line"
+  | "bar"
+  | "table"
+  | "kpi"
+  | "barlist"
+  | "donut"
+  | "matrix"
+  | "sankey"
+  | "text";
 
 const typeOf = (w: WidgetSpec): ChartType =>
   w.kind === "series" ? w.style : w.kind === "summary" ? "table" : w.kind;
@@ -577,6 +748,7 @@ const CHART_TYPES: Array<Exclude<ChartType, "text">> = [
   "barlist",
   "donut",
   "matrix",
+  "sankey",
 ];
 
 const TYPE_LABELS: Record<Exclude<ChartType, "text">, string> = {
@@ -587,6 +759,7 @@ const TYPE_LABELS: Record<Exclude<ChartType, "text">, string> = {
   barlist: "Barlist",
   donut: "Donut",
   matrix: "Matrix",
+  sankey: "Flow",
 };
 
 const TYPE_ICON: Record<
@@ -600,6 +773,7 @@ const TYPE_ICON: Record<
   barlist: ListOrdered,
   donut: ChartPie,
   matrix: Grid3x3,
+  sankey: Spline,
   text: Type,
 };
 
@@ -612,7 +786,28 @@ const minCells = (w: WidgetSpec) =>
     ? { w: 2, h: 1 }
     : w.kind === "kpi"
       ? { w: 2, h: 1 }
-      : { w: 3, h: 2 };
+      : /*
+          A sankey is the one chart that cannot be shrunk to the usual floor.
+          Measured, not guessed, and twice: at 3 and 4 columns the district
+          labels land on top of the nodes they name, and at 2 rows the
+          ribbons have less height than the labels do, whatever the width.
+          3 rows was the first answer and it was wrong -- a sankey spaces its
+          nodes by volume, so the small ones at the bottom of a column sit
+          within a few pixels of each other and their two-line labels
+          collide while the ribbons still look fine. 6 by 4 is where every
+          place it names can be read.
+        */
+        w.kind === "sankey"
+          ? { w: 6, h: 4 }
+          : /*
+              A heatmap is seven rows of twenty-four cells whatever the card,
+              so narrow is unreadable rather than merely tight, and comparing
+              adds a view control above the grid and a scale below it. Two
+              rows held the grid alone and now cuts the scale off.
+            */
+            w.kind === "matrix"
+            ? { w: 6, h: 3 }
+            : { w: 3, h: 2 };
 
 let nextId = 0;
 const newId = (prefix: string) =>
@@ -745,8 +940,15 @@ const LIBRARY: Template[] = [
   },
   {
     id: "lib-matrix",
-    cells: { w: 12, h: 2 },
+    cells: { w: 12, h: 3 },
     spec: { kind: "matrix", title: "Trips by weekday and hour" },
+  },
+  {
+    id: "lib-sankey",
+    // Offered at half the board and four rows. Its minimum is the same
+    // width and height, so this is the smallest it is ever handed out at.
+    cells: { w: 6, h: 4 },
+    spec: { kind: "sankey", title: "Trips from district to district" },
   },
   {
     id: "lib-inf-operator",
@@ -839,11 +1041,115 @@ const LIBRARY: Template[] = [
   },
   {
     id: "lib-inf-matrix",
-    cells: { w: 12, h: 2 },
+    cells: { w: 12, h: 3 },
     spec: {
       kind: "matrix",
       title: "Infringements by weekday and hour",
       dataset: "infringements",
+    },
+  },
+  {
+    id: "lib-ev-type",
+    // Ten categories at half the board. Deliberately offered as a bar list
+    // and not as a donut: the names are what distinguish them, and a bar
+    // list has somewhere to put a name.
+    cells: { w: 6, h: 2 },
+    spec: {
+      kind: "barlist",
+      title: "Fleet events by type",
+      dataset: "events",
+      by: "type",
+    },
+  },
+  {
+    id: "lib-ev-battery",
+    cells: { w: 6, h: 2 },
+    spec: {
+      kind: "donut",
+      title: "Fleet events by battery level",
+      dataset: "events",
+      by: "battery",
+    },
+  },
+  {
+    id: "lib-ev-district",
+    cells: { w: 6, h: 2 },
+    spec: {
+      kind: "barlist",
+      title: "Fleet events by district",
+      dataset: "events",
+      by: "district",
+    },
+  },
+  {
+    id: "lib-ev-over-time",
+    cells: { w: 12, h: 2 },
+    spec: {
+      kind: "series",
+      title: "Fleet events over time per operator",
+      dataset: "events",
+      metric: "events",
+      byOperator: true,
+      style: "bar",
+      display: "value",
+    },
+  },
+  {
+    id: "lib-ev-battery-time",
+    // A percentage, not a count: no share to show, and a rise is not a rise
+    // in activity. The one chart on the board whose previous period cannot
+    // be read as "more or less than before".
+    cells: { w: 6, h: 2 },
+    spec: {
+      kind: "series",
+      title: "Battery level over time",
+      dataset: "events",
+      metric: "battery",
+      byOperator: false,
+      style: "line",
+      display: "value",
+    },
+  },
+  {
+    id: "lib-kpi-events",
+    cells: { w: 4, h: 2 },
+    spec: {
+      kind: "kpi",
+      title: "Fleet events",
+      dataset: "events",
+      metric: "events",
+    },
+  },
+  {
+    id: "lib-kpi-battery",
+    cells: { w: 4, h: 2 },
+    spec: {
+      kind: "kpi",
+      title: "Median battery level",
+      dataset: "events",
+      metric: "battery",
+    },
+  },
+  {
+    id: "lib-ev-table",
+    cells: { w: 6, h: 3 },
+    spec: {
+      kind: "series",
+      title: "Fleet events by day",
+      dataset: "events",
+      metric: "events",
+      byOperator: false,
+      style: "table",
+      display: "value",
+    },
+  },
+  {
+    id: "lib-ev-matrix",
+    cells: { w: 12, h: 3 },
+    spec: {
+      kind: "matrix",
+      title: "Fleet events by weekday and hour",
+      dataset: "events",
     },
   },
 ];
@@ -903,6 +1209,52 @@ const INES: Person = {
 };
 
 const SAMPLE_REPORTS: Report[] = [
+  /*
+    The board that exercises all three feeds at once, with compare on.
+
+    Every chart here reads a previous period, and the three datasets are
+    deliberately mixed rather than kept to their own sections: a flow chart
+    only trips can fill, a ten-category bar list and an ordered donut only the
+    fleet events can fill, and a status donut only the infringements can. If a
+    comparison treatment is going to fall over, it falls over here.
+  */
+  {
+    id: "fleet-health-flows",
+    title: "Fleet health and flows",
+    creator: INES,
+    createdAt: "2026-10-08T08:02:19Z",
+    updatedAt: "2026-10-09T11:35:47Z",
+    /*
+      A fortnight, not the month: the feeds start on 1 September, so the month
+      has no month before it and every chart on this board would read "new".
+      16-30 September compares against 1-15 September, which is in the data.
+    */
+    filters: { ...DEFAULT_FILTERS, period: "h2", compare: true },
+    widgets: layOut([
+      {
+        spec: {
+          kind: "text",
+          markdown:
+            "## Late September against early September\n\nTrips, fleet events and infringements on one board. Every chart shows the **previous period** of the same length.",
+        },
+        cells: { w: 12, h: 1 },
+      },
+      ...[
+        "lib-kpi-trips",
+        "lib-kpi-events",
+        "lib-kpi-battery",
+        "lib-trips-operator",
+        "lib-ev-over-time",
+        "lib-sankey",
+        "lib-ev-type",
+        "lib-ev-battery",
+        "lib-inf-status",
+        "lib-ev-district",
+        "lib-ev-table",
+        "lib-matrix",
+      ].map(templateOf),
+    ]),
+  },
   {
     id: "operator-performance",
     title: "Operator performance",
@@ -1069,6 +1421,25 @@ const tableDay = (day: string) =>
   `${parts(day).d} ${MONTHS[parts(day).m]} ${parts(day).y}`;
 const rangeLabel = (from: string, to: string) =>
   `${shortDay(from)} to ${shortDay(to)}`;
+/**
+ * The same range, short enough to sit in a card's subhead: "Sep 16–30", or
+ * "Sep 28 – Oct 12" when it crosses a month.
+ *
+ * `rangeLabel` is the filter bar's, where there is room to say "to" and only
+ * one of them on the page. A card repeats this once per widget, so it is the
+ * one place where four characters matter.
+ */
+const spanLabel = (days: string[]) => {
+  const from = days[0];
+  const to = days[days.length - 1];
+  if (!from || !to) return "";
+  if (from === to) return shortDay(from);
+  const a = parts(from);
+  const b = parts(to);
+  return a.m === b.m && a.y === b.y
+    ? `${MONTHS[a.m]} ${a.d}–${b.d}`
+    : `${shortDay(from)} – ${shortDay(to)}`;
+};
 
 function formatMetric(value: number, metric: Metric) {
   const { digits, unit } = METRICS[metric];
@@ -1116,14 +1487,28 @@ function useDataset(def: DatasetDef, url: string) {
         const parsed = parseCsv(text);
         const events = def.read(parsed);
         if (events.length === 0) throw new Error(`No ${def.noun} in the feed`);
+        def.enrich?.(events);
         // Same inference the data hub runs, so operators come out in the same
         // order and an unstyled one gets the same palette colour there and here.
         const columns = inferColumns(parsed);
         const values = Object.fromEntries(
-          def.fields.map((f) => [
-            f.key,
-            columns[parsed.header.indexOf(f.column)]?.values ?? [],
-          ]),
+          def.fields.map((f) => {
+            const fromFeed = columns[parsed.header.indexOf(f.column)]?.values;
+            if (fromFeed?.length) return [f.key, fromFeed];
+            if (f.values) return [f.key, f.values];
+            /*
+              A derived field has no column to infer from, so its values come
+              from the events. First-seen order, like the feed's own: it is
+              what decides a category's colour, and a set that reorders
+              itself between loads would repaint the chart.
+            */
+            const seen = new Set<string>();
+            for (const e of events) {
+              const v = f.of(e);
+              if (v) seen.add(v);
+            }
+            return [f.key, [...seen]];
+          }),
         );
         setState({ status: "ready", events, values });
       })
@@ -1211,7 +1596,11 @@ function useReportData(
         values: state.values,
       };
     };
-    return { trips: of("trips"), infringements: of("infringements") };
+    return {
+      trips: of("trips"),
+      events: of("events"),
+      infringements: of("infringements"),
+    };
   }, [states, filters, styles]);
 }
 
@@ -1373,10 +1762,38 @@ function seriesRows(w: SeriesWidget, data: ReportData) {
   const names = groups ?? [METRICS[w.metric].label];
   const m = (own: AnyEvent[]) => measureEvents(own, w.metric);
   const series = dailySeries(data.events, data.days, m, groups);
-  const prev =
-    // No line at all beats a flat one at zero for a period with no data.
-    data.previous?.events.length && !w.byOperator
-      ? dailySeries(data.previous.events, data.previous.days, m, null)
+  /*
+    The previous period, always ungrouped -- one line, not one per operator.
+
+    It used to be skipped entirely whenever a chart was split by operator,
+    which is most of the charts on the board: five faded lines behind five
+    solid ones is a thicket, so the comparison was dropped rather than
+    drawn. The total is the honest single line to draw instead. Against a
+    stack it lands exactly on the stack tops, and against five lines it is
+    the one number those five add up to, so it compares like with like
+    either way.
+
+    No line at all still beats a flat one at zero for a period with no data.
+  */
+  const prev = data.previous?.events.length
+    ? dailySeries(data.previous.events, data.previous.days, m, null)
+    : null;
+  const prevTotal = prev
+    ? prev.reduce((t, d) => t + (d.values[0] ?? 0), 0)
+    : 0;
+  /*
+    And the same split the way this chart is split, where it is split.
+
+    A total is the right previous line over a STACK, where it lands on the
+    stack tops. Over five operator lines it is wrong twice: there is no
+    current total drawn for it to pair with, and being roughly five times
+    any one operator it takes the y axis with it and flattens all five into
+    the bottom of the plot. Per operator, each dashed line has its own solid
+    twin in its own colour at its own height.
+  */
+  const prevByGroup =
+    groups && data.previous?.events.length
+      ? dailySeries(data.previous.events, data.previous.days, m, groups)
       : null;
   // A share only means something for counts. A share of a median is nonsense,
   // so averages keep showing their values whatever Display says.
@@ -1399,12 +1816,49 @@ function seriesRows(w: SeriesWidget, data: ReportData) {
       row[`v${k}`] = v;
       row[`p${k}`] = share;
     });
-    // Aligned by position: day 1 of this period against day 1 of the last.
-    if (prev) row.prev = prev[i]?.values[0] ?? null;
+    /*
+      Aligned by position: day 1 of this period against day 1 of the last.
+      The day it is aligned WITH travels with the value, so a tooltip can
+      name it instead of leaving the reader to count backwards.
+    */
+    if (prev) {
+      const was = prev[i]?.values[0] ?? null;
+      row.prev = was;
+      row.prevDay = data.previous?.days[i] ?? null;
+      /*
+        What the dashed line is plotted at, which is not always what the
+        tooltip says. On a percent chart the axis runs 0-100, so an absolute
+        previous value would be off the top of it; the previous day's share
+        of its OWN period is the comparable number. Split by operator the
+        shares are per-day and always add to 100, so there is nothing for a
+        previous total to be a share of -- that chart gets no line, and the
+        tooltip still carries the figure.
+      */
+      prevByGroup?.[i]?.values.forEach((v, k) => {
+        row[`q${k}`] = v;
+      });
+      row.prevPlot = !shareable || w.display !== "percent"
+        ? was
+        : w.byOperator || was === null
+          ? null
+          : prevTotal
+            ? (was / prevTotal) * 100
+            : 0;
+    }
     return row;
   });
 
-  return { rows, names, shareable, compared: !!prev };
+  return {
+    rows,
+    names,
+    shareable,
+    compared: !!prev,
+    /** Whether the dashed TOTAL line has a scale to live on; see `prevPlot`. */
+    plottable:
+      !!prev && !(w.display === "percent" && shareable && !!w.byOperator),
+    /** Whether each series has its own previous, under key `q{i}`. */
+    perGroup: !!prevByGroup && !(w.display === "percent" && shareable),
+  };
 }
 
 /** An element's size, for charts that change what they show as their card shrinks. */
@@ -1483,6 +1937,8 @@ type TooltipRow = {
   color?: string;
   text: string;
   value: number;
+  /** What this series was on the matching day of the previous period. */
+  was?: string;
 };
 
 /**
@@ -1498,7 +1954,8 @@ function SeriesTooltip({
   day: string;
   rows: TooltipRow[];
   total?: string;
-  previous?: string;
+  /** The matching day of the previous period: which day, what it was, by how much. */
+  previous?: { day: string | null; text: string; delta: number | null };
 }) {
   return (
     <div className="bg-popover text-popover-foreground min-w-44 rounded-lg px-2.5 py-2 text-xs shadow-lg ring-1 ring-foreground/10">
@@ -1514,7 +1971,14 @@ function SeriesTooltip({
               />
               <span className="truncate">{r.label}</span>
             </span>
-            <span className="font-mono font-medium tabular-nums">{r.text}</span>
+            <span className="shrink-0 text-right font-mono font-medium tabular-nums">
+              {r.text}
+              {r.was ? (
+                <span className="text-muted-foreground ml-2 font-normal">
+                  was {r.was}
+                </span>
+              ) : null}
+            </span>
           </li>
         ))}
       </ul>
@@ -1525,9 +1989,31 @@ function SeriesTooltip({
         </p>
       ) : null}
       {previous ? (
-        <p className="text-muted-foreground mt-1 flex justify-between gap-4">
-          <span>Previous period</span>
-          <span className="font-mono tabular-nums">{previous}</span>
+        /*
+          Named, not just "previous period". Day 14 of this period lines up
+          with day 14 of the last, which is a date the reader cannot work
+          out from a chart whose axis only runs over this one -- so the
+          tooltip is the place that says it.
+        */
+        <p className="text-muted-foreground mt-1 flex items-center justify-between gap-4 border-t pt-1.5">
+          <span className="inline-flex min-w-0 items-center gap-1.5">
+            <span
+              aria-hidden
+              className="border-muted-foreground inline-block h-0 w-3 shrink-0 border-t-2 border-dashed"
+            />
+            <span className="truncate">
+              {previous.day ? longDay(previous.day) : "Previous period"}
+            </span>
+          </span>
+          <span className="shrink-0 font-mono tabular-nums">
+            {previous.text}
+            {previous.delta === null ? null : (
+              <span className="text-foreground ml-1.5">
+                {previous.delta > 0 ? "+" : ""}
+                {(previous.delta * 100).toFixed(1)}%
+              </span>
+            )}
+          </span>
         </p>
       ) : null}
     </div>
@@ -1543,10 +2029,8 @@ function SeriesBody({
   data: ReportData;
   preview?: boolean;
 }) {
-  const { rows, names, shareable, compared } = React.useMemo(
-    () => seriesRows(w, data),
-    [w, data],
-  );
+  const { rows, names, shareable, compared, plottable, perGroup } =
+    React.useMemo(() => seriesRows(w, data), [w, data]);
   const percent = w.display === "percent" && shareable;
   const both = w.display === "both" && shareable;
   const [hidden, setHidden] = React.useState<Set<string>>(() => new Set());
@@ -1570,7 +2054,10 @@ function SeriesBody({
       series.map((s) => [s.key, { label: s.label, color: s.color }]),
     );
     if (compared)
-      c.prev = { label: "Previous period", color: "var(--muted-foreground)" };
+      c.prevPlot = {
+        label: "Previous period",
+        color: "var(--muted-foreground)",
+      };
     return c;
   }, [series, compared]);
 
@@ -1614,6 +2101,41 @@ function SeriesBody({
         type: "number",
         format: (_, row) => valueText(row, i),
       })),
+      /*
+        A table is a chart too. It had the previous period in its rows and
+        no column to show it in, so the one view that could state the
+        comparison exactly was the one view that did not.
+      */
+      ...(compared
+        ? [
+            {
+              id: "prev",
+              label: "Previous",
+              type: "number",
+              format: (v: unknown) =>
+                v == null ? "—" : formatMetric(Number(v), w.metric),
+            } as Column,
+            /*
+              And the difference, so the table does not make the reader do
+              the subtraction the rest of the board does for them. Sortable
+              like every other column, which is the one thing a table can do
+              that no chart on this board can: order the days by how much
+              they moved.
+            */
+            {
+              id: "delta",
+              label: "Change",
+              type: "number",
+              format: (_: unknown, row: Record<string, unknown>) => {
+                if (row.prev == null) return "—";
+                const d = change(Number(row.total), Number(row.prev));
+                return d === null
+                  ? "—"
+                  : `${d > 0 ? "+" : ""}${(d * 100).toFixed(1)}%`;
+              },
+            } as Column,
+          ]
+        : []),
     ];
     return <WidgetTable columns={columns} rows={rows} />;
   }
@@ -1663,12 +2185,17 @@ function SeriesBody({
         const items: TooltipRow[] = visible
           .map((s) => {
             const k = Number(s.key.slice(1));
+            const was = row[`q${k}`];
             return {
               key: s.key,
               label: s.label,
               color: s.color,
               value: Number(row[`v${k}`] ?? 0),
               text: valueText(row, k),
+              was:
+                perGroup && was != null
+                  ? formatMetric(Number(was), w.metric)
+                  : undefined,
             };
           })
           .sort((a, b) => b.value - a.value);
@@ -1684,7 +2211,11 @@ function SeriesBody({
             }
             previous={
               compared && row.prev != null
-                ? formatMetric(Number(row.prev), w.metric)
+                ? {
+                    day: row.prevDay ? String(row.prevDay) : null,
+                    text: formatMetric(Number(row.prev), w.metric),
+                    delta: change(sum, Number(row.prev)),
+                  }
                 : undefined
             }
           />
@@ -1753,9 +2284,64 @@ function SeriesBody({
     />
   ) : null;
 
+  /*
+    Previous is always dashed. What it is dashed IN depends on what the
+    chart already draws, and there are exactly two cases.
+
+    Several lines: each gets its own dashed twin in its OWN hue, recessive.
+    Colour here means identity, so the twin has to carry the same identity
+    or the reader has to match six lines to five names. Hovering a legend
+    entry dims everything else, twins included, which is what makes five
+    pairs readable rather than ten lines.
+
+    One line, or a stack: a single dashed GREY line for the total. Over a
+    stack it lands exactly on the tops; over one series grey is the only
+    colour on the card that is not already somebody's identity, and a tint
+    of the one series would read as a second series.
+  */
+  const perSeries = perGroup && multi && w.style !== "bar";
+  const previousLines = perSeries ? (
+    series.map((sr, i) => (
+      <Line
+        key={`q${i}`}
+        dataKey={`q${i}`}
+        type="monotone"
+        hide={hidden.has(sr.key)}
+        stroke={`var(--color-${sr.key})`}
+        strokeWidth={1.5}
+        strokeDasharray="4 4"
+        strokeOpacity={0.45 * dim(sr.key)}
+        dot={false}
+        activeDot={false}
+        connectNulls
+        isAnimationActive={!preview}
+      />
+    ))
+  ) : plottable ? (
+    <Line
+      dataKey="prevPlot"
+      type="monotone"
+      stroke="var(--color-prevPlot)"
+      strokeWidth={2}
+      strokeDasharray="4 4"
+      dot={false}
+      activeDot={false}
+      connectNulls
+      isAnimationActive={!preview}
+    />
+  ) : null;
+
   const chart =
     w.style === "bar" ? (
-      <BarChart
+      /*
+        A ComposedChart rather than a BarChart, only so the previous period
+        can be drawn over the bars. Stacked bars cannot hold a second period
+        -- doubling them halves the width of both and the stack stops being
+        readable at a glance -- but a dashed line across the stack tops sits
+        exactly where the totals are, and is the same mark the line charts
+        already use.
+      */
+      <ComposedChart
         data={barRows}
         margin={{ top: labelsFit ? 18 : 6, right: 4, left: 0, bottom: 0 }}
         barCategoryGap="18%"
@@ -1788,7 +2374,8 @@ function SeriesBody({
             ) : null}
           </Bar>
         ))}
-      </BarChart>
+        {previousLines}
+      </ComposedChart>
     ) : (
       <ComposedChart
         data={rows}
@@ -1834,18 +2421,7 @@ function SeriesBody({
             isAnimationActive={!preview}
           />
         )}
-        {compared ? (
-          <Line
-            dataKey="prev"
-            type="monotone"
-            stroke="var(--color-prev)"
-            strokeWidth={1.5}
-            strokeDasharray="4 4"
-            dot={false}
-            activeDot={false}
-            connectNulls
-          />
-        ) : null}
+        {previousLines}
       </ComposedChart>
     );
 
@@ -1927,23 +2503,40 @@ function KpiBody({
       : delta > 0
         ? ArrowUp
         : ArrowDown;
-  const trend = React.useMemo(
-    () =>
-      dailySeries(
-        data.events,
-        data.days,
-        (own) => measureEvents(own, widget.metric),
-        null,
-      ).map((d) => ({
-        day: d.day,
-        v: d.values[0] ?? 0,
+  /*
+    The period's shape, and the previous period's behind it.
+
+    Both on ONE scale, taken across the two. The sparkline used to run from
+    its own dataMin to its own dataMax, which is right for a single line and
+    wrong the moment there are two: each would have been stretched to fill
+    the same ten pixels, so a fortnight that halved and a fortnight that
+    doubled would have drawn the same picture. The domain below is the pair's.
+  */
+  const trend = React.useMemo(() => {
+    const of = (events: AnyEvent[], days: string[]) =>
+      dailySeries(events, days, (own) => measureEvents(own, widget.metric), null)
+        .map((d) => d.values[0] ?? 0);
+    const nowSeries = of(data.events, data.days);
+    const wasSeries = data.previous?.events.length
+      ? of(data.previous.events, data.previous.days)
+      : null;
+    const all = [...nowSeries, ...(wasSeries ?? [])];
+    return {
+      rows: data.days.map((day, i) => ({
+        day,
+        v: nowSeries[i] ?? 0,
+        was: wasSeries ? (wasSeries[i] ?? null) : null,
       })),
-    [data, widget.metric],
-  );
+      compared: !!wasSeries,
+      domain: all.length
+        ? ([Math.min(...all), Math.max(...all)] as [number, number])
+        : undefined,
+    };
+  }, [data, widget.metric]);
   const gradient = `kpi-${React.useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   return (
     <div className="flex h-full min-h-28 flex-col items-center justify-center gap-1 text-center">
-      <p className="text-primary text-4xl font-semibold tracking-tight tabular-nums">
+      <p className="text-primary-ink text-4xl font-semibold tracking-tight tabular-nums">
         {METRICS[widget.metric].count && !METRICS[widget.metric].unit
           ? compact.format(now)
           : formatMetric(now, widget.metric)}
@@ -1960,8 +2553,8 @@ function KpiBody({
             !METRICS[widget.metric].count
               ? "bg-muted text-muted-foreground"
               : delta > 0 === (data.dataset.id === "trips")
-                ? "bg-success/10 text-success"
-                : "bg-destructive/10 text-destructive",
+                ? "bg-success-ink/10 text-success-ink"
+                : "bg-destructive-ink/10 text-destructive-ink",
           )}
         >
           {Arrow ? <Arrow className="size-3" aria-hidden /> : null}
@@ -1974,7 +2567,7 @@ function KpiBody({
         </p>
       ) : null}
       {/* The period's shape under the number: is it steady, or did one day make it? */}
-      {!preview && trend.length > 1 ? (
+      {!preview && trend.rows.length > 1 ? (
         <div aria-hidden inert className="mt-1 h-10 w-full max-w-64">
           <ChartContainer
             config={{
@@ -1985,10 +2578,10 @@ function KpiBody({
             }}
             className="aspect-auto size-full"
           >
-            <AreaChart
+            <ComposedChart
               // Decoration: no keyboard stop or announcement of its own.
               accessibilityLayer={false}
-              data={trend}
+              data={trend.rows}
               margin={{ top: 2, right: 0, left: 0, bottom: 0 }}
             >
               <defs>
@@ -2005,8 +2598,9 @@ function KpiBody({
                   />
                 </linearGradient>
               </defs>
-              {/* Scaled to its own range: from zero, a steady month draws flat. */}
-              <YAxis hide domain={["dataMin", "dataMax"]} />
+              {/* Not from zero: a steady month would draw flat. Scaled to
+                  both periods at once, so the two shapes are comparable. */}
+              <YAxis hide domain={trend.domain ?? ["dataMin", "dataMax"]} />
               <Area
                 dataKey="v"
                 type="monotone"
@@ -2015,7 +2609,20 @@ function KpiBody({
                 fill={`url(#${gradient})`}
                 isAnimationActive={false}
               />
-            </AreaChart>
+              {trend.compared ? (
+                <Line
+                  dataKey="was"
+                  type="monotone"
+                  stroke="var(--muted-foreground)"
+                  strokeWidth={1.25}
+                  strokeDasharray="3 3"
+                  strokeOpacity={0.8}
+                  dot={false}
+                  connectNulls
+                  isAnimationActive={false}
+                />
+              ) : null}
+            </ComposedChart>
           </ChartContainer>
         </div>
       ) : null}
@@ -2029,13 +2636,67 @@ const VEHICLE_LABELS: Record<string, string> = {
 };
 
 /** For categories with no saved style. Steps apart, so neighbours do not read as one. */
-const BREAKDOWN_COLORS = [
+/*
+  The categorical palette, not the chart ramp.
+
+  `--chart-1` to `--chart-5` are one teal, light to dark -- a SEQUENTIAL
+  ramp, for magnitude. This list used to be five of its steps in the order
+  1, 4, 2, 5, 3, which is someone spreading a ramp as far as it will go to
+  stand in for identity. It survived because the breakdowns it painted had
+  five values at most and operators brought their own colours; a thirteen-
+  district bar list makes it plain, because in the dark themes every step is
+  a tint of the same teal and thirteen categories came out one colour.
+
+  `CATEGORY_PALETTE` is the set built for this job: eight hues verified apart
+  at the directly-labelled floors under both colour-deficiency simulations on
+  all six theme surfaces, and already what the map, the operator badges and
+  the flow chart paint with. A district is now the same colour in the bar
+  list as on the map beside it, which is the whole reason that palette is
+  shared.
+
+  Past eight it still repeats. A bar list carries its identity in the row
+  label, so a repeated dot is a blemish there; a donut carries it in the
+  colour, so a repeated slice is a defect. No breakdown on the sample board
+  reaches nine, and folding the tail into "Other" is a change to what the
+  donut reports rather than how it looks -- so it is named here and not done
+  quietly.
+*/
+const BREAKDOWN_COLORS = CATEGORY_PALETTE;
+
+/**
+ * The sequential ramp, for a field whose values are one scale in bands.
+ *
+ * `--chart-1` to `--chart-5` is the DS's own single-hue ramp, light to dark
+ * in both themes and contrast-pinned at every step -- the thing the
+ * categorical palette was standing in for when `BREAKDOWN_COLORS` was five
+ * of its steps shuffled. Used here for what it is rather than as a source of
+ * hues.
+ */
+const ORDINAL_RAMP = [
   "var(--chart-1)",
-  "var(--chart-4)",
   "var(--chart-2)",
-  "var(--chart-5)",
   "var(--chart-3)",
-];
+  "var(--chart-4)",
+  "var(--chart-5)",
+] as const;
+
+/**
+ * Band `n` of `count`, along that ramp.
+ *
+ * Spread across the whole ramp rather than taking the first `count` steps:
+ * three bands should run light to dark, not sit together in the pale third
+ * of it. Past five the ramp runs out of pinned steps, so its ends are mixed
+ * instead -- still one hue, still monotone, just not a tested value.
+ */
+function ordinalColor(n: number, count: number) {
+  if (count <= 1) return ORDINAL_RAMP[2];
+  if (count <= ORDINAL_RAMP.length)
+    return ORDINAL_RAMP[
+      Math.round((n * (ORDINAL_RAMP.length - 1)) / (count - 1))
+    ]!;
+  const t = Math.round((n / (count - 1)) * 100);
+  return `color-mix(in oklab, var(--chart-5) ${t}%, var(--chart-1))`;
+}
 
 /**
  * A barlist's or donut's rows: how many of the dataset's rows have each value
@@ -2047,7 +2708,11 @@ function breakdownRows(data: ReportData, by: Breakdown) {
   // Values the report filters out are not zeros worth a row. Dropped after
   // colouring, so a value keeps its colour whatever else is filtered.
   const kept = data.kept[field.key];
-  return countBy(data.events, field.of, data.values[field.key] ?? [])
+  // Counted over the field's whole vocabulary, so `i` is a value's place on
+  // the scale and not its place among whatever survived the filters -- which
+  // is also what stops a filter repainting the bands that remain.
+  const counted = countBy(data.events, field.of, data.values[field.key] ?? []);
+  return counted
     .map((r, i) => ({
       key: `v${i}`,
       value: r.value,
@@ -2056,49 +2721,196 @@ function breakdownRows(data: ReportData, by: Breakdown) {
       share: r.share,
       color:
         (by === "operator" ? data.styles[r.value]?.color : undefined) ??
-        BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length]!,
+        (field.ramp === "ordinal"
+          ? ordinalColor(i, counted.length)
+          : BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length]!),
     }))
     .filter((r) => !kept?.length || kept.includes(r.value));
 }
 
+/**
+ * The same breakdown for the period before, keyed by value.
+ *
+ * A map rather than a parallel list: a value can be missing from either
+ * period, and lining two arrays up by index would silently compare one
+ * operator against another.
+ */
+function previousCounts(data: ReportData, by: Breakdown) {
+  if (!data.previous) return null;
+  const field = data.dataset.fields.find((f) => f.key === by) ?? OPERATOR_FIELD;
+  return new Map(
+    countBy(
+      data.previous.events,
+      field.of,
+      data.values[field.key] ?? [],
+    ).map((r) => [r.value, r.count]),
+  );
+}
+
+/**
+ * The comparison on a row of values: a figure and a signed change.
+ *
+ * Colour here means identity -- which operator -- so the comparison cannot
+ * have a hue of its own without turning four operators into eight colours.
+ * It gets a number instead.
+ *
+ * Deliberately NOT green-up / red-down, which is what `KpiBody` does.
+ *
+ * A KPI can be coloured that way because its metric has a known direction:
+ * more trips is good, more infringements is not. A row of a breakdown does
+ * not inherit that. "Resolved" infringements falling 22% came out green, on
+ * the grounds that infringements are bad -- and fewer resolutions is not
+ * good news. The same trap waits in every breakdown with a status, a
+ * severity or a battery band in it. Neither the chart nor the dataset knows
+ * which way a category is supposed to move, so neither gets to say.
+ *
+ * The arrow and the sign carry the direction, which is all that is true.
+ * This also keeps `success` and `destructive` for state, which is what the
+ * brand reserves them for.
+ */
+function RowDelta({
+  now,
+  before,
+}: {
+  now: number;
+  before: number | undefined;
+}) {
+  /*
+    Three different nothings, said differently. No row at all in the previous
+    period is "no previous". A row that counted zero and now counts something
+    is "new". A row that counted zero and still does is neither -- it is no
+    change, and calling it "new" is how a filter that empties a category ends
+    up announcing it as an arrival.
+
+    All three would otherwise come out as a percentage of zero, which is the
+    misleading 100% this exists to avoid.
+  */
+  if (before === undefined)
+    return (
+      <span className="text-muted-foreground text-[10px]">no previous</span>
+    );
+  const d = change(now, before);
+  if (d === null && now > 0)
+    return <span className="text-muted-foreground text-[10px]">new</span>;
+  const flat = d === null || Math.abs(d) < 0.005;
+  const Arrow = flat ? Minus : d! > 0 ? ArrowUp : ArrowDown;
+  return (
+    <span
+      className={cn(
+        "bg-muted inline-flex items-center gap-0.5 rounded-full px-1 py-0.5 text-[10px] font-medium tabular-nums",
+        flat ? "text-muted-foreground" : "text-foreground",
+      )}
+      title={`was ${before.toLocaleString("en")}`}
+    >
+      <Arrow className="size-2.5" aria-hidden />
+      {d === null ? "0.0" : `${d > 0 ? "+" : ""}${(d * 100).toFixed(1)}`}%
+    </span>
+  );
+}
+
 function BarlistBody({ data, by }: { data: ReportData; by: Breakdown }) {
   const rows = breakdownRows(data, by).sort((a, b) => b.count - a.count);
-  const max = Math.max(1, ...rows.map((r) => r.count));
+  const before = previousCounts(data, by);
+  /*
+    One scale across both periods, so the dashed tick and the solid bar are
+    measured by the same ruler. Without the previous period in the maximum, a
+    value that fell would put its tick past the end of its own track.
+  */
+  const max = Math.max(
+    1,
+    ...rows.map((r) => r.count),
+    ...(before ? [...before.values()] : []),
+  );
+  /*
+    Scrolls rather than clips. A breakdown's row count is the data's, not the
+    card's: operators are five, infringement types are five, fleet event
+    types are ten and districts are thirteen. The last of those does not fit
+    in two rows at any width, and the card was quietly cutting it off mid-row
+    with nothing to say it had -- a chart that under-reports its own data.
+  */
   return (
-    <ul className="space-y-2.5">
-      {rows.map((r) => (
-        <li key={r.value} className="space-y-1">
-          <div className="flex items-baseline justify-between gap-2 text-xs">
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span
-                aria-hidden
-                className="size-2 shrink-0 rounded-full"
-                style={{ background: r.color }}
-              />
-              <span className="truncate">{r.label}</span>
-            </span>
-            <span className="tabular-nums">
-              {r.count.toLocaleString("en")}
-              <span className="text-muted-foreground ml-1.5">
-                {formatPercent(r.share * 100)}
-              </span>
-            </span>
-          </div>
-          <div
-            className="bg-muted h-1.5 overflow-hidden rounded-full"
-            aria-hidden
-          >
-            <div
-              className="h-full rounded-full transition-[width] duration-500"
-              style={{
-                width: `${(r.count / max) * 100}%`,
-                background: r.color,
-              }}
-            />
-          </div>
-        </li>
-      ))}
-    </ul>
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <ul className="min-h-0 flex-1 space-y-2.5 overflow-y-auto">
+        {rows.map((r) => {
+          const was = before?.get(r.value);
+          return (
+            <li key={r.value} className="space-y-1">
+              <div className="flex items-baseline justify-between gap-2 text-xs">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span
+                    aria-hidden
+                    className="size-2 shrink-0 rounded-full"
+                    style={{ background: r.color }}
+                  />
+                  <span className="truncate">{r.label}</span>
+                </span>
+                <span className="flex items-center gap-1.5 tabular-nums">
+                  {r.count.toLocaleString("en")}
+                  {before ? (
+                    <RowDelta now={r.count} before={was} />
+                  ) : (
+                    <span className="text-muted-foreground">
+                      {formatPercent(r.share * 100)}
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="bg-muted relative h-1.5 rounded-full" aria-hidden>
+                <div
+                  className="h-full rounded-full transition-[width] duration-500"
+                  style={{
+                    width: `${(r.count / max) * 100}%`,
+                    background: r.color,
+                  }}
+                />
+                {/* Where the previous period reached, on the same track.
+                    Rows keep THIS period's order, so a value that slipped
+                    past another is visible as a crossing rather than as the
+                    whole list reshuffling. */}
+                {was ? (
+                  <span
+                    className="absolute inset-y-[-2px] w-0 border-l-2 border-dashed"
+                    style={{
+                      left: `${(was / max) * 100}%`,
+                      borderColor: r.color,
+                      opacity: 0.55,
+                    }}
+                  />
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {before ? (
+        <div className="shrink-0">
+          <CompareFootnote data={data} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * What the dashed tick and the "was" figures refer to, under the chart.
+ *
+ * Under, because the top of a widget card already carries its title and its
+ * menu; a legend above the plot makes the data the third thing on the card.
+ */
+function CompareFootnote({ data }: { data: ReportData }) {
+  return (
+    <p className="text-muted-foreground/70 flex flex-wrap items-center gap-x-2 text-[10px]">
+      <span className="inline-flex items-center gap-1">
+        <span
+          aria-hidden
+          className="border-muted-foreground/70 inline-block h-0 w-3 border-t border-dashed"
+        />
+        previous period
+      </span>
+      <span className="opacity-70">
+        {data.previous ? spanLabel(data.previous.days) : ""}
+      </span>
+    </p>
   );
 }
 
@@ -2115,6 +2927,7 @@ function DonutBody({
     () => breakdownRows(data, by).filter((r) => r.count > 0),
     [data, by],
   );
+  const before = previousCounts(data, by);
   const config: ChartConfig = Object.fromEntries(
     rows.map((r) => [r.key, { label: r.label, color: r.color }]),
   );
@@ -2164,25 +2977,69 @@ function DonutBody({
           </PieChart>
         </ChartContainer>
       </div>
+      {/*
+        Comparing turns the legend from a wrapped row into a list.
+
+        The ring stays a donut and keeps drawing this period: composition is
+        what the chart is for. What a donut genuinely cannot draw is the
+        previous composition -- a second ring makes every slice shorter for
+        the same share, so everything reads as a loss -- so the comparison is
+        carried here as a figure and a signed change per slice. That needs a
+        row per category, which a centred wrapping row cannot give.
+      */}
       {!preview ? (
-        <ul className="flex shrink-0 flex-wrap justify-center gap-x-4 gap-y-1 pt-1.5 text-xs">
-          {rows.map((r) => (
-            <li
-              key={r.key}
-              className="text-muted-foreground flex items-center gap-1.5"
-            >
-              <span
-                aria-hidden
-                className="size-2.5 rounded-[3px]"
-                style={{ background: r.color }}
-              />
-              {r.label}
-              <span className="text-foreground font-medium tabular-nums">
-                {total ? Math.round((r.count / total) * 100) : 0}%
-              </span>
-            </li>
-          ))}
-        </ul>
+        before ? (
+          <ul className="shrink-0 space-y-1 pt-1.5 text-xs">
+            {rows.map((r) => (
+              <li
+                key={r.key}
+                className="flex items-center justify-between gap-2"
+              >
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span
+                    aria-hidden
+                    className="size-2.5 shrink-0 rounded-[3px]"
+                    style={{ background: r.color }}
+                  />
+                  <span className="truncate">{r.label}</span>
+                </span>
+                {/*
+                  The count, not the share, once there is a delta beside it.
+                  "8% +6.6%" is two percentages that mean different things --
+                  a share of this period and a change in a count -- and they
+                  are read as one. The ring already draws the shares; the
+                  legend carries the figure the delta is a delta of.
+                */}
+                <span className="flex items-center gap-1.5 tabular-nums">
+                  {r.count.toLocaleString("en")}
+                  <RowDelta
+                    now={r.count}
+                    before={before.get(r.value)}
+                  />
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <ul className="flex shrink-0 flex-wrap justify-center gap-x-4 gap-y-1 pt-1.5 text-xs">
+            {rows.map((r) => (
+              <li
+                key={r.key}
+                className="text-muted-foreground flex items-center gap-1.5"
+              >
+                <span
+                  aria-hidden
+                  className="size-2.5 rounded-[3px]"
+                  style={{ background: r.color }}
+                />
+                {r.label}
+                <span className="text-foreground font-medium tabular-nums">
+                  {total ? Math.round((r.count / total) * 100) : 0}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        )
       ) : null}
     </div>
   );
@@ -2193,18 +3050,398 @@ const HOUR_LABELS = Array.from(
   (_, h) => `${String(h).padStart(2, "0")}:00`,
 );
 
-function MatrixBody({ data }: { data: ReportData }) {
+/* ---------------------------------------------------------------- sankey -- */
+
+const DIFF_UP = "#01665e";
+const DIFF_DOWN = "#8c510a";
+
+/**
+ * The per-card view switch, as quiet as a segmented control gets.
+ *
+ * Two cards out of nine carry one, and only while comparing -- it is the
+ * exception, so it should not be the loudest thing on the card. Full width
+ * and a filled track made it read as the card's primary control, above the
+ * chart it only changes the view of.
+ *
+ * Shrunk to its labels and right-aligned, with no track of its own: the
+ * selected segment's own surface is the only mark, which over a card reads
+ * as a raised tab rather than a toolbar. The component keeps its radio
+ * semantics, its roving focus and its focus ring; only the chrome goes.
+ */
+const VIEW_SWITCH =
+  "w-auto shrink-0 gap-0.5 bg-transparent p-0 [&>label]:px-2.5 [&>label]:whitespace-nowrap";
+
+/**
+ * How many origin-destination pairs a flow chart will draw before it is mush.
+ *
+ * Eight, and the binding constraint is labels rather than ribbons. Eight
+ * pairs can name up to eight places down one side, each label two lines
+ * tall, and the nodes are spaced by volume rather than evenly -- so the
+ * small ones at the bottom land on top of each other long before the
+ * ribbons themselves become unreadable.
+ */
+const FLOW_LIMIT = 8;
+
+type Flow = {
+  source: string;
+  target: string;
+  now: number;
+  before: number | null;
+};
+
+/**
+ * The busiest origin-destination pairs, and what each did since last period.
+ *
+ * Trips carry both ends of their route, so the pairs are real rather than
+ * modelled. They are capped: a dozen districts is up to 144 pairs, and a
+ * sankey with 144 ribbons is a texture. The cap is taken on THIS period's
+ * volume, so the chart answers "where do most trips go, and what changed
+ * there" rather than quietly re-picking its own subject each time the
+ * comparison moves.
+ */
+function flowsFor(data: ReportData, limit = FLOW_LIMIT): Flow[] {
+  const count = (events: AnyEvent[]) => {
+    const pairs = new Map<string, number>();
+    for (const e of events) {
+      if (!("origin" in e) || !e.origin || !e.destination) continue;
+      /*
+        A trip that began and ended beyond the drawn districts is dropped.
+        Half the sample starts or ends outside them, so this pair is by far
+        the biggest, and as a ribbon it is a slab joining "elsewhere" to
+        "elsewhere" that crowds out every flow that names two places. The
+        ones with a district at either end stay: a trip arriving into Baixa
+        from beyond the map is a real movement into Baixa.
+      */
+      if (e.origin === OUTSIDE && e.destination === OUTSIDE) continue;
+      const key = `${e.origin}\u0000${e.destination}`;
+      pairs.set(key, (pairs.get(key) ?? 0) + 1);
+    }
+    return pairs;
+  };
+
+  const now = count(data.events);
+  const before = data.previous ? count(data.previous.events) : null;
+
+  return [...now.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([key, value]) => {
+      const [source = "", target = ""] = key.split("\u0000");
+      return {
+        source,
+        target,
+        now: value,
+        before: before ? (before.get(key) ?? 0) : null,
+      };
+    });
+}
+
+function SankeyBody({ data, preview }: { data: ReportData; preview?: boolean }) {
+  const [view, setView] = React.useState<"change" | "list">("change");
+  const flows = React.useMemo(() => flowsFor(data), [data]);
+  const comparing = data.previous !== null;
+
+  if (flows.length === 0)
+    return (
+      <p className="text-muted-foreground py-10 text-center text-sm">
+        No {data.dataset.noun} between districts.
+      </p>
+    );
+
+  /*
+    Origins and destinations are the same twelve districts, so a node id has
+    to say which side it is on -- otherwise Baixa-to-Baixa is a loop into
+    itself and the layout collapses.
+  */
+  const nodes = [
+    ...new Map(
+      flows.flatMap((f) => [
+        [`o:${f.source}`, { id: `o:${f.source}`, label: f.source }],
+        [`d:${f.target}`, { id: `d:${f.target}`, label: f.target }],
+      ]) as [string, { id: string; label: string }][],
+    ).values(),
+  ];
+
+  const biggestChange = Math.max(
+    1,
+    ...flows.map((f) => Math.abs(f.now - (f.before ?? f.now))),
+  );
+
+  const byPair = new Map(
+    flows.map((f) => [`${f.source}\u0000${f.target}`, f]),
+  );
+
+  const showList = view === "list" && comparing;
+
   return (
-    <div className="space-y-2">
-      <ActivityHeatmap
-        rows={WEEKDAY_LABELS}
-        columns={HOUR_LABELS}
-        values={weekHourGrid(data.events)}
-      />
-      <div className="text-muted-foreground flex justify-between pl-16 text-[10px] tabular-nums">
-        <span>00:00</span>
-        <span>12:00</span>
-        <span>23:00</span>
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      {comparing && !preview ? (
+        <div className="flex shrink-0 justify-end">
+          <SegmentedControl
+            value={view}
+            onValueChange={(v) => setView(v as "change" | "list")}
+            size="sm"
+            className={VIEW_SWITCH}
+            items={[
+              { value: "change", label: "Change" },
+              { value: "list", label: "Flow list" },
+            ]}
+          />
+        </div>
+      ) : null}
+
+      {showList ? (
+        <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto text-xs">
+          {[...flows]
+            .sort(
+              (a, b) =>
+                Math.abs(b.now - (b.before ?? b.now)) -
+                Math.abs(a.now - (a.before ?? a.now)),
+            )
+            .map((f) => (
+              <li
+                key={`${f.source}-${f.target}`}
+                className="flex items-center justify-between gap-2"
+              >
+                <span className="min-w-0 truncate">
+                  {f.source} <span className="opacity-60">→</span> {f.target}
+                </span>
+                <span className="flex items-center gap-1.5 tabular-nums">
+                  {f.now.toLocaleString("en")}
+                  <RowDelta
+                    now={f.now}
+                    before={f.before ?? undefined}
+                  />
+                </span>
+              </li>
+            ))}
+        </ul>
+      ) : (
+        <div className="min-h-0 flex-1">
+          <SankeyFlow
+            className="size-full"
+            nodes={nodes}
+            /*
+              Every node drawn, none folded into "Other". The chart folds
+              past its palette by default, which is right when colour is
+              identity and wrong here: a folded ribbon is several pairs at
+              once, so it has no single change to colour by, and it came out
+              wearing an identity hue in the middle of a diverging scale.
+              The pair cap above already does the thinning.
+            */
+            maxNodes={nodes.length}
+            links={flows.map((f) => ({
+              source: `o:${f.source}`,
+              target: `d:${f.target}`,
+              value: f.now,
+            }))}
+            /*
+              While comparing, a ribbon's hue is its DIRECTION of travel, not
+              which district it left -- the heatmap's rule applied to
+              ribbons. Thickness still carries the volume, so the two
+              encodings do not compete.
+            */
+            linkColor={
+              comparing
+                ? ({ source, target }) => {
+                    const f = byPair.get(
+                      `${source.replace(/^o:/, "")}\u0000${target.replace(/^d:/, "")}`,
+                    );
+                    if (!f || f.before === null) return undefined;
+                    const d = f.now - f.before;
+                    const mix = Math.min(
+                      100,
+                      Math.round((Math.abs(d) / biggestChange) * 100),
+                    );
+                    return `color-mix(in oklab, ${d >= 0 ? DIFF_UP : DIFF_DOWN} ${mix}%, var(--card))`;
+                  }
+                : undefined
+            }
+          />
+        </div>
+      )}
+
+      {comparing && !showList ? (
+        <p className="text-muted-foreground/70 flex shrink-0 flex-wrap items-center gap-x-2 text-[10px]">
+          <span className="tabular-nums">−{biggestChange}</span>
+          <span
+            aria-hidden
+            className="h-1.5 w-14 rounded-full"
+            style={{
+              background: `linear-gradient(to right, ${DIFF_DOWN}, var(--card), ${DIFF_UP})`,
+            }}
+          />
+          <span className="tabular-nums">
+            +{biggestChange} {data.dataset.noun}
+          </span>
+          <span className="opacity-70">— thickness is still the volume</span>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function HourScale() {
+  return (
+    <div className="text-muted-foreground flex justify-between pl-16 text-[10px] tabular-nums">
+      <span>00:00</span>
+      <span>12:00</span>
+      <span>23:00</span>
+    </div>
+  );
+}
+
+/**
+ * The grid, comparing or not.
+ *
+ * Colour here already means the metric, so there is no faded second series to
+ * add and two ramps would be two rulers. That leaves two honest views, and
+ * Change is the default because it answers the question people open a
+ * comparison to ask -- what moved -- without a second grid to hold in mind.
+ *
+ * Levels keeps both grids on ONE maximum, taken across both periods. Scaling
+ * each to its own, which is what `weekHourGrid` does and what this widget did
+ * before, means the same shade is a different number in each grid.
+ */
+function MatrixBody({ data }: { data: ReportData }) {
+  const [view, setView] = React.useState<"change" | "levels">("change");
+  const previous = data.previous;
+
+  const grids = React.useMemo(() => {
+    const now = weekHourCounts(data.events);
+    if (!previous) return { now, before: null, max: 0, diff: null, peak: 0 };
+    const before = weekHourCounts(previous.events);
+    const max = Math.max(1, ...now.flat(), ...before.flat());
+    const diff = now.map((row, d) =>
+      row.map((v, h) => v - (before[d]?.[h] ?? 0)),
+    );
+    const peak = Math.max(1, ...diff.flat().map(Math.abs));
+    return { now, before, max, diff, peak };
+  }, [data.events, previous]);
+
+  if (!previous || !grids.diff || !grids.before) {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-2">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <ActivityHeatmap
+            fill
+            rows={WEEKDAY_LABELS}
+            columns={HOUR_LABELS}
+            values={weekHourGrid(data.events)}
+            counts={grids.now}
+            countUnit={data.dataset.noun}
+          />
+        </div>
+        <div className="shrink-0">
+          <HourScale />
+        </div>
+      </div>
+    );
+  }
+
+  const changing = view === "change";
+
+  /*
+    The grids scroll; the control, the hour scale and the legend do not.
+
+    Change is one grid, and it grows to fill whatever height the card has:
+    a heatmap has no natural size, so drawing seven 14px rows in a card the
+    reader stretched just leaves the rest of the card empty. Levels is two
+    grids plus a caption each, which will not fit twice over -- it is the
+    optional view, so it is the one that gives way and scrolls. Pinning the
+    scale and the legend matters more than it looks: they are what say which
+    number a shade is, and a reader who has scrolled away from them is
+    reading a picture.
+  */
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <div className="flex shrink-0 justify-end">
+        <SegmentedControl
+          value={view}
+          onValueChange={(v) => setView(v as "change" | "levels")}
+          size="sm"
+          className={VIEW_SWITCH}
+          items={[
+            { value: "change", label: "Change" },
+            { value: "levels", label: "Levels" },
+          ]}
+        />
+      </div>
+
+      {changing ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <ActivityHeatmap
+            fill
+            rows={WEEKDAY_LABELS}
+            columns={HOUR_LABELS}
+            ramp="diverging"
+            values={grids.diff.map((row) => row.map((v) => v / grids.peak))}
+            counts={grids.diff}
+            formatCount={(n) => `${n > 0 ? "+" : ""}${n.toLocaleString("en")}`}
+            countUnit={data.dataset.noun}
+          />
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+          {(
+            [
+              ["Previous period", grids.before],
+              ["This period", grids.now],
+            ] as const
+          ).map(([label, grid]) => (
+            <div key={label} className="space-y-1">
+              <p className="text-muted-foreground text-[10px]">{label}</p>
+              <ActivityHeatmap
+                rows={WEEKDAY_LABELS}
+                columns={HOUR_LABELS}
+                values={grid.map((row) => row.map((v) => v / grids.max))}
+                counts={grid}
+                countUnit={data.dataset.noun}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="shrink-0">
+        <HourScale />
+      </div>
+
+      {/* Legend under the chart: the top of the card already carries the
+          title, the widget menu and now this view's switch. */}
+      <div className="text-muted-foreground/70 flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
+        {changing ? (
+          <>
+            <span className="tabular-nums">
+              −{grids.peak.toLocaleString("en")}
+            </span>
+            <span aria-hidden className="h-1.5 w-16 rounded-full" style={{
+              background:
+                "linear-gradient(to right, #8c510a, var(--card), #01665e)",
+            }} />
+            <span className="tabular-nums">
+              +{grids.peak.toLocaleString("en")} {data.dataset.noun}
+            </span>
+            <span className="opacity-70">— no change is the card itself</span>
+          </>
+        ) : (
+          <>
+            <span className="tabular-nums">0</span>
+            <span aria-hidden className="flex h-1.5 w-16 overflow-hidden rounded-full">
+              {Array.from({ length: 11 }, (_, i) => (
+                <span
+                  key={i}
+                  className="flex-1"
+                  style={{ background: `var(--map-ramp-${i * 10})` }}
+                />
+              ))}
+            </span>
+            <span className="tabular-nums">
+              {grids.max.toLocaleString("en")} {data.dataset.noun}
+            </span>
+            <span className="opacity-70">— one scale, both periods</span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -2265,6 +3502,8 @@ function WidgetBody({
       );
     case "matrix":
       return <MatrixBody data={data} />;
+    case "sankey":
+      return <SankeyBody data={data} preview={preview} />;
   }
 }
 
@@ -2332,6 +3571,21 @@ function widgetCsv(widget: WidgetSpec, data: ReportData): Csv | null {
         ],
       };
     }
+    case "sankey":
+      return {
+        rows: flowsFor(data).map((f) => ({
+          origin: f.source,
+          destination: f.target,
+          count: f.now,
+          previous: f.before ?? "",
+        })),
+        columns: [
+          { id: "origin", label: "origin district" },
+          { id: "destination", label: "destination district" },
+          { id: "count", label: data.dataset.noun },
+          { id: "previous", label: `previous ${data.dataset.noun}` },
+        ],
+      };
     case "text":
       return null;
   }
@@ -2991,11 +4245,37 @@ function WidgetCard({
         </DropdownMenu>
         {/* On a phone the filter count moves to the row's right edge, as
               the tray's trigger; on a desktop it follows the dataset. */}
-        <div className="text-muted-foreground col-span-2 flex min-w-0 items-center gap-3 text-xs max-md:justify-between">
+        <div className="text-muted-foreground col-span-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs max-md:justify-between">
           <span className="flex min-w-0 items-center gap-1.5">
             <Database className="size-3.5 shrink-0" aria-hidden />
             <span className="truncate">{data.dataset.label}</span>
           </span>
+          {/*
+            The period, on the card rather than only in the filter bar.
+
+            A card is read on its own more often than the board is read as a
+            whole -- exported as a PNG, scrolled to past the bar, pasted into
+            a deck -- and until now none of them said what fortnight they
+            covered. The comparison range follows it wearing the same dashed
+            mark the charts below use, so the two periods are told apart the
+            same way everywhere on the card. It wraps to its own line before
+            it squeezes the dataset name.
+          */}
+          {data.days.length ? (
+            <span className="flex min-w-0 shrink-0 items-center gap-1.5">
+              <CalendarRange className="size-3.5 shrink-0" aria-hidden />
+              <span className="truncate">{spanLabel(data.days)}</span>
+              {data.previous ? (
+                <span className="text-muted-foreground/70 inline-flex shrink-0 items-center gap-1">
+                  <span
+                    aria-hidden
+                    className="border-muted-foreground/70 inline-block h-0 w-2.5 border-t border-dashed"
+                  />
+                  vs {spanLabel(data.previous.days)}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
           {filterDisplay === "count" ? (
             <span className="draggable-cancel empty:hidden">
               <CardFilters
@@ -3040,7 +4320,7 @@ function WidgetCard({
         className="bg-card flex min-h-0 flex-1 flex-col overflow-auto p-3"
       >
         {exportFailed ? (
-          <p role="alert" className="text-destructive mb-2 text-xs">
+          <p role="alert" className="text-destructive-ink mb-2 text-xs">
             Couldn&apos;t draw this chart as an image.
           </p>
         ) : null}
@@ -3827,7 +5107,7 @@ const ReportCanvas = React.forwardRef<
                   // `+` sent us to stays lit while its hint is up, pointer or
                   // no pointer.
                   (isHover || isHinted) &&
-                    "bg-primary/10 ring-primary/50 ring-1",
+                    "bg-primary-ink/10 ring-primary-ink/50 ring-1",
                 )}
               >
                 {/* Why the `+` appeared to do nothing. It inserted a widget
@@ -3862,7 +5142,7 @@ const ReportCanvas = React.forwardRef<
                       tabIndex={isCurrent ? 0 : -1}
                       aria-label="Create a chart here"
                       title="Create a chart"
-                      className="bg-background hover:border-primary hover:text-primary w-full min-w-0 shadow-xs"
+                      className="bg-background hover:border-primary-ink hover:text-primary-ink w-full min-w-0 shadow-xs"
                       onClick={() =>
                         setAdding({
                           rect: { ...c, w: 1, h: 1 },
@@ -3882,7 +5162,7 @@ const ReportCanvas = React.forwardRef<
                       tabIndex={isCurrent ? 0 : -1}
                       aria-label="Create text here"
                       title="Create text"
-                      className="bg-background hover:border-primary hover:text-primary w-full min-w-0 shadow-xs"
+                      className="bg-background hover:border-primary-ink hover:text-primary-ink w-full min-w-0 shadow-xs"
                       onClick={() =>
                         placeText({
                           rect: { ...c, w: 1, h: 1 },
@@ -3910,8 +5190,8 @@ const ReportCanvas = React.forwardRef<
               className={cn(
                 "pointer-events-none z-10 flex items-center justify-center rounded-xl border-2 border-dashed text-xs font-medium",
                 drawFits
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-destructive bg-destructive/10 text-destructive",
+                  ? "border-primary-ink bg-primary-ink/10 text-primary-ink"
+                  : "border-destructive-ink bg-destructive-ink/10 text-destructive-ink",
               )}
             >
               {drawRect.w} × {drawRect.h}
@@ -3921,7 +5201,7 @@ const ReportCanvas = React.forwardRef<
             <div
               aria-hidden
               style={cellSpan(landing)}
-              className="border-primary bg-primary/10 pointer-events-none z-10 rounded-xl border-2 border-dashed transition-all duration-200"
+              className="border-primary-ink bg-primary-ink/10 pointer-events-none z-10 rounded-xl border-2 border-dashed transition-all duration-200"
             />
           ) : null}
           {target ? (
@@ -4026,9 +5306,9 @@ const ReportCanvas = React.forwardRef<
                     setAdding(target);
                     setTarget(null);
                   }}
-                  className="hover:border-primary/60 focus-visible:ring-ring flex flex-col items-start gap-1 rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:outline-none"
+                  className="hover:border-primary-ink/60 focus-visible:ring-ring flex flex-col items-start gap-1 rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:outline-none"
                 >
-                  <ChartColumn className="text-primary size-5" aria-hidden />
+                  <ChartColumn className="text-primary-ink size-5" aria-hidden />
                   <span className="text-sm font-medium">Chart</span>
                   <span className="text-muted-foreground text-xs">
                     Pick from your chart library
@@ -4037,9 +5317,9 @@ const ReportCanvas = React.forwardRef<
                 <button
                   type="button"
                   onClick={() => placeText(target)}
-                  className="hover:border-primary/60 focus-visible:ring-ring flex flex-col items-start gap-1 rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:outline-none"
+                  className="hover:border-primary-ink/60 focus-visible:ring-ring flex flex-col items-start gap-1 rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:outline-none"
                 >
-                  <Type className="text-primary size-5" aria-hidden />
+                  <Type className="text-primary-ink size-5" aria-hidden />
                   <span className="text-sm font-medium">Text</span>
                   <span className="text-muted-foreground text-xs">
                     A heading or a note for a section
@@ -4292,7 +5572,7 @@ function AddChartsDialog({
                     className={cn(
                       "bg-card focus-visible:ring-ring relative flex h-72 w-full min-w-0 flex-col gap-3 overflow-hidden rounded-xl border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none",
                       on
-                        ? "border-primary ring-primary bg-muted/40 ring-1"
+                        ? "border-primary-ink ring-primary-ink bg-muted/40 ring-1"
                         : "hover:border-foreground/25",
                     )}
                   >
@@ -4459,6 +5739,20 @@ function ValuePicker({
 
 const chipClass =
   "bg-card inline-flex h-8 max-w-full items-stretch overflow-hidden rounded-md border text-sm shadow-xs";
+/*
+  The comparison chip, told apart from the date chip by the same means the
+  charts use to tell the two periods apart: dashed and recessive, not a
+  second hue.
+
+  A colour would have had to mean something. Every hue on this bar is already
+  spoken for -- the operators' identities, the diverging scale's direction --
+  and a chip in a fourth colour would be a filter that looks like a category.
+  Dashed and sunk into the background is what "previous" looks like on every
+  card below it: the tick behind a bar, the faded line behind a series. The
+  bar now says it the same way.
+*/
+const compareChipClass =
+  "bg-muted/40 text-muted-foreground inline-flex h-8 max-w-full items-stretch overflow-hidden rounded-md border border-dashed text-sm";
 const chipPartClass =
   "hover:bg-muted focus-visible:ring-ring inline-flex min-w-0 items-center gap-1.5 px-2.5 transition-colors focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset";
 
@@ -4573,10 +5867,10 @@ function ReportFilterBar({
       ) : null}
 
       {!period ? null : filters.compare ? (
-        <span className={chipClass}>
+        <span className={compareChipClass}>
           <span className="inline-flex min-w-0 items-center gap-1.5 px-2.5">
-            <span className="text-muted-foreground">Compared with:</span>
-            <span className="truncate font-medium">
+            <span>Compared with:</span>
+            <span className="text-foreground truncate font-medium">
               {rangeLabel(prev.from, prev.to)}
             </span>
             {prevHasData ? null : (
@@ -5228,7 +6522,7 @@ function ReportList({
                       type="button"
                       data-slot="report-link"
                       onClick={() => onOpen(r.id)}
-                      className="hover:text-primary focus-visible:ring-ring block max-w-full scroll-m-1 truncate rounded text-left font-medium focus-visible:ring-2 focus-visible:outline-none"
+                      className="hover:text-primary-ink focus-visible:ring-ring block max-w-full scroll-m-1 truncate rounded text-left font-medium focus-visible:ring-2 focus-visible:outline-none"
                     >
                       {r.title}
                     </button>
@@ -5359,6 +6653,7 @@ export function DashboardWorkspace({
   className,
   reports: initial = SAMPLE_REPORTS,
   tripsUrl = DATASETS.trips.url,
+  eventsUrl = DATASETS.events.url,
   infringementsUrl = DATASETS.infringements.url,
   status = "ready",
   currentUser = { name: "You", email: "" },
@@ -5372,6 +6667,8 @@ export function DashboardWorkspace({
   reports?: Report[];
   /** The MDS trips CSV the trips charts read. */
   tripsUrl?: string;
+  /** The MDS fleet-events CSV the event charts read. */
+  eventsUrl?: string;
   /** The parking infringements CSV the infringement charts read. */
   infringementsUrl?: string;
   status?: "ready" | "loading" | "error";
@@ -5391,13 +6688,18 @@ export function DashboardWorkspace({
   const rootRef = React.useRef<HTMLDivElement>(null);
 
   const trips = useDataset(DATASETS.trips, tripsUrl);
+  const events = useDataset(DATASETS.events, eventsUrl);
   const infringements = useDataset(DATASETS.infringements, infringementsUrl);
   const states: DatasetStates = React.useMemo(
-    () => ({ trips: trips.state, infringements: infringements.state }),
-    [trips.state, infringements.state],
+    () => ({
+      trips: trips.state,
+      events: events.state,
+      infringements: infringements.state,
+    }),
+    [trips.state, events.state, infringements.state],
   );
-  const retry = (id: DatasetId) =>
-    (id === "trips" ? trips : infringements).retry();
+  const feeds = { trips, events, infringements };
+  const retry = (id: DatasetId) => feeds[id].retry();
   const saved = useOperatorStyles();
   // Operators in the trips feed's order, then any only the other feed has.
   const operators = React.useMemo(

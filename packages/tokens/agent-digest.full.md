@@ -5,10 +5,10 @@
 
 | | |
 |---|---|
-| Generated | 2026-10-11 |
-| DS repo | `5dafa05 (public-main)` |
-| Input | `dist/tokens.json`, sha256 `a26072220422d0e5…` |
-| Observed | 71 semantic roles × 6 modes · 50 of 71 light roles are code-only · 76 tokens carry `a11yFix` |
+| Generated | 2026-11-27 |
+| DS repo | `206cc89 (feat/compare-date-mockup)` |
+| Input | `dist/tokens.json`, sha256 `e83915008c874eb4…` |
+| Observed | 84 semantic roles × 6 modes · 63 of 84 light roles are code-only · 99 tokens carry `a11yFix` |
 
 The four white-label themes, emitted **diff-only against `dark`** because they
 are re-accents rather than separate palettes — a dozen rows each, not 63.
@@ -22,7 +22,7 @@ contrast, so it no longer matches Figma.
 Colour values below are **resolved to hex**. The source is often `oklch()`; if you
 need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 
-## darkStone — differs from `dark` in 37 of 71 roles
+## darkStone — differs from `dark` in 35 of 84 roles
 
 | Role | dark | darkStone | P |
 |---|---|---|---|
@@ -44,8 +44,6 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `card-foreground` | `#fafafa` | `#d4d4d8` | F |
 | `popover` | `#18181b` | `#292524` | F |
 | `popover-foreground` | `#fafafa` | `#d4d4d8` | F |
-| `destructive` | `#ff6467` | `#7f1d1d` | F |
-| `destructive-foreground` | `#09090b` | `#d4d4d8` | F |
 | `border` | `#ffffff1a` | `#57534e` | F |
 | `ring` | `#71717b` | `#d4d4d8` | F |
 | `surface-raised` | `#3f3f46` | `#44403c` | C |
@@ -64,7 +62,7 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `chart-categorical-6` | `#76a151` | `#78a94c` | C |
 | `chart-categorical-8` | `#0f91b2` | `#489bb6` | C |
 
-## darkSlate — differs from `dark` in 42 of 71 roles
+## darkSlate — differs from `dark` in 40 of 84 roles
 
 | Role | dark | darkSlate | P |
 |---|---|---|---|
@@ -91,8 +89,6 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `card-foreground` | `#fafafa` | `#e5e5e5` | F |
 | `popover` | `#18181b` | `#1e293b` | F |
 | `popover-foreground` | `#fafafa` | `#e5e5e5` | F |
-| `destructive` | `#ff6467` | `#7f1d1d` | F |
-| `destructive-foreground` | `#09090b` | `#e5e5e5` | F |
 | `border` | `#ffffff1a` | `#475569` | F |
 | `ring` | `#71717b` | `#d4d4d8` | F |
 | `surface-raised` | `#3f3f46` | `#334155` | C |
@@ -111,13 +107,13 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `chart-categorical-6` | `#76a151` | `#78a94c` | C |
 | `chart-categorical-8` | `#0f91b2` | `#489bb6` | C |
 
-## fuchsia — differs from `dark` in 36 of 71 roles
+## fuchsia — differs from `dark` in 36 of 84 roles
 
 | Role | dark | fuchsia | P |
 |---|---|---|---|
 | `background` | `#09090b` | `#27272a` | F |
 | `foreground` | `#fafafa` | `#d4d4d8` | F |
-| `primary` | `#2dd4bf` | `#e879f9` | F! |
+| `primary` | `#0f766e` | `#c026d3` | F! |
 | `secondary` | `#27272a` | `#3f3f46` | F |
 | `secondary-foreground` | `#fafafa` | `#d4d4d8` | F |
 | `muted` | `#27272a` | `#3f3f46` | F |
@@ -133,14 +129,14 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `card-foreground` | `#fafafa` | `#d4d4d8` | F |
 | `popover` | `#18181b` | `#27272a` | F |
 | `popover-foreground` | `#fafafa` | `#d4d4d8` | F |
-| `destructive` | `#ff6467` | `#7f1d1d` | F |
-| `destructive-foreground` | `#09090b` | `#d4d4d8` | F |
 | `border` | `#ffffff1a` | `#52525b` | F |
 | `ring` | `#71717b` | `#d4d4d8` | F |
+| `primary-ink` | `#2dd4bf` | `#e879f9` | C |
 | `selected` | `#2dd4bf` | `#e879f9` | C |
 | `sidebar` | `#18181b` | `#27272a` | C |
 | `sidebar-foreground` | `#fafafa` | `#d4d4d8` | C |
-| `sidebar-primary` | `#2dd4bf` | `#e879f9` | C |
+| `sidebar-primary` | `#0f766e` | `#c026d3` | C |
+| `sidebar-primary-ink` | `#2dd4bf` | `#e879f9` | C |
 | `sidebar-accent` | `#27272a` | `#3f3f46` | C |
 | `sidebar-accent-foreground` | `#fafafa` | `#d4d4d8` | C |
 | `sidebar-border` | `#ffffff1a` | `#52525b` | C |
@@ -152,7 +148,7 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `chart-categorical-6` | `#76a151` | `#78a94c` | C |
 | `chart-categorical-8` | `#0f91b2` | `#489bb6` | C |
 
-## gray — differs from `dark` in 45 of 71 roles
+## gray — differs from `dark` in 43 of 84 roles
 
 | Role | dark | gray | P |
 |---|---|---|---|
@@ -163,7 +159,6 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `foreground-40` | `#d4d4d866` | `#f1f5f966` | F |
 | `foreground-20` | `#d4d4d833` | `#f1f5f933` | F |
 | `foreground-10` | `#d4d4d81a` | `#f1f5f91a` | F |
-| `primary` | `#2dd4bf` | `#5eead4` | F |
 | `secondary` | `#27272a` | `#374151` | F |
 | `secondary-foreground` | `#fafafa` | `#f1f5f9` | F |
 | `muted` | `#27272a` | `#374151` | F |
@@ -180,17 +175,16 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `card-foreground` | `#fafafa` | `#f1f5f9` | F |
 | `popover` | `#18181b` | `#1f2937` | F |
 | `popover-foreground` | `#fafafa` | `#f1f5f9` | F |
-| `destructive` | `#ff6467` | `#b91c1c` | F |
-| `destructive-foreground` | `#09090b` | `#f1f5f9` | F |
 | `border` | `#ffffff1a` | `#4b5563` | F |
 | `ring` | `#71717b` | `#5eead4` | F |
+| `primary-ink` | `#2dd4bf` | `#5eead4` | C |
 | `surface-raised` | `#3f3f46` | `#374151` | C |
 | `surface-sunken` | `#18181b` | `#111827` | C |
 | `selected` | `#2dd4bf` | `#5eead4` | C |
 | `dimmed` | `#52525b` | `#4b5563` | C |
 | `sidebar` | `#18181b` | `#1f2937` | C |
 | `sidebar-foreground` | `#fafafa` | `#f1f5f9` | C |
-| `sidebar-primary` | `#2dd4bf` | `#5eead4` | C |
+| `sidebar-primary-ink` | `#2dd4bf` | `#5eead4` | C |
 | `sidebar-accent` | `#27272a` | `#374151` | C |
 | `sidebar-accent-foreground` | `#fafafa` | `#f1f5f9` | C |
 | `sidebar-border` | `#ffffff1a` | `#4b5563` | C |

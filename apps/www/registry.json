@@ -40,7 +40,7 @@
           "card-foreground": "oklch(0.141 0.005 285.823)",
           "popover": "oklch(1 0 0)",
           "popover-foreground": "oklch(0.141 0.005 285.823)",
-          "destructive": "oklch(0.577 0.245 27.325)",
+          "destructive": "#dc2626",
           "destructive-foreground": "#fafafa",
           "border": "oklch(0.92 0.004 286.32)",
           "input": "#e4e4e7",
@@ -48,14 +48,18 @@
           "syntax-string": "#16a34a",
           "syntax-number": "#d97706",
           "syntax-property": "#6d28d9",
-          "warning": "#fbbf24",
-          "warning-foreground": "#451a03",
+          "warning": "#b45309",
+          "warning-foreground": "#fafafa",
           "data-accent": "#2dd4bf",
           "data-warning": "#fcd34d",
           "success": "#15803d",
           "success-foreground": "#fafafa",
+          "success-ink": "#15803d",
           "info": "#0369a1",
           "info-foreground": "#fafafa",
+          "info-ink": "#0369a1",
+          "primary-ink": "#0f766e",
+          "destructive-ink": "#dc2626",
           "surface-raised": "#ffffff",
           "surface-sunken": "#f4f4f5",
           "overlay": "#000000a6",
@@ -69,6 +73,7 @@
           "sidebar-foreground": "oklch(0.141 0.005 285.823)",
           "sidebar-primary": "#0f766e",
           "sidebar-primary-foreground": "#fafafa",
+          "sidebar-primary-ink": "#0f766e",
           "sidebar-accent": "oklch(0.967 0.001 286.375)",
           "sidebar-accent-foreground": "oklch(0.21 0.006 285.885)",
           "sidebar-border": "oklch(0.92 0.004 286.32)",
@@ -85,7 +90,15 @@
           "chart-categorical-5": "#8339b0",
           "chart-categorical-6": "#76a151",
           "chart-categorical-7": "#dd2824",
-          "chart-categorical-8": "#0f91b2"
+          "chart-categorical-8": "#0f91b2",
+          "tool-accent-1": "#8f4100",
+          "tool-accent-2": "#927400",
+          "tool-accent-3": "#006a35",
+          "tool-accent-4": "#00664f",
+          "tool-accent-5": "#006169",
+          "tool-accent-6": "#5e72c5",
+          "tool-accent-7": "#614ca0",
+          "tool-accent-8": "#b0588c"
         },
         "dark": {
           "background": "oklch(0.141 0.005 285.823)",
@@ -95,8 +108,8 @@
           "foreground-40": "#d4d4d866",
           "foreground-20": "#d4d4d833",
           "foreground-10": "#d4d4d81a",
-          "primary": "#2dd4bf",
-          "primary-foreground": "#09090b",
+          "primary": "#0f766e",
+          "primary-foreground": "#fafafa",
           "secondary": "oklch(0.274 0.006 286.033)",
           "secondary-foreground": "oklch(0.985 0 0)",
           "muted": "oklch(0.274 0.006 286.033)",
@@ -113,35 +126,40 @@
           "card-foreground": "oklch(0.985 0 0)",
           "popover": "oklch(0.21 0.006 285.885)",
           "popover-foreground": "oklch(0.985 0 0)",
-          "destructive": "oklch(0.704 0.191 22.216)",
-          "destructive-foreground": "#09090b",
+          "destructive": "#dc2626",
+          "destructive-foreground": "#fafafa",
           "border": "oklch(1 0 0 / 10%)",
           "input": "oklch(1 0 0 / 15%)",
           "ring": "oklch(0.552 0.016 285.938)",
           "syntax-string": "#4ade80",
           "syntax-number": "#fbbf24",
           "syntax-property": "#a78bfa",
-          "warning": "#fbbf24",
-          "warning-foreground": "#451a03",
+          "warning": "#b45309",
+          "warning-foreground": "#fafafa",
           "data-accent": "#2dd4bf",
           "data-warning": "#fcd34d",
-          "success": "#4ade80",
-          "success-foreground": "#09090b",
-          "info": "#38bdf8",
-          "info-foreground": "#09090b",
+          "success": "#15803d",
+          "success-foreground": "#fafafa",
+          "success-ink": "#4ade80",
+          "info": "#0369a1",
+          "info-foreground": "#fafafa",
+          "info-ink": "#38bdf8",
+          "primary-ink": "#2dd4bf",
+          "destructive-ink": "#f87171",
           "surface-raised": "#3f3f46",
           "surface-sunken": "#18181b",
           "overlay": "#000000a6",
-          "origin": "#2dd4bf",
-          "origin-foreground": "#09090b",
-          "destination": "#fbbf24",
-          "destination-foreground": "#09090b",
+          "origin": "#0f766e",
+          "origin-foreground": "#fafafa",
+          "destination": "#b45309",
+          "destination-foreground": "#fafafa",
           "selected": "#2dd4bf",
           "dimmed": "#52525b",
           "sidebar": "oklch(0.21 0.006 285.885)",
           "sidebar-foreground": "oklch(0.985 0 0)",
-          "sidebar-primary": "#2dd4bf",
-          "sidebar-primary-foreground": "#09090b",
+          "sidebar-primary": "#0f766e",
+          "sidebar-primary-foreground": "#fafafa",
+          "sidebar-primary-ink": "#2dd4bf",
           "sidebar-accent": "oklch(0.274 0.006 286.033)",
           "sidebar-accent-foreground": "oklch(0.985 0 0)",
           "sidebar-border": "oklch(1 0 0 / 10%)",
@@ -158,7 +176,15 @@
           "chart-categorical-5": "#8339b0",
           "chart-categorical-6": "#76a151",
           "chart-categorical-7": "#dd2824",
-          "chart-categorical-8": "#0f91b2"
+          "chart-categorical-8": "#0f91b2",
+          "tool-accent-1": "#ffa673",
+          "tool-accent-2": "#c09d2e",
+          "tool-accent-3": "#83e2a1",
+          "tool-accent-4": "#1fb48f",
+          "tool-accent-5": "#00aebb",
+          "tool-accent-6": "#a8bcff",
+          "tool-accent-7": "#a391eb",
+          "tool-accent-8": "#ffbadf"
         }
       },
       "files": []
@@ -224,6 +250,21 @@
       ]
     },
     {
+      "name": "compare",
+      "type": "registry:lib",
+      "title": "Compare",
+      "description": "Compare helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/compare.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "dependencies": [
+        "date-fns"
+      ]
+    },
+    {
       "name": "css-color",
       "type": "registry:lib",
       "title": "Css Color",
@@ -245,6 +286,21 @@
           "path": "registry/vianova/lib/csv.ts",
           "type": "registry:lib"
         }
+      ]
+    },
+    {
+      "name": "districts",
+      "type": "registry:lib",
+      "title": "Districts",
+      "description": "Districts helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/districts.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "registryDependencies": [
+        "@vianova/trip-report"
       ]
     },
     {
@@ -272,6 +328,21 @@
       ],
       "registryDependencies": [
         "@vianova/filter-ast"
+      ]
+    },
+    {
+      "name": "fleet-report",
+      "type": "registry:lib",
+      "title": "Fleet Report",
+      "description": "Fleet Report helpers.",
+      "files": [
+        {
+          "path": "registry/vianova/lib/fleet-report.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "registryDependencies": [
+        "@vianova/trip-report"
       ]
     },
     {
@@ -641,11 +712,13 @@
         "@vianova/confirm-dialog",
         "@vianova/csv",
         "@vianova/dialog",
+        "@vianova/districts",
         "@vianova/drawer",
         "@vianova/dropdown-menu",
         "@vianova/empty",
         "@vianova/export-menu",
         "@vianova/field",
+        "@vianova/fleet-report",
         "@vianova/infringement-report",
         "@vianova/inline-edit",
         "@vianova/input",
@@ -656,6 +729,8 @@
         "@vianova/relative-time",
         "@vianova/report-grid",
         "@vianova/sample-datasets",
+        "@vianova/sankey-flow",
+        "@vianova/segmented-control",
         "@vianova/selection-bar",
         "@vianova/skeleton",
         "@vianova/table",
@@ -2864,6 +2939,44 @@
       }
     },
     {
+      "name": "date-compare-panel",
+      "type": "registry:ui",
+      "title": "Date Compare Panel",
+      "description": "Date Compare Panel — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "lucide-react",
+        "react-day-picker"
+      ],
+      "registryDependencies": [
+        "@vianova/alert",
+        "@vianova/button",
+        "@vianova/calendar",
+        "@vianova/collapsible",
+        "@vianova/compare",
+        "@vianova/dropdown-menu",
+        "@vianova/field",
+        "@vianova/input-group",
+        "@vianova/label",
+        "@vianova/popover",
+        "@vianova/select",
+        "@vianova/separator",
+        "@vianova/toggle-group",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/date-compare-panel.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "draw-zone-icon",
       "type": "registry:ui",
       "title": "Draw Zone Icon",
@@ -3371,7 +3484,9 @@
         "@vianova/category-style",
         "@vianova/color-ramp",
         "@vianova/colorize-panel",
+        "@vianova/compare",
         "@vianova/data-layer-card",
+        "@vianova/date-compare-panel",
         "@vianova/filter-ast",
         "@vianova/filter-builder",
         "@vianova/filter-eval",
@@ -3382,6 +3497,7 @@
         "@vianova/popover",
         "@vianova/preset-picker",
         "@vianova/sample-datasets",
+        "@vianova/separator",
         "@vianova/size-expression",
         "@vianova/size-panel",
         "@vianova/skeleton",
@@ -3858,6 +3974,31 @@
       "files": [
         {
           "path": "registry/vianova/patterns/maintenance-screen.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "nav-rail",
+      "type": "registry:ui",
+      "title": "Nav Rail",
+      "description": "Nav Rail — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "dependencies": [
+        "@base-ui/react"
+      ],
+      "registryDependencies": [
+        "@vianova/tooltip",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/nav-rail.tsx",
           "type": "registry:ui"
         }
       ],

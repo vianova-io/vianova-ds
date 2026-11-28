@@ -112,7 +112,7 @@ export function ZoneThumbnail({
       width={size}
       height={size}
       viewBox={`0 0 ${size} ${size}`}
-      className={cn("shrink-0 text-primary", className)}
+      className={cn("shrink-0 text-primary-ink", className)}
     >
       {d ? (
         <path
@@ -1231,7 +1231,7 @@ const ZoneRow = React.memo(function ZoneRow({
           added
             ? "cursor-not-allowed bg-muted/30"
             : "cursor-pointer hover:bg-muted/50",
-          checked && !added && "border-primary bg-primary/5 dark:bg-primary/10",
+          checked && !added && "border-primary-ink bg-primary-ink/5 dark:bg-primary-ink/10",
         )}
       >
         <span className="pt-0.5">{checkbox}</span>
@@ -1409,7 +1409,7 @@ function DrawToolGrid({
              Hence 10 and 12 in light. Dark starts from `#2dd4bf` on near
              black at 8.4:1 and can afford 15 and 25, which it needs -- the
              same 10% that reads clearly on white is invisible on `#09090b`. */
-          className="aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:bg-primary/12 dark:aria-pressed:border-primary dark:aria-pressed:bg-primary/15 dark:aria-pressed:hover:bg-primary/25 min-w-0 justify-start"
+          className="aria-pressed:border-primary-ink aria-pressed:bg-primary-ink/10 aria-pressed:text-primary-ink aria-pressed:hover:bg-primary-ink/12 dark:aria-pressed:border-primary-ink dark:aria-pressed:bg-primary-ink/15 dark:aria-pressed:hover:bg-primary-ink/25 min-w-0 justify-start"
           onClick={() => onPick(value === t.value ? null : t.value)}
         >
           <t.Icon data-icon="inline-start" />
@@ -1925,7 +1925,7 @@ function ImportSource({
       </Field>
 
       {error ? (
-        <p role="alert" id={errorId} className="text-destructive text-sm">
+        <p role="alert" id={errorId} className="text-destructive-ink text-sm">
           {error}
         </p>
       ) : null}

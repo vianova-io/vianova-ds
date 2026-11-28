@@ -135,6 +135,113 @@ const IS_LIGHT = (m: string) => m === "light";
  *
  * Light needs mixed steps; no single-step combination satisfies all three.
  */
+/**
+ * The categorical series the sequential ramp above says to ADD rather than
+ * stretch: eight hues, shared by the charts and by the map's category styles
+ * so one district is one colour in both.
+ *
+ * Derived, not drawn. Each pair clears CIEDE2000 >= 15 normally and >= 8 under
+ * BOTH a Machado and a Vienot simulation of deuteranopia and protanopia, and
+ * every stop clears 3:1 on its own theme's background -- see the long note
+ * above CATEGORICAL in test/contrast.test.ts for why both CVD models have to
+ * agree. The four white-label themes lift the darker hues a step because their
+ * backgrounds are lighter than Vianova's near-black.
+ *
+ * They live HERE, in the importer, for a reason worth keeping: they were
+ * previously hand-written into src/semantic/extensions.tokens.json, which this
+ * script rewrites from scratch on every run. The first `pnpm figma:import`
+ * after that deleted all eight, in all six modes, and the only thing that
+ * noticed was the contrast suite.
+ *
+ * What these are NOT: UI chrome. They are verified against each other and
+ * against the page, never as ink on a filled surface -- three of them (amber,
+ * green, cyan) carry white at under 4.5:1. A Tool colour that fills a tile
+ * needs a fill-safe value, which is what `--primary` and its siblings are for.
+ */
+const CATEGORICAL_HUES = [
+  "teal (the product primary)",
+  "blue",
+  "amber",
+  "pink",
+  "violet",
+  "green",
+  "red",
+  "cyan",
+];
+
+const CATEGORICAL: Record<string, string[]> = {
+  light: ["#0f766e", "#2c63ec", "#dc7702", "#dc0075", "#8339b0", "#76a151", "#dd2824", "#0f91b2"],
+  dark: ["#0f766e", "#2c63ec", "#dc7702", "#dc0075", "#8339b0", "#76a151", "#dd2824", "#0f91b2"],
+  darkStone: ["#217e76", "#2f67f0", "#dc7702", "#e00d78", "#9758b4", "#78a94c", "#dd2824", "#489bb6"],
+  darkSlate: ["#217e76", "#2f67f0", "#dc7702", "#e00d78", "#9758b4", "#78a94c", "#dd2824", "#489bb6"],
+  fuchsia: ["#217e76", "#2f67f0", "#dc7702", "#e00d78", "#9758b4", "#78a94c", "#dd2824", "#489bb6"],
+  gray: ["#217e76", "#2f67f0", "#dc7702", "#e00d78", "#9758b4", "#78a94c", "#dd2824", "#489bb6"],
+};
+
+/**
+ * Tool accents: the colour one Tool takes in the nav rail, spent only while
+ * that Tool is the active one. A product with 60 Tools in a marketplace
+ * cycles these, so they repeat -- which costs nothing, because the Tile
+ * treatment colours only the ACTIVE item and two Tools sharing a hue are
+ * never on screen in colour at the same time.
+ *
+ * Why these are not `chart-categorical-*`, which is the set everyone reaches
+ * for first: those eight were derived to separate from EACH OTHER as marks on
+ * a plot, never to be read against a surface, and several fall under 3:1 on
+ * the light accent tile. These are derived against the tile instead.
+ *
+ * Derived, not drawn, under four constraints at once:
+ *   - >= 3:1 on `sidebar-accent` in all six themes. The binding tile is NOT
+ *     the dark theme's zinc-800 but the white-label themes' 700-step tiles
+ *     (#44403c, #334155, #374151), which are lighter.
+ *   - every entry inside one narrow contrast band, so no Tool's glyph reads
+ *     heavier or fainter than another's.
+ *   - CIEDE2000 >= 8.5 between any two, under normal vision and under BOTH a
+ *     Machado and a Vienot simulation of deuteranopia and protanopia -- the
+ *     floor the shipped categorical set itself achieves. Both models, because
+ *     the first pass of these optimised Machado alone and shipped three pairs
+ *     that Vienot put at 7.4-7.9; the suite caught them.
+ *   - >= 15 from `destructive`. Red is the one hue that reads as "something
+ *     is wrong" wherever it lands, and a Tool is a category, not a state.
+ *     `warning`, `success` and `info` are deliberately NOT excluded: those
+ *     roles live on badges, toasts and alerts, never as a rail glyph, so the
+ *     collision is theoretical. Teal is held only 8 off `primary-ink`, far
+ *     enough that a teal Tool is not identical to one with no colour set.
+ *
+ * Anchored across the wheel rather than left free: a solver maximising
+ * separation alone returns metrically fine sets with no blue in them and two
+ * entries on one hue. A palette people have to name out loud needs to span
+ * the spectrum, so each entry is pinned near its anchor and tuned inside it.
+ *
+ * Like CATEGORICAL, they live HERE and not in extensions.tokens.json, which
+ * this script rewrites from scratch on every run.
+ *
+ * Ink only. Nothing is written on a Tool accent -- the tile underneath it is
+ * neutral -- so these are held to 3:1 as a graphic, never to 4.5:1 as a fill.
+ */
+const TOOL_ACCENTS: [name: string, light: string, dark: string][] = [
+  ["orange", "#8f4100", "#ffa673"],
+  ["gold", "#927400", "#c09d2e"],
+  ["green", "#006a35", "#83e2a1"],
+  ["teal", "#00664f", "#1fb48f"],
+  ["sky", "#006169", "#00aebb"],
+  ["blue", "#5e72c5", "#a8bcff"],
+  ["violet", "#614ca0", "#a391eb"],
+  ["magenta", "#b0588c", "#ffbadf"],
+];
+
+/** Token descriptions that survive into the DTCG source. */
+const DESCRIPTIONS: Record<string, string> = Object.fromEntries([
+  ...CATEGORICAL_HUES.map((hue, i) => [
+    `chart-categorical-${i + 1}`,
+    `Categorical series ${i + 1} (${hue}).`,
+  ]),
+  ...TOOL_ACCENTS.map(([name], i) => [
+    `tool-accent-${i + 1}`,
+    `Tool accent ${i + 1} (${name}) -- the active Tool's glyph in the nav rail. Ink only.`,
+  ]),
+]);
+
 const CHARTS: Record<string, string[]> = {
   light: ["emerald.600", "fuchsia.500", "amber.600", "sky.800", "rose.800"],
   dark: ["green.400", "pink.400", "orange.400", "sky.400", "yellow.400"],
@@ -144,33 +251,112 @@ const CHARTS: Record<string, string[]> = {
   gray: ["emerald.500", "pink.500", "orange.500", "sky.500", "yellow.500"],
 };
 
+/**
+ * One colour role, two jobs -- and the reason every dark theme used to put
+ * near-black text on a coloured button.
+ *
+ * `--primary` is spent two ways: as a FILL that something is written on
+ * (`bg-primary`, 126 uses in the registry) and as INK written on the page
+ * (`text-primary`, `border-primary`, `ring-primary`, `stroke-primary`, about
+ * 125 more). The two jobs pull the value in opposite directions, and the
+ * contrast test pins both ends:
+ *
+ *   primary-foreground on primary >= 4.5  =>  primary dark   (L <= 0.183)
+ *   primary on background         >= 4.5  =>  primary light  (L >= 0.396 in dark)
+ *
+ * 0.183 < 0.396. In a dark theme no single value satisfies both, so something
+ * had to give, and what gave was the glyph: the override below used to lighten
+ * `primary` to teal-400 and then had nowhere left to go for its foreground but
+ * `{tw.zinc.950}`. Its comment claimed going lighter "fixes that AND the
+ * white-on-primary pair". It does not -- it trades the second failure for
+ * near-black ink on a teal button in all five dark themes, and the same trade
+ * is what put near-black on `success`, `info`, `warning` and `destination`.
+ *
+ * Splitting the role in two is what makes the arithmetic solvable:
+ *
+ *   `--primary`      the fill. ONE value across all six modes, dark enough
+ *                    that `--primary-foreground` is `{tw.zinc.50}` everywhere.
+ *   `--primary-ink`  the same role used as ink. Theme-aware, because readable
+ *                    ink on near-black and readable ink on white are honestly
+ *                    two different colours. This is the only place a second
+ *                    value is unavoidable, so it is the only place that gets
+ *                    one.
+ *
+ * Filled controls keep the fill. `text-*`, `border-*`, `ring-*`, `stroke-*`
+ * and the tint washes take `-ink`.
+ *
+ * Why a dark fill is allowed to sit on a dark page: WCAG 1.4.11 asks that what
+ * IDENTIFIES a control be visible, and on a filled button that is its 4.5:1
+ * label, not the step between fill and page. teal-700 on near-black is 3.6:1
+ * against the page with white text on it, and reads as a button on both.
+ */
+
+/**
+ * `--primary-ink` by mode: the brightest step of that THEME's own primary
+ * family, so the fuchsia theme's links stay fuchsia and the gray theme keeps
+ * the lighter teal it was already showing. These are the values `text-primary`
+ * resolved to before the split, which is why nothing about dark-mode link text
+ * changes -- only where the value lives.
+ */
+const PRIMARY_INK: Record<string, string> = {
+  light: "teal.700",
+  dark: "teal.400",
+  darkStone: "teal.400",
+  darkSlate: "teal.400",
+  fuchsia: "fuchsia.400",
+  gray: "teal.300",
+};
+
 const extensions: Record<string, Record<string, unknown>> = {};
 for (const mode of MODES) {
   const n = NEUTRAL_OF[mode]!;
   const lite = IS_LIGHT(mode);
-  const on = lite ? "{tw.zinc.50}" : "{tw.zinc.950}";
+  /**
+   * The ink that sits ON a coloured fill, and it is white in every mode. That
+   * is the whole payoff of the split above: once no fill is light, no
+   * foreground has to be dark.
+   */
+  const on = "{tw.zinc.50}";
+  /** Picks this mode's step of a family. Now only inks and neutrals need it. */
   const pair = (base: string, lightStep: number, darkStep: number) =>
     `{tw.${base}.${lite ? lightStep : darkStep}}`;
 
   extensions[mode] = {
-    // Light steps are 700, not 600: at 600 the white foreground only reaches
-    // 3.16:1 and 3.05:1, which fails AA for normal text.
-    success: pair("green", 700, 400),
+    // 700, not 600: at 600 the white foreground only reaches 3.16:1 and
+    // 3.05:1, which fails AA for normal text. The dark modes take the same
+    // 700 as a FILL now instead of a 400 with near-black written on it; the
+    // 400 moves to `-ink`, where it was doing the readable half of the job.
+    success: "{tw.green.700}",
     "success-foreground": on,
-    info: pair("sky", 700, 400),
+    "success-ink": pair("green", 700, 400),
+    info: "{tw.sky.700}",
     "info-foreground": on,
+    "info-ink": pair("sky", 700, 400),
+
+    // The ink halves of the two roles whose FILLS come from Figma, so they
+    // cannot be declared next to them. Neither is an alias, which is the
+    // point: `provenanceOf` reports them as `code`, and the contrast test
+    // holds us to them with no upstream to blame.
+    "primary-ink": `{tw.${PRIMARY_INK[mode]!}}`,
+    "destructive-ink": pair("red", 600, 400),
 
     "surface-raised": lite ? "{tw.white}" : `{tw.${n}.700}`,
     "surface-sunken": lite ? `{tw.${n}.100}` : `{tw.${n}.900}`,
     overlay: "{tw.black}a6",
 
     // OD roles. Colour IS the role on a map, so these must stay distinct from
-    // primary and from each other in every theme.
-    origin: pair("teal", 700, 400),
+    // primary and from each other in every theme. No `-ink` pair for either:
+    // nothing in the registry writes `text-origin`, and a map pin is a fill.
+    origin: "{tw.teal.700}",
     "origin-foreground": on,
-    destination: pair("amber", 700, 400),
+    destination: "{tw.amber.700}",
     "destination-foreground": on,
-    selected: `{semantic.${mode}.primary}`,
+    // Aliases the INK, not the fill. `selected` outlines a feature on a map
+    // rather than filling a control, so it is held to being visible against
+    // whatever is behind it -- which is the ink half's job. It also happens to
+    // be what keeps this token's resolved value unchanged in all six modes by
+    // the fill/ink split, which is the strongest evidence it is the right one.
+    selected: `{semantic.${mode}.primary-ink}`,
     dimmed: pair(n, 400, 600),
 
     // shadcn's sidebar contract, mapped onto the imported semantic tier.
@@ -178,6 +364,7 @@ for (const mode of MODES) {
     "sidebar-foreground": `{semantic.${mode}.foreground}`,
     "sidebar-primary": `{semantic.${mode}.primary}`,
     "sidebar-primary-foreground": `{semantic.${mode}.primary-foreground}`,
+    "sidebar-primary-ink": `{semantic.${mode}.primary-ink}`,
     "sidebar-accent": `{semantic.${mode}.accent}`,
     "sidebar-accent-foreground": `{semantic.${mode}.accent-foreground}`,
     "sidebar-border": `{semantic.${mode}.border}`,
@@ -185,6 +372,15 @@ for (const mode of MODES) {
 
     ...Object.fromEntries(
       CHARTS[mode]!.map((ref, i) => [`chart-${i + 1}`, `{tw.${ref}}`]),
+    ),
+    ...Object.fromEntries(
+      CATEGORICAL[mode]!.map((hex, i) => [`chart-categorical-${i + 1}`, hex]),
+    ),
+    ...Object.fromEntries(
+      TOOL_ACCENTS.map(([, light, dark], i) => [
+        `tool-accent-${i + 1}`,
+        lite ? light : dark,
+      ]),
     ),
   };
 }
@@ -198,6 +394,7 @@ for (const mode of MODES) {
     extensions[mode]![name] = {
       $value: value,
       $type: "color",
+      ...(DESCRIPTIONS[name] ? { $description: DESCRIPTIONS[name] } : {}),
       $extensions: {
         "io.vianova.tokens": {
           figma: null,
@@ -322,6 +519,42 @@ const CHART_RANGE: Record<string, number[]> = {
  */
 const INPUT_DARK = "oklch(1 0 0 / 15%)";
 
+/**
+ * Three overrides repeat in every mode, so they are written once.
+ *
+ * `destructive` and `warning` are the two coloured fills the Figma library
+ * still sets to a value that cannot take white ink, and they are set here
+ * rather than per mode because the answer is the same in all six: the fill is
+ * one colour, and the thing written on it is white.
+ *
+ *   destructive  Figma says red-500 in light and red-900 in the dark themes,
+ *                and the preset overlays dark with a bright red that carries
+ *                white at 2.87:1 -- which is why the old override flipped its
+ *                FOREGROUND to zinc-950 instead. red-600 takes white at 4.63:1
+ *                and is one value for every theme, so a destructive button
+ *                stops changing weight between Vianova and a white label.
+ *                `text-destructive` (60 uses) moves to `--destructive-ink`;
+ *                red-900 on `#292524` was 1.3:1 and nothing was checking it.
+ *
+ *   warning      amber-400 with amber-950 on it, identically in all six modes
+ *                -- the one LIGHT-mode instance of this trade, and the most
+ *                visible anywhere: a bright yellow chip with near-black text.
+ *                amber-700 carries white at 4.81:1 and still reads as the
+ *                warning amber. This is the change that looks biggest.
+ *
+ *   primary-foreground  Figma says zinc-300 in Stone, Slate and Fuchsia and
+ *                zinc-950 in Gray. zinc-300 reaches only 3.19-3.70:1 on the
+ *                new fills, so white is not a preference here, it is the only
+ *                step that clears AA on all of them.
+ */
+const ON_COLOUR: Record<string, string> = {
+  destructive: "{tw.red.600}",
+  "destructive-foreground": "{tw.zinc.50}",
+  warning: "{tw.amber.700}",
+  "warning-foreground": "{tw.zinc.50}",
+  "primary-foreground": "{tw.zinc.50}",
+};
+
 const A11Y_OVERRIDES: Record<string, Record<string, string>> = {
   light: {
     // 4.39:1 on muted; one step darker clears it.
@@ -332,40 +565,46 @@ const A11Y_OVERRIDES: Record<string, Record<string, string>> = {
     // see, and now the thing that identifies the field at all. Deliberately
     // NOT softened alongside the border.
     ring: "{tw.zinc.500}",
+    ...ON_COLOUR,
   },
   dark: {
-    // Figma reuses the light-mode teal-700 in dark, so primary was 3.63:1 as
-    // link text. Going lighter fixes that AND the white-on-primary pair, and
-    // matches how the preset and the HERE theme treat dark primaries.
-    primary: "{tw.teal.400}",
-    "primary-foreground": "{tw.zinc.950}",
-    // The preset's dark destructive is a bright red; light grey on it was
-    // 1.94:1. The foreground flips rather than the fill.
-    "destructive-foreground": "{tw.zinc.950}",
+    // `primary` is NOT overridden any more, and that is the whole change:
+    // Figma's dark primary is already teal-700, the fill this theme wants.
+    // Lightening it to teal-400 was what forced a near-black foreground. The
+    // teal-400 did not go anywhere -- it is `--primary-ink`, which is what
+    // `text-primary` and `border-primary` now resolve to, so dark-mode link
+    // text looks exactly as it did.
     input: INPUT_DARK,
+    ...ON_COLOUR,
   },
   darkStone: {
-    primary: "{tw.teal.400}",
-    "primary-foreground": "{tw.zinc.950}",
     "muted-foreground": "{tw.stone.300}",
     input: INPUT_DARK,
+    ...ON_COLOUR,
   },
   darkSlate: {
-    primary: "{tw.teal.400}",
-    "primary-foreground": "{tw.zinc.950}",
     "muted-foreground": "{tw.slate.300}",
     input: INPUT_DARK,
+    ...ON_COLOUR,
   },
   fuchsia: {
-    // The fuchsia theme's fuchsia-500 was 4.31:1 as text and only 2.34:1 under light grey.
-    primary: "{tw.fuchsia.400}",
-    "primary-foreground": "{tw.zinc.950}",
+    // Figma's fuchsia-500 was 4.31:1 as text and 2.34:1 under light grey; it
+    // carries white at only 3.46:1 either. One step down takes white at
+    // 4.51:1, and fuchsia-400 becomes this theme's `--primary-ink`.
+    primary: "{tw.fuchsia.600}",
     "muted-foreground": "{tw.zinc.300}",
     input: INPUT_DARK,
+    ...ON_COLOUR,
   },
   gray: {
+    // The Gray theme is the extreme case: Figma gives it teal-300, which
+    // carries white at 1.48:1 and is the reason this theme had near-black on
+    // its primary button. The fill joins the other five at teal-700 and
+    // teal-300 becomes `--primary-ink`, keeping the theme's lighter accent.
+    primary: "{tw.teal.700}",
     "muted-foreground": "{tw.gray.300}",
     input: INPUT_DARK,
+    ...ON_COLOUR,
   },
 };
 

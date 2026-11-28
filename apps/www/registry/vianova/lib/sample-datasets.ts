@@ -22,6 +22,8 @@ import {
  * someone added a feed, and the symptom would be styles silently not applying.
  */
 
+import type { TemporalKind } from "./compare";
+
 export type SampleSection = "data" | "zones" | "regulations";
 
 export type SampleFeed = {
@@ -36,6 +38,22 @@ export type SampleFeed = {
   domain: string;
   uploadedAt: string;
   dateRange?: [string, string];
+  /**
+   * What this feed's rows mean in time, which is what decides whether a date
+   * range may be compared against another one.
+   *
+   * Declared rather than sniffed. `mds-vehicles-lisbon` carries a
+   * `last_event_time` that looks exactly like something you could filter a
+   * period out of -- and filtering it yields a map of "vehicles whose last
+   * event happened to land in this window", which is a liveness artefact
+   * wearing the clothes of a period. Only the feed knows the difference.
+   */
+  temporal: TemporalKind;
+  /**
+   * The column a period is cut from. Set for `events` feeds and meaningless
+   * for the rest.
+   */
+  dateColumn?: string;
   /** Regulations only. */
   status?: "active" | "inactive";
   units?: Record<string, string>;
@@ -44,6 +62,8 @@ export type SampleFeed = {
 export const SAMPLE_FEEDS: SampleFeed[] = [
   {
     id: "sample-mds-lisbon",
+    temporal: "events",
+    dateColumn: "start_time",
     file: "mds-trips-lisbon.csv",
     title: "Trips (MDS)",
     section: "data",
@@ -57,6 +77,8 @@ export const SAMPLE_FEEDS: SampleFeed[] = [
   },
   {
     id: "sample-infringements-lisbon",
+    temporal: "events",
+    dateColumn: "detected_at",
     file: "infringements-lisbon.csv",
     title: "Parking infringements",
     section: "data",
@@ -70,6 +92,8 @@ export const SAMPLE_FEEDS: SampleFeed[] = [
   },
   {
     id: "sample-mds-events-lisbon",
+    temporal: "events",
+    dateColumn: "event_time",
     file: "mds-events-lisbon.csv",
     title: "Vehicle events",
     section: "data",
@@ -83,6 +107,7 @@ export const SAMPLE_FEEDS: SampleFeed[] = [
   },
   {
     id: "sample-mds-vehicles-lisbon",
+    temporal: "snapshot",
     file: "mds-vehicles-lisbon.csv",
     title: "Vehicle snapshot",
     section: "data",
@@ -95,6 +120,7 @@ export const SAMPLE_FEEDS: SampleFeed[] = [
   },
   {
     id: "sample-parking-zones-lisbon",
+    temporal: "static",
     file: "parking-zones-lisbon.csv",
     title: "Parking zones",
     section: "zones",
@@ -107,6 +133,7 @@ export const SAMPLE_FEEDS: SampleFeed[] = [
   },
   {
     id: "sample-districts-lisbon",
+    temporal: "static",
     file: "districts-lisbon.csv",
     title: "Districts",
     section: "zones",
@@ -118,6 +145,7 @@ export const SAMPLE_FEEDS: SampleFeed[] = [
   },
   {
     id: "sample-regulation-speed-limit",
+    temporal: "static",
     file: "regulation-speed-limit-baixa.csv",
     title: "Speed limit · Baixa",
     section: "regulations",
@@ -130,6 +158,7 @@ export const SAMPLE_FEEDS: SampleFeed[] = [
   },
   {
     id: "sample-regulation-no-parking",
+    temporal: "static",
     file: "regulation-no-parking-historic-centre.csv",
     title: "No parking · Historic centre",
     section: "regulations",
@@ -142,6 +171,7 @@ export const SAMPLE_FEEDS: SampleFeed[] = [
   },
   {
     id: "sample-regulation-fleet-cap",
+    temporal: "static",
     file: "regulation-fleet-cap-per-operator.csv",
     title: "Fleet cap per operator",
     section: "regulations",
@@ -154,6 +184,7 @@ export const SAMPLE_FEEDS: SampleFeed[] = [
   },
   {
     id: "sample-regulation-night-curfew",
+    temporal: "static",
     file: "regulation-night-curfew-bairro-alto.csv",
     title: "Night curfew · Bairro Alto",
     section: "regulations",

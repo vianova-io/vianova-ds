@@ -70,8 +70,8 @@ export function StatTile({
               data-trend={trend ?? "flat"}
               className={cn(
                 "inline-flex items-center gap-0.5 font-medium tabular-nums",
-                resolved === "positive" && "text-success",
-                resolved === "negative" && "text-destructive",
+                resolved === "positive" && "text-success-ink",
+                resolved === "negative" && "text-destructive-ink",
                 resolved === "neutral" && "text-muted-foreground",
               )}
             >

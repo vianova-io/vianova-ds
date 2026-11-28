@@ -1322,7 +1322,7 @@ function CreateDialog({
             </Button>
           </div>
           {problem ? (
-            <p role="alert" className="text-destructive text-sm">
+            <p role="alert" className="text-destructive-ink text-sm">
               {problem}
             </p>
           ) : null}
@@ -1885,7 +1885,7 @@ function SendOption({
   return (
     <div
       data-selected={selected ? "" : undefined}
-      className="data-[selected]:border-primary data-[selected]:bg-primary/5 flex flex-col gap-2.5 rounded-lg border p-3"
+      className="data-[selected]:border-primary-ink data-[selected]:bg-primary/5 flex flex-col gap-2.5 rounded-lg border p-3"
     >
       <label className="flex cursor-pointer items-start gap-2.5">
         <RadioGroupItem value={value} className="mt-0.5" />
@@ -2176,7 +2176,7 @@ function PasteEmailsDialog({
                 </span>
                 {already ? ` · ${already} already on this alert` : ""}
                 {bad.length ? (
-                  <span className="text-destructive">
+                  <span className="text-destructive-ink">
                     {" "}
                     · {bad.length} not readable
                   </span>
@@ -2876,7 +2876,7 @@ function AlertEditor({
                       </span>
                       <Badge
                         variant="outline"
-                        className="border-info/30 bg-info/10 text-info shrink-0 text-[11px] font-normal"
+                        className="border-info-ink/30 bg-info/10 text-info-ink shrink-0 text-[11px] font-normal"
                       >
                         Reported device
                       </Badge>
@@ -2970,9 +2970,9 @@ function AlertEditor({
                     it; see the file header. */}
                 <p
                   data-slot="alert-summary"
-                  className="border-primary/40 bg-primary/5 rounded-lg border p-3 text-sm text-pretty"
+                  className="border-primary-ink/40 bg-primary/5 rounded-lg border p-3 text-sm text-pretty"
                 >
-                  <span className="text-primary mb-0.5 block text-[11px] font-semibold tracking-wider uppercase">
+                  <span className="text-primary-ink mb-0.5 block text-[11px] font-semibold tracking-wider uppercase">
                     Summary
                   </span>
                   You&rsquo;ll get an e-mail when {sentence}.
@@ -3181,7 +3181,7 @@ function AlertEditor({
                   <Button
                     type="button"
                     variant="ghost"
-                    className="text-destructive hover:text-destructive"
+                    className="text-destructive-ink hover:text-destructive-ink"
                     onClick={() => setConfirmDelete(true)}
                   >
                     <Trash2 data-icon="inline-start" />
@@ -3312,7 +3312,7 @@ function PersonLink({
       onClick={() => onPerson(person.key)}
       // The ring paints outside the box, so nothing around a name may clip:
       // the name truncates itself rather than being cut by its cell.
-      className="text-primary focus-visible:ring-ring max-w-full scroll-m-1 truncate rounded underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
+      className="text-primary-ink focus-visible:ring-ring max-w-full scroll-m-1 truncate rounded underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
     >
       {person.label}
     </button>
@@ -3798,7 +3798,7 @@ function AlertList({
                               type="button"
                               onClick={() => onOpen(alert.id)}
                               data-slot="alert-open-link"
-                              className="hover:text-primary focus-visible:ring-ring min-w-0 scroll-m-1 truncate rounded text-left text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
+                              className="hover:text-primary-ink focus-visible:ring-ring min-w-0 scroll-m-1 truncate rounded text-left text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
                             >
                               {alert.name}
                             </button>
@@ -3809,7 +3809,7 @@ function AlertList({
                                  already passes AA as text in both themes. */
                               <Badge
                                 variant="outline"
-                                className="border-info/30 bg-info/10 text-info shrink-0 text-[11px] font-normal"
+                                className="border-info-ink/30 bg-info/10 text-info-ink shrink-0 text-[11px] font-normal"
                               >
                                 Reported device
                               </Badge>
@@ -3891,7 +3891,7 @@ function AlertList({
                                 aria-label={`Delete ${alert.name}`}
                                 data-slot="alert-delete"
                                 onClick={() => setBinning(alert.id)}
-                                className="text-muted-foreground hover:text-destructive shrink-0 scroll-m-1"
+                                className="text-muted-foreground hover:text-destructive-ink shrink-0 scroll-m-1"
                               >
                                 <Trash2 />
                               </Button>
@@ -4211,7 +4211,7 @@ function RecipientDialog({
               autoComplete="off"
             />
             {taken ? (
-              <FieldDescription className="text-destructive">
+              <FieldDescription className="text-destructive-ink">
                 That address is already a recipient.
               </FieldDescription>
             ) : null}
@@ -4287,7 +4287,7 @@ function RecipientDialog({
               <Button
                 type="button"
                 variant="ghost"
-                className="text-destructive hover:text-destructive"
+                className="text-destructive-ink hover:text-destructive-ink"
                 onClick={() => onDelete(contact.id)}
               >
                 Delete
@@ -4723,7 +4723,7 @@ function RecipientList({
                             }
                             data-slot="recipient-edit-link"
                             aria-label={`Edit ${label}`}
-                            className="text-primary focus-visible:ring-ring flex min-w-0 scroll-m-1 items-center gap-1.5 rounded text-left text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
+                            className="text-primary-ink focus-visible:ring-ring flex min-w-0 scroll-m-1 items-center gap-1.5 rounded text-left text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
                           >
                             <span className="truncate underline underline-offset-2">
                               {label}
@@ -4765,7 +4765,7 @@ function RecipientList({
                               key={alert.id}
                               type="button"
                               onClick={() => onOpenAlert(alert.id)}
-                              className="hover:text-primary focus-visible:ring-ring max-w-full scroll-m-1 rounded text-left text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
+                              className="hover:text-primary-ink focus-visible:ring-ring max-w-full scroll-m-1 rounded text-left text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
                             >
                               {alert.name}
                               {i < theirs.length - 1 ? "," : ""}

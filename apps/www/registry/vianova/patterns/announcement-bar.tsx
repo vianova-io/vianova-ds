@@ -84,13 +84,16 @@ export type Announcement = {
 /**
  * Tones are solid fills, not tinted surfaces with coloured text.
  *
- * `--warning` fails contrast as text on a light surface -- the same reason
- * StatusBadge keeps its label in the foreground colour and lets the dot carry
- * the state. Filling the bar and taking the matching `-foreground` sidesteps
- * that, and gives a platform-wide notice the weight it should have.
+ * `--warning` has no `-ink` counterpart, so it cannot be spent as text: it is
+ * one amber-700 in all six themes, which reads on a light page and is 2.4:1 on
+ * a dark one. The same reason StatusBadge keeps its label in the foreground
+ * colour and lets the dot carry the state. Filling the bar and taking the
+ * matching `-foreground` sidesteps it, and gives a platform-wide notice the
+ * weight it should have.
  *
- * `--warning` is the same amber in light and dark, so that row needs no
- * dark-mode fork. That is deliberate, not an oversight.
+ * Every tone here is now one fill with `{tw.zinc.50}` on it, identical in
+ * light and dark, so no row needs a dark-mode fork. That is the point of the
+ * fill/ink split, not an oversight.
  */
 const TONE_CLASS: Record<"info" | "warning" | "destructive", string> = {
   info: "bg-info text-info-foreground",
@@ -360,23 +363,28 @@ export function AnnouncementBar({
       <span className="font-medium">{a.title}</span>
 
       {/*
-        Hierarchy here is weight, not opacity. Measured on the shipped tones:
-        dimming the secondary text to 80% drops it to 4.23:1 on `info` in
-        light mode, and 70% fails AA on every tone. 90% is the floor that
-        clears 4.5:1 everywhere (worst case 4.92:1, info light), so that is as
-        far down as this goes.
+        Hierarchy here is weight, and ONLY weight. The secondary spans used to
+        be dimmed a tenth, picked as the floor that still cleared 4.5:1 on the
+        tones of the day (worst case 4.92:1, info light). The tones moved: each
+        is now a single fill carrying white in both themes, chosen as dark as
+        it can be while clearing AA, which leaves nothing to shave. Dimmed,
+        `warning` measured 4.2:1 and axe caught all three spans.
+
+        So the dimming went rather than the tone. A tenth of apparent weight is
+        not worth darkening a role the whole system spends, and the title
+        already carries `font-medium`, which is what the hierarchy rested on.
       */}
-      {a.scope?.length ? <span className="opacity-90">{a.scope.join(" · ")}</span> : null}
-      {a.body ? <span className="opacity-90">{a.body}</span> : null}
+      {a.scope?.length ? <span>{a.scope.join(" · ")}</span> : null}
+      {a.body ? <span>{a.body}</span> : null}
 
       {windowText ? (
         <span>
           <time dateTime={a.startsAt}>{windowText}</time>
-          {viewerText ? <span className="opacity-90"> ({viewerText})</span> : null}
+          {viewerText ? <span> ({viewerText})</span> : null}
         </span>
       ) : null}
 
-      {relativeText ? <span className="opacity-90">{relativeText}</span> : null}
+      {relativeText ? <span>{relativeText}</span> : null}
 
       {a.href ? (
         <a

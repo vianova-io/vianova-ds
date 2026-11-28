@@ -5,10 +5,10 @@
 
 | | |
 |---|---|
-| Generated | 2026-10-11 |
-| DS repo | `5dafa05 (public-main)` |
-| Input | `dist/tokens.json`, sha256 `a26072220422d0e5…` |
-| Observed | 71 semantic roles × 6 modes · 50 of 71 light roles are code-only · 76 tokens carry `a11yFix` |
+| Generated | 2026-11-27 |
+| DS repo | `206cc89 (feat/compare-date-mockup)` |
+| Input | `dist/tokens.json`, sha256 `e83915008c874eb4…` |
+| Observed | 84 semantic roles × 6 modes · 63 of 84 light roles are code-only · 99 tokens carry `a11yFix` |
 
 Light and dark, which is what nearly every task needs. The four white-label
 themes and the primitive index are in `agent-digest.full.md`.
@@ -32,8 +32,8 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `foreground-40` | `--foreground-40` | `#09090b66` | `#d4d4d866` | F | `text/foreground-40` |
 | `foreground-20` | `--foreground-20` | `#09090b33` | `#d4d4d833` | F | `text/foreground-20` |
 | `foreground-10` | `--foreground-10` | `#09090b1a` | `#d4d4d81a` | F | `text/foreground-10` |
-| `primary` | `--primary` | `#0f766e` | `#2dd4bf` | F | `action/primary` |
-| `primary-foreground` | `--primary-foreground` | `#fafafa` | `#09090b` | F | `action/primary-foreground` |
+| `primary` | `--primary` | `#0f766e` | `#0f766e` | F | `action/primary` |
+| `primary-foreground` | `--primary-foreground` | `#fafafa` | `#fafafa` | F! | `action/primary-foreground` |
 | `secondary` | `--secondary` | `#f4f4f5` | `#27272a` | Cp | — |
 | `secondary-foreground` | `--secondary-foreground` | `#18181b` | `#fafafa` | Cp | — |
 | `muted` | `--muted` | `#f4f4f5` | `#27272a` | Cp | — |
@@ -50,35 +50,40 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `card-foreground` | `--card-foreground` | `#09090b` | `#fafafa` | Cp | — |
 | `popover` | `--popover` | `#ffffff` | `#18181b` | Cp | — |
 | `popover-foreground` | `--popover-foreground` | `#09090b` | `#fafafa` | Cp | — |
-| `destructive` | `--destructive` | `#e7000b` | `#ff6467` | Cp | — |
-| `destructive-foreground` | `--destructive-foreground` | `#fafafa` | `#09090b` | F | `feedback/destructive-foreground` |
+| `destructive` | `--destructive` | `#dc2626` | `#dc2626` | Cp! | — |
+| `destructive-foreground` | `--destructive-foreground` | `#fafafa` | `#fafafa` | F! | `feedback/destructive-foreground` |
 | `border` | `--border` | `#e4e4e7` | `#ffffff1a` | Cp | — |
 | `input` | `--input` | `#e4e4e7` | `#ffffff26` | Cp! | — |
 | `ring` | `--ring` | `#71717a` | `#71717b` | Cp! | — |
 | `syntax-string` | `--syntax-string` | `#16a34a` | `#4ade80` | F | `syntax/string` |
 | `syntax-number` | `--syntax-number` | `#d97706` | `#fbbf24` | F | `syntax/number` |
 | `syntax-property` | `--syntax-property` | `#6d28d9` | `#a78bfa` | F | `syntax/property` |
-| `warning` | `--warning` | `#fbbf24` | `#fbbf24` | F | `feedback/warning` |
-| `warning-foreground` | `--warning-foreground` | `#451a03` | `#451a03` | F | `feedback/warning-foreground` |
+| `warning` | `--warning` | `#b45309` | `#b45309` | F! | `feedback/warning` |
+| `warning-foreground` | `--warning-foreground` | `#fafafa` | `#fafafa` | F! | `feedback/warning-foreground` |
 | `data-accent` | `--data-accent` | `#2dd4bf` | `#2dd4bf` | F | `text/data-accent` |
 | `data-warning` | `--data-warning` | `#fcd34d` | `#fcd34d` | F | `text/data-warning` |
-| `success` | `--success` | `#15803d` | `#4ade80` | C | — |
-| `success-foreground` | `--success-foreground` | `#fafafa` | `#09090b` | C | — |
-| `info` | `--info` | `#0369a1` | `#38bdf8` | C | — |
-| `info-foreground` | `--info-foreground` | `#fafafa` | `#09090b` | C | — |
+| `success` | `--success` | `#15803d` | `#15803d` | C | — |
+| `success-foreground` | `--success-foreground` | `#fafafa` | `#fafafa` | C | — |
+| `success-ink` | `--success-ink` | `#15803d` | `#4ade80` | C | — |
+| `info` | `--info` | `#0369a1` | `#0369a1` | C | — |
+| `info-foreground` | `--info-foreground` | `#fafafa` | `#fafafa` | C | — |
+| `info-ink` | `--info-ink` | `#0369a1` | `#38bdf8` | C | — |
+| `primary-ink` | `--primary-ink` | `#0f766e` | `#2dd4bf` | C | — |
+| `destructive-ink` | `--destructive-ink` | `#dc2626` | `#f87171` | C | — |
 | `surface-raised` | `--surface-raised` | `#ffffff` | `#3f3f46` | C | — |
 | `surface-sunken` | `--surface-sunken` | `#f4f4f5` | `#18181b` | C | — |
 | `overlay` | `--overlay` | `#000000a6` | `#000000a6` | C | — |
-| `origin` | `--origin` | `#0f766e` | `#2dd4bf` | C | — |
-| `origin-foreground` | `--origin-foreground` | `#fafafa` | `#09090b` | C | — |
-| `destination` | `--destination` | `#b45309` | `#fbbf24` | C | — |
-| `destination-foreground` | `--destination-foreground` | `#fafafa` | `#09090b` | C | — |
+| `origin` | `--origin` | `#0f766e` | `#0f766e` | C | — |
+| `origin-foreground` | `--origin-foreground` | `#fafafa` | `#fafafa` | C | — |
+| `destination` | `--destination` | `#b45309` | `#b45309` | C | — |
+| `destination-foreground` | `--destination-foreground` | `#fafafa` | `#fafafa` | C | — |
 | `selected` | `--selected` | `#0f766e` | `#2dd4bf` | C | — |
 | `dimmed` | `--dimmed` | `#a1a1aa` | `#52525b` | C | — |
 | `sidebar` | `--sidebar` | `#fafafa` | `#18181b` | Cp | — |
 | `sidebar-foreground` | `--sidebar-foreground` | `#09090b` | `#fafafa` | Cp | — |
-| `sidebar-primary` | `--sidebar-primary` | `#0f766e` | `#2dd4bf` | C | — |
-| `sidebar-primary-foreground` | `--sidebar-primary-foreground` | `#fafafa` | `#09090b` | C | — |
+| `sidebar-primary` | `--sidebar-primary` | `#0f766e` | `#0f766e` | C | — |
+| `sidebar-primary-foreground` | `--sidebar-primary-foreground` | `#fafafa` | `#fafafa` | C | — |
+| `sidebar-primary-ink` | `--sidebar-primary-ink` | `#0f766e` | `#2dd4bf` | C | — |
 | `sidebar-accent` | `--sidebar-accent` | `#f4f4f5` | `#27272a` | Cp | — |
 | `sidebar-accent-foreground` | `--sidebar-accent-foreground` | `#18181b` | `#fafafa` | Cp | — |
 | `sidebar-border` | `--sidebar-border` | `#e4e4e7` | `#ffffff1a` | Cp | — |
@@ -96,6 +101,14 @@ need the original, read `dist/theme.css`. Alpha renders as 8-digit hex.
 | `chart-categorical-6` | `--chart-categorical-6` | `#76a151` | `#76a151` | C | — |
 | `chart-categorical-7` | `--chart-categorical-7` | `#dd2824` | `#dd2824` | C | — |
 | `chart-categorical-8` | `--chart-categorical-8` | `#0f91b2` | `#0f91b2` | C | — |
+| `tool-accent-1` | `--tool-accent-1` | `#8f4100` | `#ffa673` | C | — |
+| `tool-accent-2` | `--tool-accent-2` | `#927400` | `#c09d2e` | C | — |
+| `tool-accent-3` | `--tool-accent-3` | `#006a35` | `#83e2a1` | C | — |
+| `tool-accent-4` | `--tool-accent-4` | `#00664f` | `#1fb48f` | C | — |
+| `tool-accent-5` | `--tool-accent-5` | `#006169` | `#00aebb` | C | — |
+| `tool-accent-6` | `--tool-accent-6` | `#5e72c5` | `#a8bcff` | C | — |
+| `tool-accent-7` | `--tool-accent-7` | `#614ca0` | `#a391eb` | C | — |
+| `tool-accent-8` | `--tool-accent-8` | `#b0588c` | `#ffbadf` | C | — |
 
 ## Foundations
 
@@ -229,11 +242,12 @@ Stock Tailwind v4, captured verbatim from the Figma `Tailwind` collection —
 
 | Semantic role (light) | Resolves to |
 |---|---|
-| `selected` | `primary` |
+| `selected` | `primary-ink` |
 | `sidebar` | `card` |
 | `sidebar-foreground` | `foreground` |
 | `sidebar-primary` | `primary` |
 | `sidebar-primary-foreground` | `primary-foreground` |
+| `sidebar-primary-ink` | `primary-ink` |
 | `sidebar-accent` | `accent` |
 | `sidebar-accent-foreground` | `accent-foreground` |
 | `sidebar-border` | `border` |

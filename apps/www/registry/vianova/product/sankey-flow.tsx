@@ -77,6 +77,7 @@ export function SankeyFlow({
   valueFormatter = (n) => n.toLocaleString("en-GB"),
   nodeWidth = 12,
   nodePadding = 16,
+  linkColor,
   className,
   ...props
 }: Omit<React.ComponentProps<typeof ChartContainer>, "config" | "children"> & {
@@ -87,6 +88,17 @@ export function SankeyFlow({
   valueFormatter?: (value: number) => string;
   nodeWidth?: number;
   nodePadding?: number;
+  /**
+   * Colour a ribbon by something other than where it came from.
+   *
+   * The default tints by SOURCE, which is right when colour means identity.
+   * It is wrong when colour has been asked to mean something per-ribbon --
+   * a period-over-period change being the case this was added for, where the
+   * ribbon's hue is its direction of travel and the node labels carry the
+   * identity instead. Return `undefined` for any ribbon that should keep the
+   * source tint.
+   */
+  linkColor?: (link: { source: string; target: string }) => string | undefined;
 }) {
   const model = React.useMemo(
     () => buildModel(nodes, links, maxNodes),
@@ -113,7 +125,7 @@ export function SankeyFlow({
         // Room for the labels, which sit OUTSIDE the end columns. Without it
         // the first and last labels are simply clipped off the chart.
         margin={{ top: 8, right: 148, bottom: 8, left: 148 }}
-        link={<FlowLink colors={model.colorById} />}
+        link={<FlowLink colors={model.colorById} linkColor={linkColor} />}
         node={
           <FlowNode
             colors={model.colorByIndex}
@@ -250,14 +262,26 @@ function buildModel(
 // Marks
 // ---------------------------------------------------------------------------
 
-function FlowLink({ colors, ...rest }: { colors: Record<string, string> } & Record<string, unknown>) {
+function FlowLink({
+  colors,
+  linkColor,
+  ...rest
+}: {
+  colors: Record<string, string>;
+  linkColor?: (link: { source: string; target: string }) => string | undefined;
+} & Record<string, unknown>) {
   const p = rest as unknown as {
     sourceX: number; targetX: number; sourceY: number; targetY: number;
     sourceControlX: number; targetControlX: number; linkWidth: number;
-    payload: { source: { name: string } };
+    payload: { source: { name: string }; target: { name: string } };
   };
   const [hover, setHover] = React.useState(false);
-  const color = colors[p.payload?.source?.name ?? ""] ?? "var(--muted-foreground)";
+  const source = p.payload?.source?.name ?? "";
+  const target = p.payload?.target?.name ?? "";
+  const color =
+    linkColor?.({ source, target }) ??
+    colors[source] ??
+    "var(--muted-foreground)";
 
   return (
     <path

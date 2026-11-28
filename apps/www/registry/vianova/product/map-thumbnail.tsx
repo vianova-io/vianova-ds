@@ -86,7 +86,7 @@ export function MapThumbnail({
         <path
           d={route}
           fill="none"
-          className="stroke-primary"
+          className="stroke-primary-ink"
           strokeWidth="1.6"
           strokeLinecap="round"
         />

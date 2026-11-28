@@ -95,7 +95,7 @@ export default function MockupIndexPage() {
           Direction C is the one that has to be felt rather than looked at — a
           push either reads as going somewhere or it does not.{" "}
           <a
-            className="text-primary underline underline-offset-4"
+            className="text-primary-ink underline underline-offset-4"
             href={asset("/mockups/mobile-nav/live/")}
           >
             Open the walkthrough

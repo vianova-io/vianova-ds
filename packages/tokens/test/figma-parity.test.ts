@@ -82,16 +82,41 @@ test("the brand primary is teal, not the map layer purple", () => {
   // Regression guard for the original mistake: #5E59E8 is map/layer-color in the
   // Brand scheme, NOT action/primary.
   assert.equal(hex(themes.light.primary), "#0f766e", "light keeps Figma's teal-700");
-  // Dark uses a lighter teal on purpose: Figma reuses the light-mode teal in
-  // dark, where it is only 3.63:1 as link text. Still teal, still not purple.
-  assert.equal(hex(themes.dark.primary), "#2dd4bf");
+  // Dark is the SAME teal-700 now, which is also what Figma says. It used to be
+  // teal-400, lightened so the one token could pass as link text, which left
+  // `primary-foreground` no option but near-black. The fill and the ink are two
+  // tokens now, so the fill went back to Figma's value and teal-400 is
+  // `primary-ink`, asserted just below.
+  assert.equal(hex(themes.dark.primary), "#0f766e");
+  assert.equal(hex(themes.dark["primary-ink"]), "#2dd4bf", "the ink keeps the lighter teal");
   for (const m of MODES) assert.notEqual(hex(themes[m].primary), "#5e59e8");
 });
 
+test("every theme's primary fill carries white, and its ink stays on-brand", () => {
+  // The two halves of the split, pinned together: one dark fill per theme with
+  // `{tw.zinc.50}` on it, and the bright per-theme accent preserved as ink.
+  // Drift in either direction is a regression -- a lighter fill brings back the
+  // near-black foreground, a darker ink makes `text-primary` unreadable on the
+  // page it sits on.
+  for (const m of MODES) {
+    assert.equal(hex(themes[m]["primary-foreground"]), "#fafafa", `${m} primary-foreground`);
+    assert.equal(hex(themes[m]["destructive-foreground"]), "#fafafa", `${m} destructive-foreground`);
+    assert.equal(hex(themes[m]["warning-foreground"]), "#fafafa", `${m} warning-foreground`);
+    assert.equal(hex(themes[m]["success-foreground"]), "#fafafa", `${m} success-foreground`);
+    assert.equal(hex(themes[m]["info-foreground"]), "#fafafa", `${m} info-foreground`);
+  }
+  assert.equal(hex(themes.light["primary-ink"]), "#0f766e", "light ink is the fill itself");
+  assert.equal(hex(themes.fuchsia["primary-ink"]), "#e879f9", "Fuchsia ink stays fuchsia-400");
+  assert.equal(hex(themes.gray["primary-ink"]), "#5eead4", "Gray ink stays teal-300");
+});
+
 test("white-label themes keep their distinct brand colours", () => {
-  // Fuchsia stays fuchsia and Gray stays teal; only the step moved, to clear AA.
-  assert.equal(hex(themes.fuchsia.primary), "#e879f9", "Fuchsia should be fuchsia-400");
-  assert.equal(hex(themes.gray.primary), "#5eead4", "Gray should be teal-300");
+  // Fuchsia stays fuchsia and Gray stays teal. Both FILLS moved a step darker
+  // so white clears AA on them -- fuchsia-500 carried white at 3.46:1 and
+  // teal-300 at 1.48:1 -- and each theme's own lighter step survives as its
+  // `primary-ink`, asserted above.
+  assert.equal(hex(themes.fuchsia.primary), "#c026d3", "Fuchsia should be fuchsia-600");
+  assert.equal(hex(themes.gray.primary), "#0f766e", "Gray's fill joins the teal-700 the others use");
   assert.equal(hex(themes.gray.background), "#1f2937", "Gray should sit on gray-800");
   assert.equal(hex(themes.darkStone.background), "#292524", "Dark Stone should use the stone ramp");
   assert.equal(hex(themes.darkSlate.background), "#1e293b", "Dark Slate should use the slate ramp");
@@ -130,10 +155,13 @@ test("token provenance is labelled correctly across all four sources", () => {
   const expected: Record<string, Provenance> = {
     // Kept from Figma on purpose -- the preset would have made these zinc-900.
     primary: "figma",
-    "primary-foreground": "figma",
     "sidebar-primary": "figma", // aliases primary
-    warning: "figma",
     "data-accent": "figma",
+    // Figma's values are `zinc-300`/`zinc-950` for the foreground and
+    // amber-400 + amber-950 for warning. Neither can carry white ink, so both
+    // are now ours -- the design file should follow.
+    "primary-foreground": "a11yFix",
+    warning: "a11yFix",
     // Overlaid by the shadcn preset.
     background: "preset",
     foreground: "preset",
@@ -148,6 +176,14 @@ test("token provenance is labelled correctly across all four sources", () => {
     destination: "code",
     success: "code",
     info: "code",
+    // The ink tier is entirely ours, and not an alias of anything -- which is
+    // the point: `provenanceOf` reports `code`, so the contrast test holds us
+    // to these with no upstream to blame for them.
+    "primary-ink": "code",
+    "destructive-ink": "code",
+    "success-ink": "code",
+    "info-ink": "code",
+    "sidebar-primary-ink": "code", // aliases primary-ink, which is ours
   };
   const wrong = Object.entries(expected)
     .map(([n, want]) => [n, want, provenanceOf(n)] as const)

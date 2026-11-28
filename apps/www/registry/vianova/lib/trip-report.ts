@@ -31,6 +31,16 @@ export type ReportEvent = {
 export type Trip = ReportEvent & {
   durationS: number;
   distanceM: number;
+  /** Where it ended, from the LAST vertex of `route`. NaN when absent. */
+  endLon: number;
+  endLat: number;
+  /**
+   * The districts the trip ran between, filled in after the feed is read by
+   * whoever knows the city's shapes. Absent until then: the reader parses a
+   * CSV and has no business knowing about Lisbon.
+   */
+  origin?: string;
+  destination?: string;
 };
 
 /** A circle on the map, which is all a sample feed's zones need to be. */
@@ -121,6 +131,10 @@ export function readTrips(
       durationS: Number(row[c.duration]) || 0,
       distanceM: Number(row[c.distance]) || 0,
       ...firstVertex(row[c.route]),
+      ...(() => {
+        const end = lastVertex(row[c.route]);
+        return { endLon: end.lon, endLat: end.lat };
+      })(),
     });
   }
   return trips;
@@ -135,6 +149,68 @@ export function firstVertex(wkt: string | undefined): {
 } {
   const m = FIRST_VERTEX.exec(wkt ?? "");
   return m ? { lon: Number(m[1]), lat: Number(m[2]) } : { lon: NaN, lat: NaN };
+}
+
+/** Every vertex of a WKT geometry, in order. */
+const VERTEX = /(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/g;
+
+/**
+ * Where a LINESTRING ends -- the trip's destination.
+ *
+ * `firstVertex` has been here since the beginning and the rest of the route
+ * was thrown away, which is why this feed looked for a long time as though it
+ * had no destination in it. It has had one all along, at the other end of the
+ * same string.
+ *
+ * A POINT has one vertex, so for those this returns the same place as
+ * `firstVertex`, which is the correct answer for a thing that did not move.
+ */
+export function lastVertex(wkt: string | undefined): {
+  lon: number;
+  lat: number;
+} {
+  let last: RegExpExecArray | null = null;
+  let m: RegExpExecArray | null;
+  VERTEX.lastIndex = 0;
+  while ((m = VERTEX.exec(wkt ?? "")) !== null) last = m;
+  return last
+    ? { lon: Number(last[1]), lat: Number(last[2]) }
+    : { lon: NaN, lat: NaN };
+}
+
+/**
+ * Is a point inside a ring? Ray casting, counting crossings to the east.
+ *
+ * Good enough and then some: these are a dozen hand-drawn city districts with
+ * ten vertices apiece, not a topology. A point exactly on an edge may fall
+ * either way, which for assigning a trip to a neighbourhood is a distinction
+ * without a difference.
+ */
+export function pointInRing(
+  [lon, lat]: [number, number],
+  ring: [number, number][],
+): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i];
+    const b = ring[j];
+    if (!a || !b) continue;
+    const [xi, yi] = a;
+    const [xj, yj] = b;
+    if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi)
+      inside = !inside;
+  }
+  return inside;
+}
+
+/** The vertices of a WKT POLYGON's outer ring. */
+export function polygonRing(wkt: string | undefined): [number, number][] {
+  const ring: [number, number][] = [];
+  let m: RegExpExecArray | null;
+  VERTEX.lastIndex = 0;
+  while ((m = VERTEX.exec(wkt ?? "")) !== null)
+    ring.push([Number(m[1]), Number(m[2])]);
+  return ring;
 }
 
 /**
@@ -285,9 +361,23 @@ export function byProvider(trips: Trip[], providers: string[]): ProviderRow[] {
 }
 
 /** values[weekday][hour], scaled so the busiest cell is 1. */
-export function weekHourGrid(trips: ReportEvent[]): number[][] {
+/**
+ * The raw weekday x hour counts, unnormalised.
+ *
+ * Separate from `weekHourGrid` because the moment two periods are drawn, each
+ * one scaling to its OWN maximum is the standard heatmap-comparison lie: the
+ * same shade means a different number in each grid, so a period that halved
+ * can look identical to one that did not move. Comparing callers take the
+ * counts, find one maximum across both, and normalise against that.
+ */
+export function weekHourCounts(trips: ReportEvent[]): number[][] {
   const grid = WEEKDAYS.map(() => Array.from({ length: 24 }, () => 0));
   for (const t of trips) if (t.weekday >= 0) grid[t.weekday]![t.hour]!++;
+  return grid;
+}
+
+export function weekHourGrid(trips: ReportEvent[]): number[][] {
+  const grid = weekHourCounts(trips);
   const max = Math.max(1, ...grid.flat());
   return grid.map((row) => row.map((v) => v / max));
 }

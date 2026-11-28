@@ -159,12 +159,12 @@ export function InlineEdit({
             className={cn(
               titleBox,
               "border-input bg-background placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 col-start-1 row-start-1 w-full min-w-0 shadow-xs focus-visible:ring-3 focus-visible:outline-none",
-              error && "border-destructive focus-visible:border-destructive",
+              error && "border-destructive-ink focus-visible:border-destructive-ink",
             )}
           />
         </span>
         {error ? (
-          <p className="text-destructive px-1.5 text-xs">{error}</p>
+          <p className="text-destructive-ink px-1.5 text-xs">{error}</p>
         ) : null}
       </div>
     );
@@ -225,7 +225,7 @@ export function InlineEdit({
           }}
           className={cn(
             "border-input focus-visible:border-ring focus-visible:ring-ring/50 h-7 min-w-32 rounded-md border bg-transparent px-1.5 text-sm focus-visible:ring-3 focus-visible:outline-none",
-            error && "border-destructive focus-visible:border-destructive",
+            error && "border-destructive-ink focus-visible:border-destructive-ink",
           )}
         />
         {/* onMouseDown, not onClick: blur fires first and would commit instead. */}
@@ -252,7 +252,7 @@ export function InlineEdit({
           <XIcon className="size-3.5" />
         </button>
       </div>
-      {error ? <p className="text-destructive text-xs">{error}</p> : null}
+      {error ? <p className="text-destructive-ink text-xs">{error}</p> : null}
     </div>
   );
 }

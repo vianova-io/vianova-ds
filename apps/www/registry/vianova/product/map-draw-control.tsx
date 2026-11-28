@@ -271,7 +271,7 @@ export function MapDrawControl({
     "focus-visible:relative focus-visible:z-10 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none " +
     "disabled:pointer-events-none disabled:opacity-50";
   const tone = active
-    ? "border-primary text-primary"
+    ? "border-primary-ink text-primary-ink"
     : "border-border text-muted-foreground hover:text-foreground";
 
   return (

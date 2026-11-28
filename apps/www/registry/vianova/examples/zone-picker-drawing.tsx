@@ -70,7 +70,7 @@ export default function ZonePickerDrawing() {
           </p>
           <button
             type="button"
-            className="text-primary text-sm underline underline-offset-4"
+            className="text-primary-ink text-sm underline underline-offset-4"
             onClick={() => {
               setAdded(null);
               setDrafts(DRAWN);

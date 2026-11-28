@@ -77,7 +77,7 @@ export function MapWorkspaceVariants() {
             -- and 404'd on the project Pages site. */}
         <a
           href={asset("/mockups/map-size/")}
-          className="text-primary text-sm underline underline-offset-4"
+          className="text-primary-ink text-sm underline underline-offset-4"
         >
           Compare at four widths
         </a>
