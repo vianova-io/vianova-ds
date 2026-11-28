@@ -605,6 +605,8 @@
         "@vianova/dialog",
         "@vianova/empty",
         "@vianova/field",
+        "@vianova/filter-ast",
+        "@vianova/filter-builder",
         "@vianova/inline-edit",
         "@vianova/input",
         "@vianova/input-group",

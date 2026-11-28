@@ -38,7 +38,15 @@
  * - **A no-parking alert starts on its rule.** The "Alerts" switch on a
  *   no-parking rule, in Regulations, makes a row here marked Reported device.
  *   What it watches stays the rule's; who hears about it and whether it is on
- *   are handled here, like any other alert.
+ *   are handled here, like any other alert. The rows follow the switches:
+ *   see `reconcileRuleAlerts`.
+ * - **Filters are the dataset's columns.** Vehicle type and operator have
+ *   their own pickers because nearly every alert uses them; any other column
+ *   of the data being watched can be filtered on with the house filter
+ *   builder, and reads back in the summary.
+ * - **Data a scope lacks is named, not just hidden.** A suggestion or a
+ *   measure that cannot run is not offered as if it could, and the page says
+ *   which data is missing, so "why is fleet cap not here" has an answer.
  *
  * Deliberately NOT here:
  *
@@ -164,6 +172,7 @@ import { TableCard } from "@/registry/vianova/patterns/table-card";
 import { TagInput } from "@/registry/vianova/patterns/tag-input";
 import { ToolBand } from "@/registry/vianova/patterns/tool-band";
 import { RuleTypeIcon } from "@/registry/vianova/product/rule-type-icon";
+import { FilterBuilder } from "@/registry/vianova/product/filter-builder";
 import { ZoneDrawMap } from "@/registry/vianova/product/zone-draw-map";
 import {
   ZonePickerPanel,
@@ -180,6 +189,16 @@ import {
   type Rule,
   type Vehicle,
 } from "@/registry/vianova/lib/sample-regulations";
+import {
+  countConditions,
+  describeFilter,
+  isFilterComplete,
+  newCondition,
+  newGroup,
+  toQuery,
+  type FilterField,
+  type FilterGroup,
+} from "@/registry/vianova/lib/filter-ast";
 import { cn } from "@/registry/vianova/lib/utils";
 
 /* -------------------------------------------------------------------------- */
@@ -315,6 +334,12 @@ export type Alert = {
   vehicles: Vehicle[];
   /** Empty means every operator. */
   operators: string[];
+  /**
+   * Conditions on any other column of the data being watched. Absent means
+   * none. The tree is the query itself (see lib/filter-ast), so what the
+   * panel shows and what the backend receives cannot drift apart.
+   */
+  filters?: FilterGroup;
   schedule: AlertSchedule;
   /** Ids into the contacts list. */
   recipientIds: string[];
@@ -522,6 +547,62 @@ export function alertableRules(
   );
 }
 
+/**
+ * The alerts made by rules, brought into line with the rules' own switches.
+ *
+ * The switch is the truth: it is on the rule, in Regulations, and that is the
+ * only place it is turned on or off. So a rule whose switch is on has a
+ * Reported device row here, and a row whose rule has been switched off -- or
+ * deleted -- is gone. Rows that already exist are kept as they are, with the
+ * recipients and the on/off someone set on this page.
+ *
+ * A row made here starts with every operator's mailbox as its recipients:
+ * the operators are who a report is for, and an alert that told nobody would
+ * be worse than one that tells them all until someone narrows it.
+ *
+ * Exported for a host that holds the list itself and wants the same rule.
+ */
+export function reconcileRuleAlerts(
+  alerts: Alert[],
+  regulations: Regulation[],
+  contacts: Contact[],
+): Alert[] {
+  const switched = alertableRules(regulations).filter(({ rule }) => rule.alerts);
+  const kept = alerts.filter(
+    (a) =>
+      a.kind !== "report" || switched.some(({ rule }) => rule.id === a.ruleId),
+  );
+  const made: Alert[] = switched
+    .filter(({ rule }) => !kept.some((a) => a.kind === "report" && a.ruleId === rule.id))
+    .map(({ regulation, rule }) => ({
+      id: `al-rule-${rule.id}`,
+      kind: "report",
+      // The regulation's name, which is what people call it; the rule's too
+      // where one regulation holds several rules.
+      name:
+        regulation.rules.length > 1
+          ? `${regulation.name} · ${rule.name}`
+          : regulation.name,
+      watch: "no_parking",
+      threshold: 2,
+      regulationId: regulation.id,
+      ruleId: rule.id,
+      zoneIds: [],
+      vehicles: [],
+      operators: [],
+      schedule: { mode: "hourly" },
+      recipientIds: contacts.filter((c) => c.kind === "operator").map((c) => c.id),
+      extraEmails: [],
+      createdBy: "You",
+      mine: true,
+      // The demo's clock, not the reader's, so the server and the browser
+      // print the same age.
+      createdAt: ALERTS_NOW,
+      on: true,
+    }));
+  return [...made, ...kept];
+}
+
 const WEEKDAYS: Record<Weekday, string> = {
   mon: "Monday",
   tue: "Tuesday",
@@ -585,7 +666,55 @@ type WatchSpec = {
   source: string;
   /** What "right now" counts: vehicles, or operators for a fleet cap. */
   counts: "vehicle" | "operator";
+  /**
+   * The other columns of that data, for Filters. Vehicle type and operator
+   * are columns too, and are left out: they have their own pickers.
+   */
+  columns: FilterField[];
 };
+
+/** Live vehicle positions: one row per vehicle, as the MDS feed describes it. */
+const POSITION_COLUMNS: FilterField[] = [
+  {
+    name: "vehicle_status",
+    label: "Status",
+    type: "enum",
+    options: [
+      { value: "available", label: "Available" },
+      { value: "reserved", label: "Reserved" },
+      { value: "non_operational", label: "Not in service" },
+    ],
+  },
+  {
+    name: "propulsion_type",
+    label: "Propulsion",
+    type: "enum",
+    options: [
+      { value: "electric", label: "Electric" },
+      { value: "electric_assist", label: "Electric assist" },
+      { value: "human", label: "Human" },
+    ],
+  },
+  { name: "battery_level", label: "Battery level", type: "number", unit: "%" },
+  { name: "idle_hours", label: "Idle time", type: "number", unit: "h" },
+  { name: "vehicle_id", label: "Vehicle id", type: "string" },
+];
+
+/** Fleet availability: one row per operator, vehicle type and hour. */
+const FLEET_COLUMNS: FilterField[] = [
+  { name: "available_count", label: "Available vehicles", type: "number" },
+  { name: "deployed_count", label: "Deployed vehicles", type: "number" },
+  { name: "hour_of_day", label: "Hour of the day", type: "number", unit: "h" },
+  {
+    name: "day_type",
+    label: "Day",
+    type: "enum",
+    options: [
+      { value: "weekday", label: "Weekday" },
+      { value: "weekend", label: "Weekend" },
+    ],
+  },
+];
 
 const WATCH: Record<WatchType, WatchSpec> = {
   battery: {
@@ -597,6 +726,7 @@ const WATCH: Record<WatchType, WatchSpec> = {
     column: "Battery",
     source: "live vehicle positions",
     counts: "vehicle",
+    columns: POSITION_COLUMNS,
   },
   idle: {
     label: "Idle vehicles",
@@ -607,6 +737,7 @@ const WATCH: Record<WatchType, WatchSpec> = {
     column: "Idle",
     source: "live vehicle positions",
     counts: "vehicle",
+    columns: POSITION_COLUMNS,
   },
   available: {
     label: "Too few available",
@@ -617,6 +748,7 @@ const WATCH: Record<WatchType, WatchSpec> = {
     column: "Available",
     source: "fleet availability, every hour",
     counts: "vehicle",
+    columns: FLEET_COLUMNS,
   },
   cap: {
     label: "Above the cap",
@@ -627,6 +759,7 @@ const WATCH: Record<WatchType, WatchSpec> = {
     column: "Fleet",
     source: "fleet availability, every hour",
     counts: "operator",
+    columns: FLEET_COLUMNS,
   },
   parked: {
     label: "Parked too long",
@@ -637,6 +770,7 @@ const WATCH: Record<WatchType, WatchSpec> = {
     column: "Parked",
     source: "live vehicle positions",
     counts: "vehicle",
+    columns: POSITION_COLUMNS,
   },
   no_parking: {
     label: "No-parking rule broken",
@@ -647,8 +781,12 @@ const WATCH: Record<WatchType, WatchSpec> = {
     column: "In the zone",
     source: "your regulations and live vehicle positions",
     counts: "vehicle",
+    columns: POSITION_COLUMNS,
   },
 };
+
+/** The data behind a measure, as a short name: "fleet availability". */
+const dataName = (watch: WatchType) => WATCH[watch].source.split(",")[0]!;
 
 /** What can be picked here. `no_parking` is made on its rule; see `WatchType`. */
 export const PICKABLE_WATCHES: WatchType[] = [
@@ -772,8 +910,20 @@ function summarySentence(
   const v = vehicleWords(alert.vehicles);
   const n = alert.threshold;
   const when = schedulePhrase(alert.schedule);
+  // The extra conditions, in the words the filter builder itself uses, so
+  // the sentence and the rows under Filters are one description.
+  // Only once they are finished: a condition still missing its value would
+  // read "where status is ...", which promises nothing.
+  const columns = WATCH[alert.watch].columns;
+  const said =
+    alert.filters?.children.length && isFilterComplete(alert.filters, columns)
+      ? describeFilter(alert.filters, columns)
+      : "";
+  const where = said
+    ? `, where ${said.charAt(0).toLowerCase()}${said.slice(1)}`
+    : "";
   if (alert.watch === "no_parking")
-    return `${who}${v} break “${ruleName ?? "a no-parking rule"}” for more than ${plural(n, "hour", "hours")}, ${when}`;
+    return `${who}${v} break “${ruleName ?? "a no-parking rule"}” for more than ${plural(n, "hour", "hours")}${where}, ${when}`;
   const core: Record<Exclude<WatchType, "no_parking">, string> = {
     battery: `${who}${v} fall below ${n} % battery`,
     idle: `${who}${v} have not moved for more than ${plural(n, "hour", "hours")}`,
@@ -781,7 +931,7 @@ function summarySentence(
     cap: `${who ? `${who.trim()}'s ` : "an operator's "}fleet goes above ${n.toLocaleString("en-GB")} ${v}`,
     parked: `${who}${v} stay parked more than ${plural(n, "hour", "hours")}`,
   };
-  return `${core[alert.watch]} in ${zoneWords(alert.zoneIds, zones)}, ${when}`;
+  return `${core[alert.watch]} in ${zoneWords(alert.zoneIds, zones)}${where}, ${when}`;
 }
 
 /**
@@ -833,6 +983,7 @@ function estimateMatches(alert: Alert) {
   if (alert.vehicles.length) n *= 0.55;
   if (alert.operators.length) n *= 0.4;
   if (alert.zoneIds.length) n *= Math.min(1, 0.25 * alert.zoneIds.length);
+  if (alert.filters) n *= 0.6 ** countConditions(alert.filters);
   return Math.max(0, Math.round(n));
 }
 
@@ -1054,12 +1205,15 @@ function draftFromSentence(
 function CreateDialog({
   open,
   onOpenChange,
+  scope,
   watchable,
   zones,
   onDraft,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Named when a suggestion is held back: "data Munich does not send yet". */
+  scope: string;
   watchable: WatchType[];
   zones: PickerZone[];
   /** `name` is set when the draft came from a suggestion that has one. */
@@ -1084,6 +1238,17 @@ function CreateDialog({
   const shown = offered.filter((s) =>
     s.text.toLowerCase().includes(query.trim().toLowerCase()),
   );
+  /** The data behind the suggestions that are held back, each named once. */
+  const missing = [
+    ...new Set(
+      SUGGESTIONS.flatMap((s) =>
+        s.patch.watch && !watchable.includes(s.patch.watch)
+          ? [dataName(s.patch.watch)]
+          : [],
+      ),
+    ),
+  ];
+  const withheld = SUGGESTIONS.length - offered.length;
 
   const generate = () => {
     const said = text.trim();
@@ -1102,7 +1267,9 @@ function CreateDialog({
       const read = draftFromSentence(said, zones);
       if ("problem" in read) setProblem(read.problem);
       else if (read.patch.watch && !watchable.includes(read.patch.watch))
-        setProblem("This scope has no data for that yet.");
+        setProblem(
+          `${scope} does not send ${dataName(read.patch.watch)} yet, so this cannot be watched.`,
+        );
       else onDraft(read.patch, "sentence");
     }, 750);
   };
@@ -1206,6 +1373,19 @@ function CreateDialog({
               </p>
             ) : null}
           </div>
+        ) : null}
+
+        {/* What is NOT offered, and why. Hiding a suggestion that cannot run
+            is right; hiding it silently leaves someone looking for the fleet
+            cap alert a colleague in another city showed them. */}
+        {withheld > 0 ? (
+          <p
+            data-slot="alert-missing-data"
+            className="text-muted-foreground text-xs"
+          >
+            {plural(withheld, "more suggestion needs", "more suggestions need")}{" "}
+            data {scope} does not send yet: {listOf(missing, "and")}.
+          </p>
         ) : null}
 
         <DialogFooter className="sm:justify-between">
@@ -2522,9 +2702,22 @@ function AlertEditor({
     }, 500);
   };
 
-  const vehicleSummary = `${
+  const extraFilters = draft.filters ? countConditions(draft.filters) : 0;
+  /** A half-built condition is normal mid-edit, and not something to save. */
+  const filtersReady =
+    !draft.filters || isFilterComplete(draft.filters, spec.columns);
+  const filterSummary = `${
     draft.vehicles.length ? vehicleWords(draft.vehicles) : "all types"
-  }, ${draft.operators.length ? draft.operators.join(", ") : "all operators"}`;
+  }, ${draft.operators.length ? draft.operators.join(", ") : "all operators"}${
+    extraFilters ? ` + ${extraFilters} more` : ""
+  }`;
+  /** The one thing standing between this alert and Save, if anything is. */
+  const blocker =
+    addresses.length === 0
+      ? "Add a recipient to save."
+      : !filtersReady
+        ? "Finish the filter to save."
+        : null;
 
   /** What the request would carry. Shown under Advanced, never edited. */
   const query = JSON.stringify(
@@ -2541,6 +2734,7 @@ function AlertEditor({
         vehicle_type: draft.vehicles.length ? draft.vehicles : "any",
         provider: draft.operators.length ? draft.operators : "any",
       },
+      where: draft.filters ? toQuery(draft.filters) : null,
       geo_features: zoneIds.length ? zoneIds : "zone_limits",
       threshold:
         draft.watch === "no_parking"
@@ -2722,17 +2916,36 @@ function AlertEditor({
                         onChange={(e) => {
                           const watch = e.target.value as WatchType;
                           // A different measure has a different scale: 20 is
-                          // a battery level, and nonsense as a fleet cap.
-                          update({ watch, threshold: WATCH[watch].initial });
+                          // a battery level, and nonsense as a fleet cap. And
+                          // different data has different columns, so filters
+                          // on the old ones cannot be carried over.
+                          update({
+                            watch,
+                            threshold: WATCH[watch].initial,
+                            filters:
+                              WATCH[watch].columns === spec.columns
+                                ? draft.filters
+                                : undefined,
+                          });
                         }}
                       >
-                        {PICKABLE_WATCHES.filter(
-                          (w) => watchable.includes(w) || w === draft.watch,
-                        ).map((w) => (
-                          <NativeSelectOption key={w} value={w}>
-                            {WATCH[w].label}
-                          </NativeSelectOption>
-                        ))}
+                        {/* All five, always. One the scope has no data for
+                            is there and cannot be picked, and says why. */}
+                        {PICKABLE_WATCHES.map((w) => {
+                          const offered =
+                            watchable.includes(w) || w === draft.watch;
+                          return (
+                            <NativeSelectOption
+                              key={w}
+                              value={w}
+                              disabled={!offered}
+                            >
+                              {offered
+                                ? WATCH[w].label
+                                : `${WATCH[w].label} · no ${dataName(w)} data yet`}
+                            </NativeSelectOption>
+                          );
+                        })}
                       </NativeSelect>
                       <FieldDescription className="flex items-center gap-1.5">
                         <Info aria-hidden className="size-3.5 shrink-0" />
@@ -2843,7 +3056,7 @@ function AlertEditor({
                   </PanelSection>
 
                   {fromRule ? null : (
-                    <PanelSection title="Vehicles" summary={vehicleSummary}>
+                    <PanelSection title="Filters" summary={filterSummary}>
                       <div className="flex flex-wrap gap-2">
                         <FilterPick
                           label="Vehicle types"
@@ -2865,6 +3078,57 @@ function AlertEditor({
                           }
                         />
                       </div>
+
+                      {/* Every other column of the data being watched. The
+                          two above are columns too; they are picked so often
+                          that a row of the builder each would be a chore. */}
+                      {draft.filters ? (
+                        <>
+                          <FilterBuilder
+                            aria-label="More filters"
+                            fields={spec.columns}
+                            value={draft.filters}
+                            // One flat list. Nested groups are for analysts
+                            // building a query, not for narrowing an alert.
+                            maxDepth={1}
+                            onValueChange={(next) =>
+                              update({
+                                filters: next.children.length ? next : undefined,
+                              })
+                            }
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="self-start"
+                            onClick={() => update({ filters: undefined })}
+                          >
+                            Clear these filters
+                          </Button>
+                        </>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              update({
+                                filters: newGroup("and", [
+                                  newCondition(spec.columns[0]!.name),
+                                ]),
+                              })
+                            }
+                          >
+                            <Plus data-icon="inline-start" />
+                            Add a filter
+                          </Button>
+                          <span className="text-muted-foreground text-xs">
+                            On any other column of {dataName(draft.watch)}.
+                          </span>
+                        </div>
+                      )}
                     </PanelSection>
                   )}
 
@@ -2924,12 +3188,12 @@ function AlertEditor({
                     Delete
                   </Button>
                 ) : null}
-                {addresses.length === 0 ? (
+                {blocker ? (
                   <span
-                    id="alert-needs-recipient"
-                    className="text-muted-foreground text-xs"
+                    id="alert-save-blocker"
+                    className="text-muted-foreground order-first basis-full text-xs"
                   >
-                    Add a recipient to save.
+                    {blocker}
                   </span>
                 ) : null}
                 <span className="flex-1" />
@@ -2938,10 +3202,8 @@ function AlertEditor({
                 </Button>
                 <Button
                   type="button"
-                  disabled={!dirty || saving || addresses.length === 0}
-                  aria-describedby={
-                    addresses.length === 0 ? "alert-needs-recipient" : undefined
-                  }
+                  disabled={!dirty || saving || blocker !== null}
+                  aria-describedby={blocker ? "alert-save-blocker" : undefined}
                   onClick={save}
                 >
                   {saving ? "Saving…" : isNew ? "Create alert" : "Save changes"}
@@ -3261,6 +3523,8 @@ function AlertList({
   const view = useTableView(ALERT_COLUMNS, { selection: true, dates: true });
   const selecting = view.selecting;
   const [selected, setSelected] = React.useState<string[]>([]);
+  /** The alert whose bin was pressed, while it waits to be confirmed. */
+  const [binning, setBinning] = React.useState<string | null>(null);
   // Tick boxes put away take their ticks with them.
   React.useEffect(() => {
     if (!selecting) setSelected([]);
@@ -3456,9 +3720,14 @@ function AlertList({
                 <TableHead className="w-64">Sent to</TableHead>
                 ) : null}
                 {view.shows("lastSent") ? (
-                <TableHead className="w-40">Last sent</TableHead>
+                <TableHead className={view.dates === "exact" ? "w-40" : "w-32"}>
+                  Last sent
+                </TableHead>
                 ) : null}
-                <TableHead className="w-20 text-right">On</TableHead>
+                <TableHead className="w-28">
+                  <span className="mr-10 block text-right">On</span>
+                  <span className="sr-only">Delete</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -3595,7 +3864,7 @@ function AlertList({
                               cut by the table's own scroll edge -- measured at
                               2.4px on the report badge. At the end of the row
                               the cell's inset is always there to paint on. */}
-                          <div className="flex items-center justify-end">
+                          <div className="flex items-center justify-end gap-2">
                             <Switch
                               checked={alert.on}
                               onCheckedChange={() => onToggle(alert.id)}
@@ -3606,6 +3875,27 @@ function AlertList({
                               }
                               className="scroll-m-1"
                             />
+                            {/* The bin Katell and Jimmy both listed. On the
+                                row, because deleting one alert should not
+                                need Select rows first; confirmed, because it
+                                sits a finger's width from the switch. */}
+                            {report ? (
+                              // A rule's alert goes when its switch does, on
+                              // the rule. The gap keeps the switches in line.
+                              <span aria-hidden className="size-8 shrink-0" />
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Delete ${alert.name}`}
+                                data-slot="alert-delete"
+                                onClick={() => setBinning(alert.id)}
+                                className="text-muted-foreground hover:text-destructive-ink shrink-0 scroll-m-1"
+                              >
+                                <Trash2 />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -3624,6 +3914,21 @@ function AlertList({
           · times are {SCOPE_TIME_ZONE}
         </p>
       ) : null}
+
+      <ConfirmDialog
+        open={binning !== null}
+        onOpenChange={(next) => {
+          if (!next) setBinning(null);
+        }}
+        title={`Delete ${alerts.find((a) => a.id === binning)?.name ?? "this alert"}?`}
+        description="It stops sending e-mails, and it cannot be brought back."
+        confirmLabel="Delete alert"
+        destructive
+        onConfirm={() => {
+          if (binning) onDelete([binning]);
+          setBinning(null);
+        }}
+      />
 
       <SentToDialog
         alert={listed ?? null}
@@ -4574,7 +4879,11 @@ export function AlertsWorkspace({
    */
   onOpenRegulation?: (rule: { regulationId: string; ruleId: string }) => void;
 }) {
-  const [alerts, setAlerts] = React.useState(initialAlerts);
+  // Read once, like the rest of the props: the rows a rule's switch calls
+  // for are settled when the page opens, and then this page owns the list.
+  const [alerts, setAlerts] = React.useState(() =>
+    reconcileRuleAlerts(initialAlerts, regulations, initialContacts),
+  );
   const [contacts, setContacts] = React.useState(initialContacts);
   const [section, setSection] = React.useState<Section>("alerts");
   /**
@@ -4925,6 +5234,7 @@ export function AlertsWorkspace({
           key={createCount}
           open={creating}
           onOpenChange={setCreating}
+          scope={scope}
           watchable={watchable}
           zones={zones}
           onDraft={startDraft}
