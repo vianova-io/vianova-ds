@@ -258,7 +258,14 @@ function FilterConditionRow({
   return (
     <div data-slot="filter-condition" className="space-y-1">
       <div className="flex flex-wrap items-center gap-2">
-        <Select value={condition.field} onValueChange={setField}>
+        {/* `items` is what lets the closed trigger print the label. Without
+            it Base UI has only the value to show, and the three triggers read
+            "vehicle_status", "eq", "available" -- the query, not the words. */}
+        <Select
+          items={Object.fromEntries(fields.map((f) => [f.name, f.label]))}
+          value={condition.field}
+          onValueChange={setField}
+        >
           <SelectTrigger size="sm" className="w-40" aria-label="Field">
             <SelectValue />
           </SelectTrigger>
@@ -271,7 +278,11 @@ function FilterConditionRow({
           </SelectContent>
         </Select>
 
-        <Select value={condition.operator} onValueChange={setOperator}>
+        <Select
+          items={Object.fromEntries(operators.map((op) => [op, OPERATOR_LABELS[op]]))}
+          value={condition.operator}
+          onValueChange={setOperator}
+        >
           <SelectTrigger size="sm" className="w-36" aria-label="Operator">
             <SelectValue />
           </SelectTrigger>
@@ -394,6 +405,7 @@ function FilterValueInput({
         : (field.options ?? []);
     return (
       <Select
+        items={Object.fromEntries(options.map((o) => [o.value, o.label]))}
         value={String(scalar)}
         onValueChange={(next: string | null) =>
           onChange(next === null ? undefined : field.type === "boolean" ? next === "true" : next)

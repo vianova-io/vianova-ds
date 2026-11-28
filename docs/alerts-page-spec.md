@@ -36,8 +36,15 @@ The switch on the rule is the one staging calls *Create reports*; Katell asked
 for it to read **Alerts** (DM, 26 Nov). The Regulations block in this PR has
 it: a row on every no-parking rule, a confirmation when it is turned on, an
 *Alerts* badge in the Regulations list, and *Manage in Alerts*. It takes
-effect at once, without the regulation's Save. It is only drawn for scopes
-that have the Alerts tool (`alerts` prop).
+effect at once, without the regulation's Save.
+
+- **It is only drawn for scopes that have both the Alerts tool and the
+  Reported devices tool** (call of 26 Nov). The host works that out and
+  passes it as the `alerts` prop.
+- **The rows follow the switches.** A rule whose switch is on has a Reported
+  device row on the Alerts page; switching it off, or deleting the rule,
+  removes the row. A row that already exists keeps its recipients and its
+  on/off. A new one starts with every operator's mailbox as its recipients.
 
 ## 3. The model the UI assumes
 
@@ -55,6 +62,7 @@ type Alert = {
   zoneIds: string[];          // [] = the whole scope
   vehicles: Vehicle[];        // [] = every type
   operators: string[];        // [] = every operator
+  filters?: FilterGroup;      // conditions on other columns, §5; absent = none
   schedule: AlertSchedule;    // §6
   recipientIds: string[];     // ids into the recipients list
   extraEmails: string[];      // addresses with no VIP account
@@ -78,7 +86,23 @@ What each watch needs, kept in the frontend as you suggested on 19 Nov:
 | `no_parking` | not offered; made on the rule | In the zone for more than | hours | 2 | 1 | regulations and live positions |
 
 The block takes a `watchable` list. A measure or a suggestion whose data the
-scope lacks is not offered at all.
+scope lacks cannot be picked, and the page says which data is missing:
+
+- In **Create alert**, under the suggestions: *2 more suggestions need data
+  Munich does not send yet: fleet availability.*
+- In **What to watch**, the measure stays in the list, greyed: *Above the cap
+  · no fleet availability data yet*.
+- Asked for in a sentence: *Munich does not send fleet availability yet, so
+  this cannot be watched.*
+
+The columns Filters offers, by data:
+
+| Data | Columns |
+|---|---|
+| Live vehicle positions | Status, Propulsion, Battery level (%), Idle time (h), Vehicle id |
+| Fleet availability | Available vehicles, Deployed vehicles, Hour of the day, Day (weekday / weekend) |
+
+Vehicle type and operator are columns too; they keep their own pickers.
 
 ## 4. The list
 
@@ -102,6 +126,8 @@ Last sent · On.
   the chip opens the whole list for that alert, with *Open the alert* in its
   footer. An address with no VIP account is shown as text, not a link.
 - **On** is a switch on every row, a rule's alert included.
+- **A bin at the end of every row** deletes that alert, after a confirmation.
+  A rule's alert has none: it goes when its switch does, on the rule.
 - A row made by a rule carries a **Reported device** badge under its name.
 - Filter: search, and All / On / Off.
 - **A settings menu at the end of the toolbar**, the same one every workspace
@@ -159,13 +185,14 @@ The panel, top to bottom:
 | Section | Closed, it says | Open |
 |---|---|---|
 | Zones | *whole scope* / *2 zones* | The chosen zones with thumbnails, and **Add zones** |
-| Vehicles | *all types, all operators* | Vehicle types and operators; several of each can be ticked |
+| Filters | *scooters, all operators + 1 more* | Vehicle types and operators, several of each; then **Add a filter** on any other column of the data (§3), with the house filter builder. The conditions read back in the Summary. Changing what is watched to different data clears them |
 | Schedule | *Hourly, new vehicles only* | §6 |
 | Recipients | *3 recipients* | §7 |
 | Advanced | *the query behind it* | The request as JSON, read-only |
 
 6. Footer: **Delete** · **Cancel** · **Create alert** / **Save changes**. Save
-   is off until there is a recipient, and says so.
+   is off until there is a recipient and every filter is finished, and says
+   which.
 
 **Add zones** swaps the panel for the Regulations zone panel, unchanged —
 Library, Draw, Import — and the e-mail for a map showing what is chosen. A
@@ -288,6 +315,7 @@ honestly. A rule's alert is offered in *Gets these alerts* like any other.
 | 5 | Replace-across-alerts: one call or N? | Jimmy |
 | 6 | A rule's alert: are its recipients the same list as Settings › Report contacts, edited from both places? | Jimmy |
 | 7 | Vehicles and operators take several values here; the prototype took one. OK? | Katell |
+| 11 | Filters: the column lists in §3 are my reading of the MDS feed and the availability table. Which columns can the alert query really filter on? | Jimmy |
 | 8 | Hours 06:00–20:00 rather than all 24 — deliberate? | Katell |
 | 9 | Permissions: who may edit or delete someone else's alert? | Katell |
 | 10 | Delivery failure: is there a state for an e-mail that did not arrive? | Jimmy |
