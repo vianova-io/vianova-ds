@@ -673,10 +673,15 @@ for (const block of NON_MAP_BLOCKS) {
           : (["list"] as const);
 
         for (const view of views) {
-          // A card in the data hub, a name in the reports or regulations table.
+          // A card in the data hub, a name in the reports, regulations or
+          // alerts table.
           if (view === "dataset") {
             // The data hub's cards arrive after the page does.
-            const first = root.locator("ul button, [data-slot=report-link], [data-slot=regulation-link]").first();
+            const first = root
+              .locator(
+                "ul button, [data-slot=report-link], [data-slot=regulation-link], [data-slot=alert-open-link]",
+              )
+              .first();
             await first.waitFor();
             await first.click();
           }

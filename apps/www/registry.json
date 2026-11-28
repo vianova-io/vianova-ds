@@ -588,6 +588,61 @@
       "dependencies": []
     },
     {
+      "name": "alerts-workspace",
+      "type": "registry:block",
+      "title": "Alerts workspace",
+      "description": "Alerts workspace layout, composed from Vianova components.",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/alert",
+        "@vianova/avatar",
+        "@vianova/badge",
+        "@vianova/button",
+        "@vianova/checkbox",
+        "@vianova/confirm-dialog",
+        "@vianova/dialog",
+        "@vianova/empty",
+        "@vianova/field",
+        "@vianova/inline-edit",
+        "@vianova/input",
+        "@vianova/input-group",
+        "@vianova/native-select",
+        "@vianova/person-cell",
+        "@vianova/popover",
+        "@vianova/radio-group",
+        "@vianova/relative-time",
+        "@vianova/rule-type-icon",
+        "@vianova/sample-regulations",
+        "@vianova/select",
+        "@vianova/selection-bar",
+        "@vianova/skeleton",
+        "@vianova/status-badge",
+        "@vianova/switch",
+        "@vianova/table",
+        "@vianova/table-card",
+        "@vianova/table-settings",
+        "@vianova/tabs",
+        "@vianova/tag-input",
+        "@vianova/textarea",
+        "@vianova/tool-band",
+        "@vianova/tooltip",
+        "@vianova/utils",
+        "@vianova/zone-draw-map",
+        "@vianova/zone-picker"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/blocks/alerts-workspace.tsx",
+          "type": "registry:block"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "citizen-workspace",
       "type": "registry:block",
       "title": "Citizen Platform workspace",
@@ -646,11 +701,11 @@
       "registryDependencies": [
         "@vianova/activity-heatmap",
         "@vianova/alert",
-        "@vianova/avatar",
         "@vianova/badge",
         "@vianova/button",
         "@vianova/category-style",
         "@vianova/chart",
+        "@vianova/checkbox",
         "@vianova/command",
         "@vianova/confirm-dialog",
         "@vianova/csv",
@@ -667,13 +722,18 @@
         "@vianova/input",
         "@vianova/input-group",
         "@vianova/markdown-editor",
+        "@vianova/person-cell",
         "@vianova/popover",
+        "@vianova/relative-time",
         "@vianova/report-grid",
         "@vianova/sample-datasets",
         "@vianova/sankey-flow",
         "@vianova/segmented-control",
+        "@vianova/selection-bar",
         "@vianova/skeleton",
         "@vianova/table",
+        "@vianova/table-card",
+        "@vianova/table-settings",
         "@vianova/textarea",
         "@vianova/toggle-group",
         "@vianova/tooltip",
@@ -884,6 +944,7 @@
         "@vianova/map-controls",
         "@vianova/map-draw-control",
         "@vianova/popover",
+        "@vianova/relative-time",
         "@vianova/rule-rail",
         "@vianova/rule-type-icon",
         "@vianova/sample-regulations",
@@ -894,7 +955,10 @@
         "@vianova/skeleton",
         "@vianova/slider-field",
         "@vianova/status-badge",
+        "@vianova/switch",
         "@vianova/table",
+        "@vianova/table-card",
+        "@vianova/table-settings",
         "@vianova/use-category-shape-layer",
         "@vianova/utils",
         "@vianova/zone-picker"
@@ -919,16 +983,20 @@
       ],
       "registryDependencies": [
         "@vianova/alert",
-        "@vianova/avatar",
         "@vianova/badge",
         "@vianova/button",
         "@vianova/checkbox",
         "@vianova/dialog",
         "@vianova/empty",
         "@vianova/input-group",
+        "@vianova/person-cell",
+        "@vianova/relative-time",
         "@vianova/select",
+        "@vianova/selection-bar",
         "@vianova/skeleton",
         "@vianova/table",
+        "@vianova/table-card",
+        "@vianova/table-settings",
         "@vianova/toggle",
         "@vianova/tooltip",
         "@vianova/utils"
@@ -3598,6 +3666,38 @@
       }
     },
     {
+      "name": "zone-draw-map",
+      "type": "registry:ui",
+      "title": "Zone Draw Map",
+      "description": "Zone Draw Map — a Vianova product component.",
+      "categories": [
+        "Product"
+      ],
+      "dependencies": [
+        "maplibre-gl"
+      ],
+      "registryDependencies": [
+        "@vianova/basemap-switcher",
+        "@vianova/basemaps",
+        "@vianova/category-style",
+        "@vianova/map-canvas",
+        "@vianova/map-controls",
+        "@vianova/map-draw-control",
+        "@vianova/use-category-shape-layer",
+        "@vianova/utils",
+        "@vianova/zone-picker"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/product/zone-draw-map.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "zone-picker",
       "type": "registry:ui",
       "title": "Zone Picker",
@@ -3953,6 +4053,28 @@
       }
     },
     {
+      "name": "person-cell",
+      "type": "registry:ui",
+      "title": "Person Cell",
+      "description": "Person Cell — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "registryDependencies": [
+        "@vianova/avatar",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/person-cell.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
       "name": "phone-frame",
       "type": "registry:ui",
       "title": "Phone Frame",
@@ -3966,6 +4088,27 @@
       "files": [
         {
           "path": "registry/vianova/patterns/phone-frame.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "relative-time",
+      "type": "registry:ui",
+      "title": "Relative Time",
+      "description": "Relative Time — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "registryDependencies": [
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/relative-time.tsx",
           "type": "registry:ui"
         }
       ],
@@ -4037,6 +4180,28 @@
       "files": [
         {
           "path": "registry/vianova/patterns/section-card.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "selection-bar",
+      "type": "registry:ui",
+      "title": "Selection Bar",
+      "description": "Selection Bar — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "registryDependencies": [
+        "@vianova/button",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/selection-bar.tsx",
           "type": "registry:ui"
         }
       ],
@@ -4163,6 +4328,32 @@
       "files": [
         {
           "path": "registry/vianova/patterns/table-card.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "meta": {
+        "status": "stable"
+      }
+    },
+    {
+      "name": "table-settings",
+      "type": "registry:ui",
+      "title": "Table Settings",
+      "description": "Table Settings — primitives composed into one pattern.",
+      "categories": [
+        "Patterns"
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@vianova/button",
+        "@vianova/dropdown-menu",
+        "@vianova/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/vianova/patterns/table-settings.tsx",
           "type": "registry:ui"
         }
       ],

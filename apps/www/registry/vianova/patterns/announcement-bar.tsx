@@ -25,6 +25,21 @@ export type AnnouncementKind = "maintenance" | "info" | "incident";
  */
 export type AnnouncementPhase = "scheduled" | "imminent" | "active" | "done";
 
+/**
+ * How badly an incident is hurting, on Statuspage's own scale.
+ *
+ * Named `impact`, with Statuspage's own three words for its values, because
+ * that is what the field is called in the response VIP already polls. The
+ * value is copied across untranslated, so there is no mapping of ours sitting
+ * between the two to go stale when Statuspage adds a level. `severity` would
+ * read as a scale of our own and invite each caller to invent one.
+ *
+ * Statuspage has a fourth value, `none`, which it uses for scheduled
+ * maintenances. It is absent here on purpose: `kind` already carries that,
+ * and an incident impacting nothing is not an incident worth announcing.
+ */
+export type AnnouncementImpact = "minor" | "major" | "critical";
+
 export type Announcement = {
   /** Stable across renders and deploys: dismissal is remembered against it. */
   id: string;
@@ -41,6 +56,14 @@ export type Announcement = {
    */
   startsAt?: string;
   endsAt?: string;
+  /**
+   * Statuspage's impact for an incident, when the caller has one.
+   *
+   * Optional, and ignored for `maintenance`: planned work is blue whatever
+   * Statuspage says about it. For an incident this is the better signal than
+   * anything derivable from the dates, and `statusToastVariant` prefers it.
+   */
+  impact?: AnnouncementImpact;
   /**
    * When the team last said something about this. Incidents only, where it is
    * the most reassuring line on the card -- "updated 20 minutes ago" says
@@ -179,8 +202,27 @@ export function formatViewerWindow(
 
 const RELATIVE = new Intl.RelativeTimeFormat("en-GB", { numeric: "auto" });
 
-/** "in 3 days", "starts in 40 minutes", "ends in about an hour". */
-function formatRelative(a: Announcement, phase: AnnouncementPhase, now: number): string | undefined {
+/**
+ * Where the window sits relative to now, in words: "starts in 40 minutes",
+ * "ends in about an hour".
+ *
+ * Exported because this vocabulary is the only thing that distinguishes a
+ * window happening right now from one next Thursday, and more than one surface
+ * needs to draw that distinction -- `StatusToast` prints it after the window on
+ * its meta line. Shared rather than copied: "ends" against "starts" is the kind
+ * of wording that drifts into two slightly different answers the moment there
+ * are two copies of it.
+ *
+ * Takes the instant and derives the phase itself, so a caller cannot pass a
+ * phase that disagrees with the clock it also passed.
+ */
+export function formatPhaseRelative(a: Announcement, now: number): string | undefined {
+  const phase = announcementPhase(a, now);
+  // A closed window has nothing to count towards. Without this the helper
+  // reads the start date and reports a finished intervention as "starts 3 days
+  // ago", which is how a stale notice gets written.
+  if (phase === "done") return undefined;
+
   const target =
     phase === "active" ? (a.endsAt ? Date.parse(a.endsAt) : undefined) : a.startsAt ? Date.parse(a.startsAt) : undefined;
   if (target === undefined || Number.isNaN(target)) return undefined;
@@ -288,7 +330,7 @@ export function AnnouncementBar({
   const viewer =
     viewerTimeZone ?? (mounted ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined);
   const viewerText = formatViewerWindow(a, viewer);
-  const relativeText = now !== undefined || mounted ? formatRelative(a, phase, instant) : undefined;
+  const relativeText = now !== undefined || mounted ? formatPhaseRelative(a, instant) : undefined;
   // An active window stays up. Dismissing the bar for an outage already under
   // way just hides the explanation for what the reader is looking at.
   const canDismiss = (a.dismissible ?? true) && phase !== "active";

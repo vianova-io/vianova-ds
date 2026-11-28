@@ -82,6 +82,7 @@ import {
 } from "@/registry/vianova/ui/empty";
 import {
   Field,
+  FieldContent,
   FieldDescription,
   FieldGroup,
   FieldLabel,
@@ -109,6 +110,7 @@ import {
   SelectValue,
 } from "@/registry/vianova/ui/select";
 import { Skeleton } from "@/registry/vianova/ui/skeleton";
+import { Switch } from "@/registry/vianova/ui/switch";
 import {
   Table,
   TableBody,
@@ -178,6 +180,14 @@ import {
   type Rule,
   type Vehicle,
 } from "@/registry/vianova/lib/sample-regulations";
+import { RelativeTime } from "@/registry/vianova/patterns/relative-time";
+import { TableCard } from "@/registry/vianova/patterns/table-card";
+import {
+  TableSettings,
+  useTableView,
+  type DateDisplay,
+  type ViewColumn,
+} from "@/registry/vianova/patterns/table-settings";
 import { cn } from "@/registry/vianova/lib/utils";
 
 /* -------------------------------------------------------------------------- */
@@ -231,14 +241,13 @@ const STATUS_FILTERS: Record<StatusFilter, string> = {
 
 type SortDir = "desc" | "asc";
 
-const dateFmt = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
-const formatDate = (iso: string) => dateFmt.format(new Date(iso));
+/**
+ * The demo's "today", as a moment: what the list's ages are counted back
+ * from. The same fixed day the statuses are worked out against, so a
+ * regulation cannot read "3 d ago" in one column and "not active yet" in the
+ * next.
+ */
+const LIST_NOW = Date.parse(`${REFERENCE_DATE}T12:00:00Z`);
 
 let seq = 0;
 /** Ids for things made in this session. Prefixed so they never collide with a sample's. */
@@ -274,6 +283,28 @@ const cloneRegulation = (reg: Regulation): Regulation => ({
     operators: [...r.operators],
     schedule: { ...r.schedule, days: [...r.schedule.days] },
   })),
+});
+
+/**
+ * A rule and the regulation it belongs to, by id. What the workspace hands a
+ * host when it talks about one rule's alerts: the Alerts page lists an alert
+ * under both, so one id without the other would not find it.
+ */
+type RuleRef = { regulationId: string; ruleId: string };
+
+/**
+ * Whether a rule reports the vehicles that break it.
+ *
+ * The type is checked as well as the flag: only a no-parking rule has alerts
+ * for now, and a flag left on some other type by an import or an API must not
+ * put a badge on the list that no switch in the editor can explain.
+ */
+const ruleAlerts = (rule: Rule) => rule.type === "no_parking" && rule.alerts === true;
+
+/** One rule's alerts set on or off, everything else in the regulation as it was. */
+const withRuleAlerts = (reg: Regulation, ruleId: string, on: boolean): Regulation => ({
+  ...reg,
+  rules: reg.rules.map((r) => (r.id === ruleId ? { ...r, alerts: on } : r)),
 });
 
 /** Rule types in a regulation, once each, in the order the rules are listed. */
@@ -373,17 +404,41 @@ export function RegulationsWorkspace({
   regulations: initial = SAMPLE_REGULATIONS,
   status = "ready",
   geocode,
+  alerts = true,
   onRetry,
   onSave,
+  onAlertsChange,
+  onOpenAlerts,
 }: {
   className?: string;
   regulations?: Regulation[];
   status?: "ready" | "loading" | "error";
   /** Looks up places for the map's search field. Omitted, there is none. */
   geocode?: Geocode;
+  /**
+   * Whether this scope has the Alerts tool. Without it a no-parking rule has
+   * no Alerts switch and the list has no Alerts badge: neither is drawn at
+   * all, rather than drawn and disabled, because a scope that does not have
+   * the tool has nowhere to send someone who asks what the switch would do.
+   */
+  alerts?: boolean;
   onRetry?: () => void;
   /** Called with the saved regulation, after the workspace has kept it. */
   onSave?: (regulation: Regulation) => void;
+  /**
+   * Called when the Alerts switch on a saved rule is turned on or off, after
+   * the workspace has kept the change. It does not go through `onSave`: the
+   * switch takes effect at once and leaves the rest of the regulation, and
+   * whatever is unsaved in it, alone. On a rule that has not been saved yet
+   * the switch is one more unsaved field, and arrives with `onSave`.
+   */
+  onAlertsChange?: (rule: RuleRef, on: boolean) => void;
+  /**
+   * Opens the Alerts page at one rule's alert. Given, a rule with alerts on
+   * shows "Manage in Alerts"; omitted, it shows no link, since this block
+   * cannot navigate anywhere by itself.
+   */
+  onOpenAlerts?: (rule: RuleRef) => void;
 }) {
   const [regulations, setRegulations] = React.useState(initial);
   const [view, setView] = React.useState<View>({ kind: "list" });
@@ -458,6 +513,26 @@ export function RegulationsWorkspace({
           onZoneRename={(id, name) =>
             setZones((all) => all.map((z) => (z.id === id ? { ...z, name } : z)))
           }
+          onRuleAlerts={
+            alerts
+              ? (ruleId, on) => {
+                  // The saved regulation, not a draft: the switch has already
+                  // happened by the time anyone presses Save, or decides not
+                  // to. `updatedAt` is left alone on purpose. "Last update" is
+                  // what a save moves, and switching alerts is not a new
+                  // version of the rule.
+                  setRegulations((all) =>
+                    all.map((r) => (r.id === view.id ? withRuleAlerts(r, ruleId, on) : r)),
+                  );
+                  onAlertsChange?.({ regulationId: view.id, ruleId }, on);
+                }
+              : undefined
+          }
+          onOpenAlerts={
+            alerts && onOpenAlerts
+              ? (ruleId) => onOpenAlerts({ regulationId: view.id, ruleId })
+              : undefined
+          }
           onSave={(reg) => {
             // The list's "Last update" is what a save moves, so it is stamped
             // here, where every save passes, rather than in the editor's own
@@ -479,6 +554,10 @@ export function RegulationsWorkspace({
             copy.visibility = "private";
             copy.createdAt = new Date().toISOString();
             copy.updatedAt = copy.createdAt;
+            // A copy starts with alerts off. Turning them on asks first, and
+            // a duplicate that carried the flag would start reporting
+            // vehicles on its first save without anyone having been asked.
+            copy.rules = copy.rules.map(({ alerts: _, ...r }) => r);
             setDrafts((d) => ({ ...d, [copy.id]: copy }));
             setView({ kind: "edit", id: copy.id, isNew: true });
           }}
@@ -492,6 +571,7 @@ export function RegulationsWorkspace({
         <RegulationList
           regulations={regulations}
           status={status}
+          alerts={alerts}
           onRetry={onRetry}
           notice={notice}
           onDismissNotice={() => setNotice(null)}
@@ -534,9 +614,22 @@ const filterCount = (f: Filters) =>
 const appliesTo = <T,>(chosen: T[], ruleList: T[]) =>
   chosen.length === 0 || ruleList.length === 0 || chosen.some((c) => ruleList.includes(c));
 
+/**
+ * No row selection among them: the list has nothing to do to several
+ * regulations at once, and tick boxes with no action behind them are a
+ * question the page cannot answer.
+ */
+const REGULATION_COLUMNS: ViewColumn[] = [
+  { id: "name", label: "Name", locked: true },
+  { id: "status", label: "Status" },
+  { id: "created", label: "Created" },
+  { id: "updated", label: "Last update" },
+];
+
 function RegulationList({
   regulations,
   status,
+  alerts,
   onRetry,
   notice,
   onDismissNotice,
@@ -546,6 +639,8 @@ function RegulationList({
 }: {
   regulations: Regulation[];
   status: "ready" | "loading" | "error";
+  /** Whether the scope has the Alerts tool, and so whether rows may say so. */
+  alerts: boolean;
   onRetry?: () => void;
   notice: string | null;
   onDismissNotice: () => void;
@@ -559,6 +654,7 @@ function RegulationList({
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("active");
   const [filters, setFilters] = React.useState<Filters>(NO_FILTERS);
   const [sort, setSort] = React.useState<SortDir>("desc");
+  const view = useTableView(REGULATION_COLUMNS, { dates: true });
 
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -633,6 +729,7 @@ function RegulationList({
           </SelectContent>
         </Select>
         <FiltersPopover value={filters} onChange={setFilters} count={active} />
+        <TableSettings {...view.settings} />
       </div>
 
       {status === "loading" ? (
@@ -692,13 +789,16 @@ function RegulationList({
           </EmptyContent>
         </Empty>
       ) : (
-        <div className="rounded-lg border">
-          <Table>
+        <TableCard>
+          <Table inset>
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
                 <TableHead className="w-28">Rules</TableHead>
                 <TableHead>Name</TableHead>
+                {view.shows("status") ? (
                 <TableHead className="hidden sm:table-cell">Status</TableHead>
+                ) : null}
+                {view.shows("created") ? (
                 <TableHead className="hidden md:table-cell">
                   <button
                     type="button"
@@ -710,7 +810,10 @@ function RegulationList({
                     {sort === "desc" ? <ArrowDown className="size-3.5" /> : <ArrowUp className="size-3.5" />}
                   </button>
                 </TableHead>
+                ) : null}
+                {view.shows("updated") ? (
                 <TableHead className="hidden md:table-cell">Last update</TableHead>
+                ) : null}
                 <TableHead className="w-20">
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -721,13 +824,16 @@ function RegulationList({
                 <RegulationRow
                   key={reg.id}
                   reg={reg}
+                  alerts={alerts && reg.rules.some(ruleAlerts)}
+                  shows={view.shows}
+                  dates={view.dates}
                   onOpen={() => onOpen(reg.id)}
                   onDownload={() => onDownload(reg)}
                 />
               ))}
             </TableBody>
           </Table>
-        </div>
+        </TableCard>
       )}
     </div>
   );
@@ -735,10 +841,18 @@ function RegulationList({
 
 function RegulationRow({
   reg,
+  alerts,
+  shows,
+  dates,
   onOpen,
   onDownload,
 }: {
   reg: Regulation;
+  /** Whether at least one of its rules has alerts on, in a scope that has the tool. */
+  alerts: boolean;
+  /** Whether a column is on screen, from the list's settings. */
+  shows: (column: string) => boolean;
+  dates: DateDisplay;
   onOpen: () => void;
   onDownload: () => void;
 }) {
@@ -762,14 +876,30 @@ function RegulationRow({
         </span>
       </TableCell>
       <TableCell className="max-w-0 min-w-40">
-        <button
-          type="button"
-          data-slot="regulation-link"
-          onClick={onOpen}
-          className="hover:text-primary-ink focus-visible:ring-ring/50 block w-full truncate rounded-sm text-left font-medium focus-visible:ring-[3px] focus-visible:outline-none"
-        >
-          {reg.name}
-        </button>
+        {/* The name gives way and the badge does not: `min-w-0` lets the
+            button shrink inside the row and truncate, while the badge is
+            `shrink-0` and keeps its whole word. The other way round, a long
+            name would push "Alerts" out of the cell, and it is the one thing
+            here that says vehicles are being reported. */}
+        <span className="flex items-center gap-2">
+          <button
+            type="button"
+            data-slot="regulation-link"
+            onClick={onOpen}
+            className="hover:text-primary-ink focus-visible:ring-ring/50 block min-w-0 truncate rounded-sm text-left font-medium focus-visible:ring-[3px] focus-visible:outline-none"
+          >
+            {reg.name}
+          </button>
+          {alerts ? (
+            // Staging says "Creates reports" here. Renamed with the switch it
+            // reflects, so the list, the rule and the Alerts page use one
+            // word for one thing. Not a link: the name beside it already
+            // opens the regulation, where the switch is.
+            <Badge variant="outline" data-alerts="on">
+              Alerts
+            </Badge>
+          ) : null}
+        </span>
         <span className="text-muted-foreground block truncate text-xs">
           {RULE_TYPES[reg.kind].label}
           {reg.rules.length > 1 ? ` · ${reg.rules.length} rules` : ""}
@@ -780,18 +910,34 @@ function RegulationRow({
           </span>
         </span>
       </TableCell>
+      {shows("status") ? (
       <TableCell className="hidden sm:table-cell">
         <span className="flex flex-wrap items-center gap-1">
           <RegulationStatusBadge status={status} />
           {reg.visibility === "public" ? <VisibilityBadge visibility="public" /> : null}
         </span>
       </TableCell>
+      ) : null}
+      {shows("created") ? (
       <TableCell className="text-muted-foreground hidden whitespace-nowrap md:table-cell">
-        {formatDate(reg.createdAt)}
+        <RelativeTime
+          iso={reg.createdAt}
+          now={LIST_NOW}
+          timeZone="UTC"
+          display={dates}
+        />
       </TableCell>
+      ) : null}
+      {shows("updated") ? (
       <TableCell className="text-muted-foreground hidden whitespace-nowrap md:table-cell">
-        {formatDate(reg.updatedAt)}
+        <RelativeTime
+          iso={reg.updatedAt}
+          now={LIST_NOW}
+          timeZone="UTC"
+          display={dates}
+        />
       </TableCell>
+      ) : null}
       <TableCell>
         {/* Download alone. The ⋯ menu held Open and Download GeoJSON and
             nothing else: the name opens the regulation and this icon downloads
@@ -1034,6 +1180,8 @@ function RegulationEditor({
   geocode,
   onZonesCreated,
   onZoneRename,
+  onRuleAlerts,
+  onOpenAlerts,
   onSave,
   onDuplicate,
   onClose,
@@ -1047,6 +1195,12 @@ function RegulationEditor({
   geocode?: Geocode;
   onZonesCreated: (zones: PickerZone[]) => void;
   onZoneRename: (id: string, name: string) => void;
+  /**
+   * Keeps an alerts switch on the saved regulation. Omitted when the scope
+   * has no Alerts tool, which is also what takes the switch off the rule.
+   */
+  onRuleAlerts?: (ruleId: string, on: boolean) => void;
+  onOpenAlerts?: (ruleId: string) => void;
   onSave: (reg: Regulation) => void;
   onDuplicate: (reg: Regulation) => void;
   onClose: (notice?: string) => void;
@@ -1124,6 +1278,43 @@ function RegulationEditor({
   const updateRule = (id: string, next: Partial<Rule>) =>
     update({ rules: draft.rules.map((r) => (r.id === id ? { ...r, ...next } : r)) });
 
+  /** Rules the saved regulation already has. A new regulation has none. */
+  const isSavedRule = (id: string) => saved?.rules.some((r) => r.id === id) ?? false;
+
+  /**
+   * Turns a rule's alerts on or off, now. The one edit in here that does not
+   * wait for Save.
+   *
+   * Everything else in the editor is a draft, because everything else changes
+   * what the rule is and a save makes a new version of it. Alerts do not:
+   * they are one field beside the rule, and someone who flips the switch
+   * expects vehicles to start or stop being reported, not a save bar asking
+   * whether they meant it. So the change is written in three places at once:
+   *
+   *   the draft      so the switch shows what was just chosen;
+   *   the baseline   so the draft still equals what it is compared against,
+   *                  and the editor is exactly as dirty as it was before --
+   *                  clean if it was clean, and if it was not, Discard still
+   *                  takes back the other edits and leaves the alerts alone;
+   *   the saved      through `onRuleAlerts`, so the list's badge and the
+   *   regulation     next visit to this editor agree with the switch.
+   *
+   * Both JSON strings get the same patch on the same rule, so a key the rule
+   * did not have yet is added in the same place in each and they still
+   * compare equal.
+   *
+   * A rule that has not been saved has nothing behind it to switch: there is
+   * no rule yet for an alert to watch. There the switch is one more unsaved
+   * field, and the alert starts with the save that creates the rule.
+   */
+  const setRuleAlerts = (id: string, on: boolean) => {
+    setDraft(withRuleAlerts(draft, id, on));
+    if (!isSavedRule(id)) return;
+    const base = JSON.parse(baseline) as Regulation | null;
+    if (base) setBaseline(JSON.stringify(withRuleAlerts(base, id, on)));
+    onRuleAlerts?.(id, on);
+  };
+
   const save = () => {
     setSaving(true);
     // Stands in for a request: long enough to see the pending state, short
@@ -1174,7 +1365,10 @@ function RegulationEditor({
   const duplicateRule = (id: string) => {
     const src = draft.rules.find((r) => r.id === id);
     if (!src) return;
-    const copy = { ...src, id: uid("rule"), name: `${src.name} (copy)`, zoneIds: [...src.zoneIds] };
+    // Alerts are not copied, for the reason a duplicated regulation drops
+    // them: the copy would report vehicles without anyone having been asked.
+    const { alerts: _, ...rest } = src;
+    const copy = { ...rest, id: uid("rule"), name: `${src.name} (copy)`, zoneIds: [...src.zoneIds] };
     update({ rules: [...draft.rules, copy] });
     setSelected(copy.id);
   };
@@ -1468,6 +1662,15 @@ function RegulationEditor({
                 zoneIndex={zoneIndex}
                 zonesLoading={zonesLoading}
                 onChange={(next) => updateRule(rule.id, next)}
+                onAlertsChange={onRuleAlerts ? (on) => setRuleAlerts(rule.id, on) : undefined}
+                // While a save is in flight the request already holds the
+                // regulation as it was when Save was pressed. A switch flipped
+                // now would be kept, then overwritten when that request lands.
+                alertsDisabled={saving}
+                // Only for a rule the Alerts page can already find.
+                onOpenAlerts={
+                  onOpenAlerts && isSavedRule(rule.id) ? () => onOpenAlerts(rule.id) : undefined
+                }
                 onAddZones={() => {
                   // On a phone the panes take turns, and Add zones is the
                   // settings pane's own next screen.
@@ -1766,6 +1969,9 @@ function RuleEditor({
   zoneIndex,
   zonesLoading,
   onChange,
+  onAlertsChange,
+  alertsDisabled,
+  onOpenAlerts,
   onAddZones,
   onLocate,
   onZoneRename,
@@ -1778,6 +1984,13 @@ function RuleEditor({
   zoneIndex: Map<string, PickerZone>;
   zonesLoading: boolean;
   onChange: (next: Partial<Rule>) => void;
+  /**
+   * Switches the rule's alerts. Separate from `onChange` because it is not a
+   * draft edit: see `setRuleAlerts`. Omitted, the rule has no Alerts row.
+   */
+  onAlertsChange?: (on: boolean) => void;
+  alertsDisabled?: boolean;
+  onOpenAlerts?: () => void;
   onAddZones: () => void;
   onLocate: (zoneId: string) => void;
   onZoneRename: (id: string, name: string) => void;
@@ -1845,6 +2058,18 @@ function RuleEditor({
         <Info />
         <AlertDescription>{meta.description}</AlertDescription>
       </Alert>
+
+      {/* No parking only, for now. Above the accordion and not a section of
+          it: the sections are what the rule is, and they wait for Save. This
+          does neither, so it does not sit in a list that says it does. */}
+      {rule.type === "no_parking" && onAlertsChange ? (
+        <RuleAlerts
+          rule={rule}
+          disabled={alertsDisabled}
+          onChange={onAlertsChange}
+          onManage={onOpenAlerts}
+        />
+      ) : null}
 
       {rule.type === "parking" ? (
         <Field>
@@ -1956,6 +2181,117 @@ function RuleEditor({
         </RuleSection>
       </Accordion>
     </div>
+  );
+}
+
+/**
+ * The Alerts row of a no-parking rule: whether each vehicle that breaks the
+ * rule for 2 hours in a row is reported to its operator.
+ *
+ * Staging has this switch as "Create reports". It is "Alerts" here because
+ * what it makes is an alert -- the thing listed and managed on the Alerts
+ * page -- and a switch named after something else would send people looking
+ * for a Reports page that has nothing to do with it.
+ *
+ * On asks first; off does not. Turning it on starts sending operators
+ * reports about their vehicles, which other people receive and cannot be
+ * unsent. Turning it off only stops them, and is undone by turning it back
+ * on.
+ *
+ * The switch is controlled and never moves by itself: a press on "off" opens
+ * the question and the thumb stays where it is until the answer is yes, so
+ * Cancel has nothing to put back.
+ */
+function RuleAlerts({
+  rule,
+  disabled,
+  onChange,
+  onManage,
+}: {
+  rule: Rule;
+  disabled?: boolean;
+  onChange: (on: boolean) => void;
+  /** Opens this rule's alert on the Alerts page. Omitted, there is no link. */
+  onManage?: () => void;
+}) {
+  const [confirming, setConfirming] = React.useState(false);
+  const on = rule.alerts === true;
+  const id = `${rule.id}-alerts`;
+
+  return (
+    <>
+      <Field
+        orientation="horizontal"
+        data-slot="rule-alerts"
+        data-disabled={disabled || undefined}
+        // Bordered like the accordion below it, so the two read as one column
+        // of settings rather than a loose line of text above a box.
+        className="rounded-lg border p-3"
+      >
+        <FieldContent>
+          <FieldLabel htmlFor={id}>Alerts</FieldLabel>
+          {/* Field pulls a description up by 4px when one thing follows it,
+              which is meant for a control under a label. Here that one thing
+              is a link that comes and goes with the switch, and the sentence
+              would jump each time. */}
+          <FieldDescription id={`${id}-description`} className="nth-last-2:mt-0">
+            Each vehicle that breaks this rule for 2 hours is reported to its operator.
+          </FieldDescription>
+          {on && onManage ? (
+            <Button
+              variant="link"
+              size="sm"
+              data-slot="rule-alerts-manage"
+              // No side padding, so the words start where the sentence above
+              // does. 44px tall under a thumb, by the registry's own
+              // convention for a control with a label; `scroll-m-1` because
+              // the rule panel scrolls and the ring paints outside the box.
+              className="scroll-m-1 self-start px-0 pointer-coarse:h-11"
+              onClick={onManage}
+            >
+              Manage in Alerts
+            </Button>
+          ) : null}
+        </FieldContent>
+        <Switch
+          id={id}
+          checked={on}
+          disabled={disabled}
+          aria-describedby={`${id}-description`}
+          onCheckedChange={(next) => (next ? setConfirming(true) : onChange(false))}
+          // The switch's box is the design and stays 32x18. What grows is its
+          // hit slop, from the 8px it ships with to 16px above and below, so
+          // the area a thumb can land on clears 44px. Unconditional, not
+          // `pointer-coarse:`, as the registry's slop always is: a tablet
+          // with a trackpad reports a fine pointer while being touched. The
+          // label is a second way in -- pressing "Alerts" flips it too.
+          className="scroll-m-1 after:-inset-y-4"
+        />
+      </Field>
+
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Turn on alerts for this rule?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Each vehicle that breaks this rule for 2 hours is reported to its operator, and the
+              alert shows up on the Alerts page.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                onChange(true);
+                setConfirming(false);
+              }}
+            >
+              Turn on alerts
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

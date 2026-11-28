@@ -56,6 +56,15 @@ export type Rule = {
   vehicles: Vehicle[];
   /** Empty means every operator. */
   operators: string[];
+  /**
+   * No parking only; it means nothing on any other type. When true, a vehicle
+   * that breaks the rule for 2 hours in a row is reported to its operator,
+   * and the people on the scope's alert recipients list get an e-mail.
+   *
+   * Not part of what a rule IS: switching it does not make a new version of
+   * the rule, so it is changed on its own and never waits for a save.
+   */
+  alerts?: boolean;
 };
 
 export type Regulation = {
@@ -303,6 +312,9 @@ export const SAMPLE_REGULATIONS: Regulation[] = [
         schedule: { ...ALL_DAY, start: "2026-01-15", end: "2027-01-14" },
         vehicles: [],
         operators: [],
+        // The one sample rule with alerts on, so the switch and the list's
+        // badge are both on screen without anyone having to turn one on.
+        alerts: true,
       },
     ],
   },
